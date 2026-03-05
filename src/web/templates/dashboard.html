@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>文档下载管理后台</title>
+    <script src="https://unpkg.com/jszip/dist/jszip.min.js"></script>
+    <script src="https://unpkg.com/docx-preview/dist/docx-preview.min.js"></script>
+    <style>
+        #mdPreviewModal {
+            display: none !important;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            margin: 0;
+            background: #fff;
+            color: #1f2a44;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* Layout */
+        .app-container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: 220px;
+            background: #f5f7fa; /* 匹配图片浅灰色 */
+            border-right: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            padding-top: 20px;
+            flex-shrink: 0;
+        }
+        .nav-item {
+            padding: 12px 24px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: #475569; /* 深灰色 */
+            transition: all 0.2s;
+        }
+        .nav-item:hover {
+            background: #e2e8f0;
+        }
+        .nav-item.active {
+            background: #3b82f6; /* 蓝色背景 */
+            color: white; /* 白色文字 */
+        }
+        
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: white;
+            position: relative;
+        }
+        
+        /* Header */
+        .header {
+            height: 60px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 30px;
+            flex-shrink: 0;
+        }
+        .page-title {
+            font-size: 20px;
+            font-weight: 700; /* 粗体黑色 */
+            color: #000;
+        }
+        .header-actions {
+            display: flex;
+            gap: 20px;
+            font-size: 13px;
+        }
+        .action-link { cursor: pointer; }
+        .action-link.blue { color: #3b82f6; }
+        .action-link.red { color: #ef4444; }
+        
+        /* Content Body */
+        .content-body {
+            flex: 1;
+            overflow: hidden;
+            padding: 24px 30px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .tab-pane { display: none; width: 100%; flex: 1; min-height: 0; }
+        .tab-pane.scrollable { overflow-y: auto; }
+        .tab-pane.active { display: flex; flex-direction: column; }
+        
+        /* Sections */
+        .section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        /* MD Selection Area */
+        .md-search-input {
+            padding: 6px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            font-size: 13px;
+            width: 240px;
+            outline: none;
+        }
+        .md-search-input:focus { border-color: #3b82f6; }
+        
+        .md-selection-area {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 20px;
+            height: 200px;
+            margin-bottom: 20px;
+        }
+        
+        .md-list-box {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: #fff;
+            overflow-y: auto;
+            position: relative;
+        }
+        
+        /* 分栏视图 (从 index.html 复制) */
+        .split-view {
+            display: grid;
+            grid-template-columns: 240px 1fr;
+            gap: 15px;
+            height: 250px;
+            margin-bottom: 20px;
+        }
+        .list-view {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            overflow-y: auto;
+            background: #f8fafc;
+        }
+        .preview-pane {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        .centered-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            width: 100%;
+            text-align: center;
+            color: #94a3b8;
+        }
+        .list-item {
+            padding: 10px 12px;
+            font-size: 13px;
+            border-bottom: 1px solid #f1f5f9;
+            cursor: pointer;
+            color: #334155;
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .list-item:hover { background: #f8fafc; }
+        .list-item.active { background: #eef6ff; color: #3b82f6; border-left: 3px solid #3b82f6; }
+
+        .md-list-empty {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        
+        .md-preview-box {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: #fff;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .md-preview-placeholder {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        .md-preview-content {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #334155;
+            white-space: pre-wrap;
+        }
+        .magnify-btn {
+            position: absolute;
+            top: 12px; right: 12px;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 4px 12px;
+            font-size: 12px;
+            color: #64748b;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            z-index: 10;
+        }
+        .magnify-btn:hover { background: #f8fafc; }
+        
+        /* 移动端样式 (来自 index.html) */
+        .mobile-select-style {
+            display: none;
+        }
+        
+        .preview-pane-style {
+            border: 1px solid #e3e8f5;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            height: 300px; /* 桌面端仪表盘固定高度 */
+            width: 100%;
+        }
+
+        .centered-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            width: 100%;
+            text-align: center;
+            color: #94a3b8;
+        }
+        
+        .option-section {
+            margin-bottom: 24px;
+        }
+        
+        .section-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .checkbox-label {
+            font-size: 13px;
+            color: #475569;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+        }
+        
+        /* Button */
+        
+        .form-select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-bottom: 12px;
+            outline: none;
+            background: #fff;
+        }
+        
+        .preview-box-large {
+            height: 300px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: #fff;
+            overflow: hidden;
+            display: flex;
+            align-items: flex-start;
+            justify-content: flex-start;
+            position: relative;
+        }
+        
+        /* Button */
+        .btn-start {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 10px 24px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(59, 130, 246, 0.2);
+        }
+        .btn-start:hover { background: #2563eb; }
+        
+        /* Project Table (reused styles) */
+        .project-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .project-table th { text-align: left; background: #f8fafc; padding: 12px; color: #475569; font-weight: 600; border-bottom: 1px solid #e2e8f0; }
+        .project-table td { padding: 12px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+        .project-table tr:hover { background: #f8fafc; }
+        
+        /* Misc */
+        .footer-copyright {
+            position: fixed;
+            bottom: 10px;
+            right: 20px;
+            color: #94a3b8;
+            font-size: 12px;
+            z-index: 1000;
+        }
+        
+        /* Table Preview Styles */
+        .tbl-preview-content { width: 100%; height: 100%; overflow: auto; padding: 10px; box-sizing: border-box; display: flex; align-items: flex-start; justify-content: center; }
+        .tbl-preview-content table { width: 90%; border-collapse: collapse; font-size: 12px; }
+        .tbl-preview-content td, .tbl-preview-content th { padding: 8px; }
+        
+        /* 样式定义 (复制) */
+        .style-1 th { background: #445bdc; color: white; font-weight: bold; border: 1px solid #D9D9D9; }
+        .style-1 td { background: white; color: black; border: 1px solid #D9D9D9; }
+        .style-2 th, .style-2 td { background: white; color: black; border: 2px solid black; }
+        .style-3 th { background: #F2F2F2; color: black; border: 3px solid black; }
+        .style-3 td { background: white; color: black; border: 3px solid black; }
+        .style-4 table { border-top: 1px solid black; border-bottom: 1px solid black; border-left: none; border-right: none; }
+        .style-4 th, .style-4 td { border-top: 1px solid black; border-bottom: 1px solid black; border-left: none; border-right: none; background: white; color: black; }
+        .style-5 table { border-top: 1px solid black; border-bottom: 1px solid black; }
+        .style-5 th, .style-5 td { border: 1px solid #D9D9D9; color: black; }
+        .style-5 tr:first-child th { border-top: 1px solid black; }
+        .style-5 tr:last-child td { border-bottom: 1px solid black; }
+        .style-6 tbody tr:nth-child(odd) td, .style-6 tbody tr:nth-child(odd) th { background: #F2F2F2; }
+        .style-6 tbody tr:nth-child(even) td { background: white; }
+        .style-6 thead tr th, .style-6 thead tr td { background: black; color: white; font-weight: bold; }
+        .style-6 td, .style-6 th { border: 1px solid #D9D9D9; color: black; }
+        .docx { margin: 0 !important; box-shadow: none !important; width: auto !important; }
+
+        /* Modals */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+        .modal-content {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            width: 600px;
+            max-width: 90vw;
+        }
+        
+        @media (max-width: 768px) {
+            .app-container { flex-direction: column; height: auto; min-height: 100vh; overflow: auto; }
+            .sidebar { width: 100%; border-right: none; border-bottom: 1px solid #eee; padding-top: 0; flex-direction: row; overflow-x: auto; height: 50px; align-items: center; }
+            .nav-item { padding: 0 16px; white-space: nowrap; line-height: 50px; }
+            .main-content { height: auto; overflow: visible; }
+            .content-body { overflow: visible; padding: 16px; }
+            .md-selection-area { grid-template-columns: 1fr; height: auto; }
+            .md-list-box { height: 200px; }
+            .md-preview-box { height: 300px; }
+            .options-grid { grid-template-columns: 1fr; }
+            .header { padding: 0 16px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="nav-item active" onclick="switchTab('projects')">项目管理</div>
+            <div class="nav-item" onclick="switchTab('config')">配置管理</div>
+            <div class="nav-item" onclick="switchTab('stats')">下载统计</div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Header -->
+            <div class="header">
+                <div class="page-title" id="pageTitle">项目管理</div>
+                <div class="header-actions">
+                    <span class="action-link blue" onclick="startConvert()">+ 新建任务</span>
+                    <span class="action-link blue" onclick="refreshData()">刷新</span>
+                    <span class="action-link red" onclick="logout()">退出登录</span>
+                </div>
+            </div>
+
+            <div class="content-body">
+                <!-- Tab: Projects -->
+                <div id="tab-projects" class="tab-pane active">
+                    <div style="overflow-y:auto; flex:1;">
+                        <table class="project-table">
+                            <thead>
+                                <tr><th>项目名称</th><th>创建时间</th><th>磁盘空间</th><th>操作</th></tr>
+                            </thead>
+                            <tbody id="projectTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tab: Config -->
+                <div id="tab-config" class="tab-pane">
+                    <div style="flex: 1; overflow-y: auto; padding: 20px;">
+                         <div id="configForm"></div>
+                    </div>
+                    <div style="padding: 20px; border-top: 1px solid #e2e8f0; text-align: right; background: #fff;">
+                        <button onclick="saveConfig()" class="btn-start" style="padding: 10px 24px;">保存配置</button>
+                    </div>
+                </div>
+
+                <!-- Tab: Stats -->
+                <div id="tab-stats" class="tab-pane scrollable">
+                    <div style="margin-bottom:20px; font-size:14px; display:flex; flex-wrap:wrap; align-items:center; gap:10px; justify-content: space-between;">
+                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                            <span>总下载数: <span id="totalCount" style="font-weight:bold; color:#3b82f6;">0</span></span>
+                            <input type="text" id="statsSearchTitle" placeholder="搜索标题..." oninput="searchStats()" class="md-search-input" style="width:140px;">
+                            <input type="text" id="statsSearchUrl" placeholder="搜索 URL..." oninput="searchStats()" class="md-search-input" style="width:140px;">
+                            <input type="text" id="statsSearchIp" placeholder="搜索 IP..." oninput="searchStats()" class="md-search-input" style="width:120px;">
+                            <input type="date" id="statsSearchDate" onchange="searchStats()" class="md-search-input" style="width:140px;">
+                        </div>
+                        <div style="display:flex; gap:10px;">
+                            <button onclick="deleteSelectedStats()" class="btn-start" style="padding: 8px 16px; background-color: #ef4444;">批量删除</button>
+                            <button onclick="downloadAll()" class="btn-start" style="padding: 8px 16px;">下载全部文件 (Zip)</button>
+                        </div>
+                    </div>
+                    <div id="tableContainer"></div>
+                    <div class="pagination" style="margin-top:20px; display:flex; gap:10px; justify-content:center;">
+                        <button onclick="prevPage()" id="prevBtn" class="magnify-btn" style="position:static; width:80px;">上一页</button>
+                        <span id="pageInfo" style="line-height:26px; font-size:13px;">1 / 1</span>
+                        <button onclick="nextPage()" id="nextBtn" class="magnify-btn" style="position:static; width:80px;">下一页</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="progressModal" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-top:0; font-size:18px; margin-bottom:15px; border-bottom:1px solid #f1f5f9; padding-bottom:10px;">转换进度</h3>
+            <div id="progressLog" style="height: 300px; overflow-y: auto; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; font-size: 13px; font-family: monospace; line-height: 1.5; color: #334155; margin-bottom: 20px;"></div>
+            <div style="text-align:right; display: flex; justify-content: flex-end; gap: 12px;">
+                <button onclick="closeProgressModal()" class="magnify-btn" style="position:static; width:80px; background:#f1f5f9;">关闭</button>
+                <a id="modalDownloadBtn" href="#" class="btn-start" style="display:none; text-decoration:none; line-height:20px;">下载文件</a>
+            </div>
+        </div>
+    </div>
+
+    <div id="newTaskModal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 500px;">
+            <h3 style="margin-top:0;">新建下载任务</h3>
+            <div style="margin-bottom:15px;">
+                <label style="display:block; margin-bottom:5px; font-size:14px; font-weight:600;">飞书文档链接</label>
+                <input type="text" id="newDocUrl" class="form-select" placeholder="https://..." style="width:100%; box-sizing:border-box;">
+            </div>
+            
+            <div style="margin-bottom:15px;">
+                <label style="display:block; margin-bottom:5px; font-size:14px; font-weight:600;">选择模板</label>
+                <select id="newTemplateSelect" class="form-select"></select>
+            </div>
+            
+            <div style="margin-bottom:15px;">
+                <label style="display:block; margin-bottom:5px; font-size:14px; font-weight:600;">表格样式</label>
+                <select id="newStyleSelect" class="form-select"></select>
+            </div>
+            
+            <div style="margin-bottom:20px;">
+                 <label class="checkbox-label">
+                    <input type="checkbox" id="newAddCover" checked> 添加模板首页
+                </label>
+            </div>
+            
+            <div style="text-align:right; display:flex; justify-content:flex-end; gap:10px;">
+                <button onclick="closeNewTaskModal()" class="magnify-btn" style="position:static; width:80px; background:#f1f5f9;">取消</button>
+                <button onclick="submitNewTask()" class="btn-start">开始转换</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let adminData = null;
+        let selectedTemplate = "";
+        let selectedStyle = "1";
+        let projectCache = [];
+        let progressTimer = null;
+        // let selectedMd = "";
+
+        function encodeKey(value) {
+            return btoa(unescape(encodeURIComponent(value || "")));
+        }
+
+        function logout() {
+            fetch("/api/admin/logout", {method: "POST"}).then(() => {
+                window.location.reload();
+            });
+        }
+
+        function switchTab(name) {
+            document.querySelectorAll(".nav-item").forEach(i => i.classList.remove("active"));
+            const target = document.querySelector(`.nav-item[onclick="switchTab('${name}')"]`);
+            if(target) target.classList.add("active");
+            
+            document.querySelectorAll(".tab-pane").forEach(c => c.classList.remove("active"));
+            const content = document.getElementById("tab-" + name);
+            if(content) content.classList.add("active");
+            
+            // 更新标题
+            const titles = {
+                'projects': '项目管理',
+                'config': '配置管理',
+                'stats': '下载统计'
+            };
+            document.getElementById('pageTitle').innerText = titles[name];
+            
+            if (name === 'projects') loadProjects();
+            if (name === 'config') loadConfig();
+            if (name === 'stats') loadStats();
+        }
+
+        // 初始化加载
+        document.addEventListener('DOMContentLoaded', () => {
+             loadData(); // 加载基础数据 (templates, styles)
+             switchTab('projects'); // 默认加载项目管理页的数据
+        });
+        let statsData = [];
+        let filteredStats = [];
+        let currentPage = 1;
+        const pageSize = 10;
+        
+        let configCache = [];
+        
+        async function loadConfig() {
+            try {
+                const res = await fetch('/api/config');
+                const data = await res.json();
+                configCache = data;
+                renderConfigForm(data);
+            } catch (e) {
+                alert('加载配置失败');
+            }
+        }
+        
+        function renderConfigForm(data) {
+            const container = document.getElementById('configForm');
+            container.innerHTML = "";
+            
+            data.forEach(item => {
+                const div = document.createElement("div");
+                div.style.marginBottom = "24px";
+                div.style.background = "#fff";
+                div.style.padding = "0";
+                
+                const label = document.createElement("div");
+                label.style.fontWeight = "600";
+                label.style.marginBottom = "8px";
+                label.style.fontSize = "14px";
+                label.style.color = "#1f2a44";
+                label.innerText = item.desc || item.key;
+                
+                const input = document.createElement("input");
+                input.type = "text";
+                input.className = "form-select";
+                input.style.marginBottom = "4px";
+                input.style.padding = "10px";
+                input.style.fontSize = "14px";
+                input.style.border = "1px solid #d9e4f5";
+                input.style.borderRadius = "6px";
+                input.value = item.value;
+                input.dataset.key = item.key;
+                
+                const keyLabel = document.createElement("div");
+                keyLabel.style.fontSize = "12px";
+                keyLabel.style.color = "#94a3b8";
+                keyLabel.style.fontFamily = "monospace";
+                keyLabel.innerText = item.key;
+                
+                div.appendChild(label);
+                div.appendChild(input);
+                div.appendChild(keyLabel);
+                container.appendChild(div);
+            });
+        }
+        
+        async function saveConfig() {
+            try {
+                const inputs = document.querySelectorAll('#configForm input');
+                const newData = [];
+                inputs.forEach(input => {
+                    newData.push({
+                        key: input.dataset.key,
+                        value: input.value
+                    });
+                });
+                
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(newData)
+                });
+                const result = await res.json();
+                if (result.status === "ok") {
+                    alert('保存成功，部分配置可能需要重启生效');
+                } else {
+                    alert('保存失败: ' + result.message);
+                }
+            } catch (e) {
+                alert('保存错误: ' + e.message);
+            }
+        }
+        
+        async function loadStats() {
+            try {
+                const res = await fetch('/api/stats');
+                const data = await res.json();
+                statsData = data.items;
+                filteredStats = statsData;
+                document.getElementById('totalCount').innerText = data.total;
+                currentPage = 1;
+                renderStatsTable();
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function searchStats() {
+            const titleQ = (document.getElementById('statsSearchTitle').value || "").toLowerCase();
+            const urlQ = (document.getElementById('statsSearchUrl').value || "").toLowerCase();
+            const ipQ = (document.getElementById('statsSearchIp').value || "").toLowerCase();
+            const dateQ = document.getElementById('statsSearchDate').value;
+            
+            filteredStats = statsData.filter(item => {
+                const title = (item.title || "").toLowerCase();
+                const url = (item.url || "").toLowerCase();
+                const ip = (item.ip || "").toLowerCase();
+                const time = (item.time || "").split('T')[0];
+                
+                const matchTitle = !titleQ || title.includes(titleQ);
+                const matchUrl = !urlQ || url.includes(urlQ);
+                const matchIp = !ipQ || ip.includes(ipQ);
+                const matchDate = !dateQ || time === dateQ;
+                
+                return matchTitle && matchUrl && matchIp && matchDate;
+            });
+            
+            currentPage = 1;
+            renderStatsTable();
+        }
+        
+        function renderStatsTable() {
+            const start = (currentPage - 1) * pageSize;
+            const end = start + pageSize;
+            const pageData = filteredStats.slice(start, end);
+            
+            let html = '<table class="project-table" style="width:100%; table-layout: fixed;">';
+            html += '<thead><tr><th style="width:40px; text-align:center;"><input type="checkbox" id="selectAllStats" onchange="toggleSelectAllStats()"></th><th style="width:150px">时间</th><th>标题</th><th style="width:100px">URL</th><th style="width:80px">状态</th><th style="width:120px">IP</th></tr></thead><tbody>';
+            
+            if (pageData.length === 0) {
+                html += '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #94a3b8;">暂无数据</td></tr>';
+            } else {
+                for (const item of pageData) {
+                    html += `<tr>
+                        <td style="text-align:center;"><input type="checkbox" class="stat-checkbox" value="${item.id ? 'id:'+item.id : 'ts:'+item.ts}"></td>
+                        <td style="color: #64748b; vertical-align:top;">${item.time.replace('T', ' ').split('.')[0]}</td>
+                        <td style="font-weight: 500; white-space: normal; word-break: break-all; vertical-align:top;">${item.title || '-'}</td>
+                        <td style="vertical-align:top; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${item.url}"><a href="${item.url}" target="_blank" style="color:#3b82f6;">链接</a></td>
+                        <td style="vertical-align:top;">${item.status || '-'}</td>
+                        <td style="color: #64748b; vertical-align:top;">${item.ip || '-'}</td>
+                    </tr>`;
+                }
+            }
+            html += '</tbody></table>';
+            document.getElementById('tableContainer').innerHTML = html;
+            
+            const totalPages = Math.ceil(filteredStats.length / pageSize) || 1;
+            document.getElementById('pageInfo').innerText = `${currentPage} / ${totalPages}`;
+            document.getElementById('prevBtn').disabled = currentPage <= 1;
+            document.getElementById('nextBtn').disabled = currentPage >= totalPages;
+        }
+        
+        function toggleSelectAllStats() {
+            const checked = document.getElementById("selectAllStats").checked;
+            document.querySelectorAll(".stat-checkbox").forEach(cb => cb.checked = checked);
+        }
+        
+        function deleteSelectedStats() {
+            const ts_list = [];
+            const id_list = [];
+            document.querySelectorAll(".stat-checkbox:checked").forEach(cb => {
+                const val = cb.value;
+                if (val.startsWith("id:")) {
+                    id_list.push(val.substring(3));
+                } else if (val.startsWith("ts:")) {
+                    ts_list.push(val.substring(3));
+                } else {
+                    ts_list.push(val); // 回退
+                }
+            });
+            
+            if (ts_list.length === 0 && id_list.length === 0) {
+                alert("请先选择要删除的记录");
+                return;
+            }
+            
+            const total = ts_list.length + id_list.length;
+            if (!confirm(`确定删除选中的 ${total} 条记录吗？此操作仅删除日志记录，不会删除已下载的文件。`)) return;
+            
+            fetch("/api/admin/stats/delete", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ts_list: ts_list, id_list: id_list })
+            }).then(r => r.json()).then(res => {
+                if (res.status === "ok") {
+                    loadStats(); // 重新加载数据
+                } else {
+                    alert(res.message || "删除失败");
+                }
+            });
+        }
+        
+        function prevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                renderStatsTable();
+            }
+        }
+        
+        function nextPage() {
+            const totalPages = Math.ceil(filteredStats.length / pageSize) || 1;
+            if (currentPage < totalPages) {
+                currentPage++;
+                renderStatsTable();
+            }
+        }
+        
+        function downloadAll() {
+            window.location.href = '/api/download_all';
+        }
+
+        function refreshData() {
+             loadData();
+             // 根据当前激活的 tab 刷新对应的数据
+             if(document.getElementById('tab-projects').classList.contains('active')) loadProjects();
+             if(document.getElementById('tab-config').classList.contains('active')) loadConfig();
+             if(document.getElementById('tab-stats').classList.contains('active')) loadStats();
+        }
+
+        function loadData() {
+        fetch("/api/admin/info").then(r => r.json()).then(res => {
+            adminData = res;
+            renderTemplates(res.templates);
+            renderStyles(res.table_styles);
+        });
+    }
+
+    function renderTemplates(list) {
+            const select = document.getElementById("templateSelect");
+            select.innerHTML = "";
+            
+            const defaultTemplate = "[/* default_template */]";
+            list.sort((a, b) => {
+                if (a.name === defaultTemplate) return -1;
+                if (b.name === defaultTemplate) return 1;
+                return a.name.localeCompare(b.name);
+            });
+            
+            let defaultFound = false;
+
+            list.forEach(t => {
+                const opt = document.createElement("option");
+                opt.value = t.name;
+                opt.innerText = t.name;
+                select.appendChild(opt);
+                
+                if (t.name === defaultTemplate) {
+                    select.value = t.name;
+                    selectedTemplate = t.name;
+                    previewTemplate(t.name);
+                    defaultFound = true;
+                }
+            });
+            
+            if (!defaultFound && list.length > 0) {
+                select.value = list[0].name;
+                selectedTemplate = list[0].name;
+                previewTemplate(list[0].name);
+            }
+        }
+        
+        function onTemplateSelectChange() {
+            const val = document.getElementById("templateSelect").value;
+            selectedTemplate = val;
+            if (val) previewTemplate(val);
+        }
+
+        function renderStyles(list) {
+            const select = document.getElementById("styleSelect");
+            select.innerHTML = "";
+            
+            list.forEach(s => {
+                const opt = document.createElement("option");
+                opt.value = s.id;
+                opt.innerText = s.name;
+                select.appendChild(opt);
+            });
+            
+            if (list.length > 0) {
+                select.value = list[0].id;
+                selectedStyle = list[0].id;
+                previewStyle(list[0].id);
+            }
+        }
+        
+        function onStyleSelectChange() {
+             const val = document.getElementById("styleSelect").value;
+             selectedStyle = val;
+             if (val) previewStyle(val);
+        }
+
+        function previewTemplate(name) {
+            const preview = document.getElementById("templatePreview");
+            preview.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#666">加载预览...</div>';
+            
+            let t = null;
+            if (adminData && adminData.templates) {
+                t = adminData.templates.find(x => x.name === name);
+            }
+            
+            if (t && t.has_png) {
+                preview.innerHTML = `<img src="/api/template_preview/${encodeURIComponent(name)}" style="width:100%; height:auto; display:block;" onerror="this.onerror=null;this.parentNode.innerHTML='无法预览';"/>`;
+                return;
+            }
+
+            fetch(`/api/template/${encodeURIComponent(name)}`)
+                .then(res => res.blob())
+                .then(blob => {
+                    preview.innerHTML = "";
+                    
+                    const sizingWrapper = document.createElement("div");
+                    const transformWrapper = document.createElement("div");
+                    transformWrapper.className = "docx";
+                    transformWrapper.style.display = "inline-block";
+                    
+                    sizingWrapper.appendChild(transformWrapper);
+                    preview.appendChild(sizingWrapper);
+
+                    docx.renderAsync(blob, transformWrapper, null, { inWrapper: false, ignoreWidth: false })
+                        .then(() => {
+                            const containerWidth = preview.clientWidth - 10;
+                            const contentWidth = transformWrapper.scrollWidth || transformWrapper.getBoundingClientRect().width;
+                            const contentHeight = transformWrapper.offsetHeight;
+                            
+                            if (contentWidth > containerWidth) {
+                                const scale = containerWidth / contentWidth;
+                                transformWrapper.style.transformOrigin = "top left";
+                                transformWrapper.style.transform = `scale(${scale})`;
+                                sizingWrapper.style.height = (contentHeight * scale) + "px";
+                                sizingWrapper.style.width = "100%";
+                                sizingWrapper.style.overflow = "hidden";
+                            }
+                            preview.scrollTop = 0;
+                        })
+                        .catch(err => {
+                            console.error(err);
+                            preview.innerHTML = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;"><img src="/api/template_preview/${encodeURIComponent(name)}" style="max-width:100%;max-height:100%;" onerror="this.onerror=null;this.parentNode.innerText='无法预览';"/></div>`;
+                        });
+                });
+        }
+        
+        function previewStyle(id) {
+            const preview = document.getElementById("stylePreview");
+            const html = `
+                <table class="style-${id}">
+                    <thead>
+                        <tr><th>项目</th><th>说明</th><th>备注</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>样例 A</td><td>字段示例</td><td>可替换</td></tr>
+                        <tr><td>样例 B</td><td>字段示例</td><td>可替换</td></tr>
+                        <tr><td>样例 C</td><td>字段示例</td><td>可替换</td></tr>
+                    </tbody>
+                </table>
+            `;
+            preview.innerHTML = html;
+        }
+
+        function groupFiles(files) {
+            const root = [];
+            const folders = {};
+            (files || []).forEach(f => {
+                const parts = (f.rel_path || "").split("/");
+                if (parts.length > 1) {
+                    const folder = parts[0];
+                    const rest = parts.slice(1).join("/");
+                    if (!folders[folder]) folders[folder] = [];
+                    folders[folder].push({ ...f, rel_path: rest });
+                } else {
+                    root.push(f);
+                }
+            });
+            return { root, folders };
+        }
+
+        function renderFileRow(f, displayName) {
+            const name = displayName || f.rel_path;
+            const download = `/api/admin/download_file?path=${encodeURIComponent(f.path)}`;
+            return `
+                <div style="display:grid; grid-template-columns: 1fr 140px 100px; gap:8px; padding:6px 0; border-bottom:1px dashed #eee; align-items:center;">
+                    <div title="${name}" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</div>
+                    <div style="font-size:12px; color:#64748b;">${f.ctime}</div>
+                    <div style="text-align:right;">
+                        <a href="${download}" style="color:#3b82f6; text-decoration:none; margin-right:8px; font-size:12px;">下载</a>
+                        <span style="color:#ef4444; cursor:pointer; font-size:12px;" onclick="deleteFile('${f.path.replace(/\\/g, '\\\\')}')">删除</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderProjectFiles(path, files) {
+            const grouped = groupFiles(files);
+            let html = "";
+            grouped.root.forEach(f => {
+                html += renderFileRow(f, f.rel_path);
+            });
+            Object.keys(grouped.folders).forEach(folder => {
+                const subId = encodeKey(path + "/" + folder);
+                // 确保路径使用正斜杠以保持 JS 逻辑一致性
+                const folderPath = path.replace(/\\/g, '/') + "/" + folder;
+                html += `
+                    <div style="padding:4px 0; font-weight:600; color:#475569; display:flex; justify-content:space-between; align-items:center;">
+                        <div style="cursor:pointer;" onclick="toggleSubfolder('${subId}')">
+                            📂 ${folder} <span id="arrow-${subId}" style="font-size:10px;">▼</span>
+                        </div>
+                        <div style="font-size:12px;">
+                            <a href="/api/admin/download_folder?path=${encodeURIComponent(folderPath)}" style="color:#3b82f6; text-decoration:none; margin-right:8px;">打包下载</a>
+                            <span style="color:#ef4444; cursor:pointer;" onclick="deleteProject('${folderPath.replace(/\\/g, '\\\\')}')">删除</span>
+                        </div>
+                    </div>
+                    <div id="sub-${subId}" style="display:none; padding-left:16px;">
+                        ${grouped.folders[folder].map(f => renderFileRow(f, f.rel_path)).join("")}
+                    </div>
+                `;
+            });
+            return html || "<div style='color:#94a3b8; font-size:12px;'>无文件</div>";
+        }
+
+        function startConvert() {
+            // 显示模态框
+            document.getElementById("newTaskModal").style.display = "flex";
+            document.getElementById("newDocUrl").focus();
+            
+            // 填充下拉框
+            const tSelect = document.getElementById("newTemplateSelect");
+            tSelect.innerHTML = "";
+            (adminData.templates || []).forEach(t => {
+                const opt = document.createElement("option");
+                opt.value = t.name;
+                opt.innerText = t.name;
+                tSelect.appendChild(opt);
+            });
+            if(selectedTemplate) tSelect.value = selectedTemplate;
+            
+            const sSelect = document.getElementById("newStyleSelect");
+            sSelect.innerHTML = "";
+            (adminData.table_styles || []).forEach(s => {
+                const opt = document.createElement("option");
+                opt.value = s.id;
+                opt.innerText = s.name;
+                sSelect.appendChild(opt);
+            });
+            if(selectedStyle) sSelect.value = selectedStyle;
+        }
+        
+        function closeNewTaskModal() {
+            document.getElementById("newTaskModal").style.display = "none";
+        }
+        
+        function submitNewTask() {
+            const docUrl = document.getElementById("newDocUrl").value;
+            if(!docUrl) return alert("请输入文档链接");
+            
+            const tpl = document.getElementById("newTemplateSelect").value;
+            const style = document.getElementById("newStyleSelect").value;
+            const addCover = document.getElementById("newAddCover").checked;
+            
+            closeNewTaskModal();
+            document.getElementById("progressModal").style.display = "flex";
+            
+            const logEl = document.getElementById("progressLog");
+            logEl.innerHTML = '<div style="color:#666">正在提交任务...</div>';
+            document.getElementById("modalDownloadBtn").style.display = "none";
+            
+            fetch("/api/start", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url: docUrl, template: tpl, tableStyle: style, addCover: addCover })
+            }).then(r => r.json()).then(res => {
+                if (res.status === "ok") {
+                    logEl.innerHTML += `<div>任务已开始，ID: ${res.job_id}</div>`;
+                    pollProgress(res.job_id);
+                } else {
+                    logEl.innerHTML += `<div style="color:red">提交失败: ${res.message}</div>`;
+                }
+            }).catch(e => {
+                 logEl.innerHTML += `<div style="color:red">请求错误: ${e.message}</div>`;
+            });
+        }
+
+        function pollProgress(jobId) {
+            if (progressTimer) clearInterval(progressTimer);
+            progressTimer = setInterval(() => {
+                fetch(`/api/status/${jobId}`).then(r => r.json()).then(res => {
+                    const logEl = document.getElementById("progressLog");
+                    if (res.logs) {
+                        logEl.innerHTML = "";
+                        res.logs.forEach(l => {
+                            const row = document.createElement("div");
+                            row.innerText = `[${l.ts}] ${l.message}`;
+                            logEl.appendChild(row);
+                        });
+                        logEl.scrollTop = logEl.scrollHeight;
+                    }
+                    
+                    if (res.status === "done") {
+                        clearInterval(progressTimer);
+                        const btn = document.getElementById("modalDownloadBtn");
+                        btn.href = `/api/download/${jobId}`;
+                        btn.style.display = "inline-block";
+                        
+                        const row = document.createElement("div");
+                        row.style.color = "green";
+                        row.style.fontWeight = "bold";
+                        row.style.marginTop = "10px";
+                        row.innerText = "转换完成！";
+                        logEl.appendChild(row);
+                        logEl.scrollTop = logEl.scrollHeight;
+                        
+                        loadProjects();
+                    } else if (res.status === "error") {
+                        clearInterval(progressTimer);
+                        const row = document.createElement("div");
+                        row.style.color = "red";
+                        row.innerText = "任务失败: " + (res.message || "未知错误");
+                        logEl.appendChild(row);
+                    }
+                });
+            }, 1000);
+        }
+        
+        function closeProgressModal() {
+            document.getElementById("progressModal").style.display = "none";
+            if (progressTimer) clearInterval(progressTimer);
+        }
+
+        function formatSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function loadProjects() {
+            fetch("/api/admin/projects").then(r => r.json()).then(res => {
+                projectCache = res || [];
+                const tbody = document.getElementById("projectTableBody");
+                tbody.innerHTML = "";
+                projectCache.forEach(p => {
+                    const folderId = encodeKey(p.path);
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = `
+                        <td>
+                            <div style="cursor:pointer; font-weight:600; color:#1e293b;" onclick="toggleFolder('${p.path.replace(/\\/g, '\\\\')}')">
+                                📁 ${p.name} <span style="font-size:10px; color:#94a3b8;">▼</span>
+                            </div>
+                        </td>
+                        <td style="color:#64748b; font-size:13px;">${p.ctime}</td>
+                        <td style="color:#64748b; font-size:13px;">${formatSize(p.size || 0)}</td>
+                        <td>
+                            <a href="/api/admin/download_project?path=${encodeURIComponent(p.path)}" style="color:#3b82f6; text-decoration:none; margin-right:12px; font-size:13px;">下载</a>
+                            <span class="action-link red" onclick="deleteProject('${p.path.replace(/\\/g, '\\\\')}')">删除</span>
+                        </td>
+                    `;
+                    const trDetail = document.createElement("tr");
+                    trDetail.id = `folder-${folderId}`;
+                    trDetail.style.display = "none";
+                    trDetail.innerHTML = `
+                        <td colspan="3" style="background:#f8fafc; padding:10px 20px;">
+                            ${renderProjectFiles(p.path, p.files || [])}
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                    tbody.appendChild(trDetail);
+                });
+            });
+        }
+        
+        function toggleFolder(path) {
+            const id = "folder-" + encodeKey(path);
+            const el = document.getElementById(id);
+            if (el) el.style.display = el.style.display === "none" ? "table-row" : "none";
+        }
+
+        function toggleSubfolder(id) {
+            const el = document.getElementById("sub-" + id);
+            if (el) el.style.display = el.style.display === "none" ? "block" : "none";
+        }
+
+        function deleteProject(path) {
+            if (!confirm("确定删除该项目吗？")) return;
+            fetch("/api/admin/delete_project", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ path: path })
+            }).then(r => r.json()).then(res => {
+                if (res.status === "ok") {
+                    loadProjects();
+                } else {
+                    alert(res.message);
+                }
+            });
+        }
+
+        function deleteFile(path) {
+            if (!confirm("确定删除该文件吗？")) return;
+            fetch("/api/admin/delete_file", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ path: path })
+            }).then(r => r.json()).then(res => {
+                if (res.status === "ok") {
+                    loadProjects();
+                } else {
+                    alert(res.message);
+                }
+            });
+        }
+
+        loadData();
+    </script>
+    <div class="footer-copyright">© Hawkon 2025 | <a href="[/* usage_url */]" target="_blank" style="color: #94a3b8; text-decoration: none;">联系我</a></div>
+</body>
+</html>
