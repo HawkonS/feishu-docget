@@ -403,6 +403,7 @@
             <div class="nav-item" onclick="switchTab('config')">配置管理</div>
             <div class="nav-item" onclick="switchTab('stats')">下载统计</div>
             <div class="nav-item" onclick="switchTab('logs')">日志检查</div>
+            <div class="nav-item" onclick="switchTab('system')">系统管理</div>
         </div>
 
         <!-- Main Content -->
@@ -476,6 +477,66 @@
                                 <button id="deleteLogBtn" onclick="deleteCurrentLog()" class="btn-start" style="padding: 6px 16px; background-color: #ef4444; font-size: 13px; display: none;">删除日志</button>
                             </div>
                             <pre id="logContent" style="flex: 1; overflow: auto; padding: 20px; margin: 0; font-family: 'Menlo', 'Monaco', 'Courier New', monospace; font-size: 13px; color: #334155; line-height: 1.6; white-space: pre-wrap; background: #fff;"></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab: System -->
+                <div id="tab-system" class="tab-pane" style="height: 100%;">
+                    <div style="display: flex; flex-direction: column; height: 100%; background: #f8fafc; padding: 24px; box-sizing: border-box;">
+                        
+                        <!-- Control Panel -->
+                        <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+                            
+                            <!-- Left: Service Actions -->
+                            <div style="display: flex; gap: 16px;">
+                                <div>
+                                    <div style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">服务操作</div>
+                                    <div style="display: flex; gap: 10px;">
+                                        <button onclick="systemAction('restart')" class="btn-start" style="background: #fff; color: #f59e0b; border: 1px solid #f59e0b; padding: 8px 16px; font-size: 13px; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                                            重启服务
+                                        </button>
+                                        <button onclick="systemAction('update')" class="btn-start" style="background: #fff; color: #10b981; border: 1px solid #10b981; padding: 8px 16px; font-size: 13px; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                            更新并重启程序
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Right: Monitor Controls -->
+                            <div style="display: flex; gap: 16px; border-left: 1px solid #f1f5f9; padding-left: 20px;">
+                                <div>
+                                    <div style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">实时监控</div>
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <div style="display:flex; align-items:center; gap:8px; background: #f8fafc; padding: 4px 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                                            <span style="font-size: 12px; color: #64748b;">刷新间隔:</span>
+                                            <input type="number" id="monitorInterval" value="5" min="1" style="width: 40px; padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px; text-align: center; font-size: 13px; outline: none;">
+                                            <span style="font-size: 12px; color: #64748b;">s</span>
+                                        </div>
+                                        
+                                        <button id="toggleMonitorBtn" onclick="toggleSystemMonitor()" class="btn-start" style="padding: 8px 20px; font-size: 13px; background: #94a3b8; transition: all 0.2s;">开启监控</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Terminal Area -->
+                        <div style="flex: 1; background: #1e293b; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); min-height: 0;">
+                            <!-- Terminal Header -->
+                            <div style="background: #0f172a; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; flex-shrink: 0;">
+                                <div style="font-size: 12px; color: #94a3b8; font-family: monospace; font-weight: 600;">> systemctl status feishu-docget</div>
+                                <div style="display:flex; align-items:center; gap:6px;">
+                                    <span id="statusIndicator" style="display:inline-block; width:6px; height:6px; background:#475569; border-radius:50%;"></span>
+                                    <span id="monitorStatusText" style="font-size: 11px; color: #64748b;">已暂停</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Terminal Content -->
+                            <div style="flex: 1; padding: 20px; font-family: 'Menlo', 'Monaco', 'Courier New', monospace; font-size: 13px; color: #e2e8f0; line-height: 1.6; overflow-y: auto;">
+                                <div id="systemStatus" style="white-space: pre-wrap;">点击右上角“开启监控”以查看系统状态...</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -616,6 +677,8 @@
             });
         }
 
+        let statusTimer = null;
+
         function switchTab(name) {
             if (window.location.hash.substring(1) === name) {
                 renderTab(name);
@@ -624,7 +687,14 @@
             }
         }
 
+        let isMonitoring = false;
+
         function renderTab(name) {
+            // 切换 Tab 时，如果是离开 system，则暂停监控
+            if (name !== 'system' && isMonitoring) {
+                toggleSystemMonitor(); // 关闭
+            }
+            
             document.querySelectorAll(".nav-item").forEach(i => i.classList.remove("active"));
             const target = document.querySelector(`.nav-item[onclick="switchTab('${name}')"]`);
             if(target) target.classList.add("active");
@@ -638,7 +708,8 @@
                 'projects': '项目管理',
                 'config': '配置管理',
                 'stats': '下载统计',
-                'logs': '日志检查'
+                'logs': '日志检查',
+                'system': '系统管理'
             };
             document.getElementById('pageTitle').innerText = titles[name] || '项目管理';
             
@@ -646,6 +717,7 @@
             if (name === 'config') loadConfig();
             if (name === 'stats') loadStats();
             if (name === 'logs') loadLogs();
+            // system tab 不再自动开始，需要用户手动点开启
         }
 
         // 初始化加载
@@ -653,7 +725,7 @@
              loadData(); // 加载基础数据 (templates, styles)
              
              const hash = window.location.hash.substring(1);
-             const validTabs = ['projects', 'config', 'stats', 'logs'];
+             const validTabs = ['projects', 'config', 'stats', 'logs', 'system'];
              if (validTabs.includes(hash)) {
                  renderTab(hash);
              } else {
@@ -663,7 +735,7 @@
         
         window.onhashchange = () => {
              const hash = window.location.hash.substring(1);
-             const validTabs = ['projects', 'config', 'stats', 'logs'];
+             const validTabs = ['projects', 'config', 'stats', 'logs', 'system'];
              if (validTabs.includes(hash)) {
                  renderTab(hash);
              }
@@ -1440,6 +1512,99 @@
                     loadProjects();
                 } else {
                     alert(res.message);
+                }
+            });
+        }
+
+        function toggleSystemMonitor() {
+            const btn = document.getElementById("toggleMonitorBtn");
+            const indicator = document.getElementById("statusIndicator");
+            const text = document.getElementById("monitorStatusText");
+            const intervalInput = document.getElementById("monitorInterval");
+            
+            if (isMonitoring) {
+                // 关闭监控
+                isMonitoring = false;
+                if (statusTimer) {
+                    clearInterval(statusTimer);
+                    statusTimer = null;
+                }
+                btn.innerText = "开启监控";
+                btn.style.background = "#94a3b8";
+                indicator.style.background = "#475569"; // Grey
+                text.innerText = "已暂停";
+                intervalInput.disabled = false;
+            } else {
+                // 开启监控
+                const interval = parseInt(intervalInput.value) || 5;
+                if (interval < 1) {
+                    alert("刷新间隔不能小于 1 秒");
+                    return;
+                }
+                
+                isMonitoring = true;
+                intervalInput.disabled = true; // 开启后禁止修改，防止逻辑混乱
+                checkSystemStatus();
+                statusTimer = setInterval(checkSystemStatus, interval * 1000);
+                
+                btn.innerText = "暂停监控";
+                btn.style.background = "#ef4444";
+                indicator.style.background = "#10b981"; // Green
+                text.innerText = `刷新中 (${interval}s)`;
+            }
+        }
+
+        function checkSystemStatus() {
+            const el = document.getElementById("systemStatus");
+            const indicator = document.getElementById("statusIndicator");
+            
+            if (!isMonitoring) return;
+            
+            fetch("/api/admin/system", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "status" })
+            }).then(r => r.json()).then(res => {
+                if (!isMonitoring) return;
+                if (res.status === "ok") {
+                    el.innerText = res.output;
+                    el.style.color = "#f1f5f9";
+                    if (indicator) indicator.style.background = "#10b981";
+                } else {
+                    el.innerText = "状态检查失败: " + res.message;
+                    el.style.color = "#ef4444";
+                    if (indicator) indicator.style.background = "#ef4444";
+                }
+            }).catch(e => {
+                if (!isMonitoring) return;
+                el.innerText = "请求错误: " + e.message;
+                el.style.color = "#ef4444";
+                if (indicator) indicator.style.background = "#ef4444"; // Red
+            });
+        }
+
+        function systemAction(action) {
+            let msg = "";
+            if (action === "restart") msg = "确定要重启服务吗？服务将短暂中断。";
+            if (action === "stop") msg = "确定要停止服务吗？停止后您将无法访问此页面，必须手动在服务器启动。";
+            if (action === "update") msg = "确定要更新程序吗？更新后服务会自动重启。";
+            
+            if (!confirm(msg)) return;
+            
+            fetch("/api/admin/system", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: action })
+            }).then(r => r.json()).then(res => {
+                if (res.status === "ok") {
+                    alert(res.message);
+                    if (action === "update" || action === "restart") {
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 5000);
+                    }
+                } else {
+                    alert("操作失败: " + res.message);
                 }
             });
         }

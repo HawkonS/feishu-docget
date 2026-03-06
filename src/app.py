@@ -613,6 +613,71 @@ def api_admin_delete_log(filename):
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
 
+@app.route('/api/admin/system', methods=['POST'])
+@admin_required
+def api_admin_system():
+    data = request.get_json(silent=True) or {}
+    action = data.get('action')
+    
+    # 检查 systemctl 是否可用
+    if shutil.which('systemctl') is None:
+        return jsonify({'status': 'error', 'message': '未找到 systemctl，系统管理功能不可用'})
+
+    if action == 'status':
+        try:
+            import subprocess
+            # 使用 list-units 检查服务是否存在
+            subprocess.check_call(['systemctl', 'status', 'feishu-docget'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            # 获取状态详情
+            output = subprocess.check_output(['systemctl', 'status', 'feishu-docget', '--no-pager'], stderr=subprocess.STDOUT)
+            return jsonify({'status': 'ok', 'output': output.decode('utf-8')})
+        except subprocess.CalledProcessError:
+             return jsonify({'status': 'error', 'message': '服务未运行或不存在'})
+        except Exception as e:
+             return jsonify({'status': 'error', 'message': str(e)})
+
+    elif action == 'update':
+        script_path = os.path.join(base_dir, 'tools', 'update.sh')
+        if not os.path.exists(script_path):
+             return jsonify({'status': 'error', 'message': '更新脚本未找到'})
+        
+        def run_update_bg():
+            import subprocess
+            try:
+                # 使用 nohup 运行更新脚本，避免因服务重启导致脚本中断
+                # 脚本内部会处理重启逻辑
+                subprocess.Popen(['nohup', 'bash', script_path, '&'], cwd=base_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception as e:
+                logger.error(f'启动更新脚本失败: {e}')
+        
+        threading.Thread(target=run_update_bg).start()
+        return jsonify({'status': 'ok', 'message': '更新任务已在后台启动，服务稍后将自动重启'})
+
+    elif action in ['restart', 'stop']:
+        cmd = ['sudo', 'systemctl', action, 'feishu-docget']
+        try:
+            import subprocess
+            sudo_pass = config.get('system.sudo_password')
+            
+            def run_cmd_bg():
+                if sudo_pass:
+                    full_cmd = f"echo '{sudo_pass}' | sudo -S {' '.join(cmd[1:])}"
+                    subprocess.Popen(full_cmd, shell=True)
+                else:
+                    subprocess.Popen(cmd)
+            
+            # 异步执行，防止阻塞 HTTP 响应
+            threading.Thread(target=run_cmd_bg).start()
+            
+            msg = '正在重启服务...' if action == 'restart' else '正在停止服务...'
+            return jsonify({'status': 'ok', 'message': msg})
+        except Exception as e:
+            return jsonify({'status': 'error', 'message': str(e)})
+            
+    else:
+        return jsonify({'status': 'error', 'message': '无效的操作'})
+
 if __name__ == '__main__':
     port = int(config.get('server.port', '7800'))
     logger.info(f'服务启动于端口 {port}...')
