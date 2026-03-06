@@ -1287,8 +1287,9 @@
         }
 
         function pollProgress(jobId) {
-            if (progressTimer) clearInterval(progressTimer);
-            progressTimer = setInterval(() => {
+            if (progressTimer) clearTimeout(progressTimer);
+            
+            const check = () => {
                 fetch(`/api/status/${jobId}`).then(r => r.json()).then(res => {
                     const logEl = document.getElementById("progressLog");
                     if (res.logs) {
@@ -1302,7 +1303,6 @@
                     }
                     
                     if (res.status === "done") {
-                        clearInterval(progressTimer);
                         const btn = document.getElementById("modalDownloadBtn");
                         btn.href = `/api/download/${jobId}`;
                         btn.style.display = "inline-block";
@@ -1317,19 +1317,24 @@
                         
                         loadProjects();
                     } else if (res.status === "error") {
-                        clearInterval(progressTimer);
                         const row = document.createElement("div");
                         row.style.color = "red";
                         row.innerText = "任务失败: " + (res.message || "未知错误");
                         logEl.appendChild(row);
+                    } else {
+                        progressTimer = setTimeout(check, 2000);
                     }
+                }).catch(() => {
+                    progressTimer = setTimeout(check, 3000);
                 });
-            }, 1000);
+            };
+            
+            check();
         }
         
         function closeProgressModal() {
             document.getElementById("progressModal").style.display = "none";
-            if (progressTimer) clearInterval(progressTimer);
+            if (progressTimer) clearTimeout(progressTimer);
         }
 
         function formatSize(bytes) {
