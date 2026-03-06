@@ -478,6 +478,75 @@
                     当选择“作为正文处理”时，列表项将不再有前面的符号，且缩进与正文一致。
                 </div>
             </div>
+            
+            <div class="form-group" style="margin-top: 15px; border-top: 1px dashed #e2e8f0; padding-top: 15px;">
+                <label style="display:flex; align-items:center; cursor:pointer;">
+                    <input type="checkbox" id="enableBodyStyle" onchange="toggleBodyStyle()" style="width:auto; margin-right:8px;"> 
+                    调整正文样式
+                </label>
+                <div id="bodyStyleConfig" style="display: none; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                        <!-- Font Size -->
+                        <div>
+                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">字号 (磅)</label>
+                            <div style="display: flex; gap: 5px;">
+                                <input type="number" id="styleFontSize" value="12" step="0.5" style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="syncFontSizeSelect(this.value)">
+                                <select id="styleFontSizeSelect" onchange="document.getElementById('styleFontSize').value=this.value" style="width: 80px; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    <option value="">-</option>
+                                    <option value="42">初号</option>
+                                    <option value="36">小初</option>
+                                    <option value="26">一号</option>
+                                    <option value="24">小一</option>
+                                    <option value="22">二号</option>
+                                    <option value="18">小二</option>
+                                    <option value="16">三号</option>
+                                    <option value="15">小三</option>
+                                    <option value="14">四号</option>
+                                    <option value="12" selected>小四</option>
+                                    <option value="10.5">五号</option>
+                                    <option value="9">小五</option>
+                                    <option value="7.5">六号</option>
+                                    <option value="6.5">小六</option>
+                                    <option value="5.5">七号</option>
+                                    <option value="5">八号</option>
+                                </select>
+                            </div>
+                        </div>
+                    <!-- Line Spacing -->
+                    <div>
+                        <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">行间距</label>
+                        <div style="display: flex; gap: 5px;">
+                            <input type="number" id="styleLineSpacing" value="1.5" step="0.1" style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                            <select id="styleLineSpacingUnit" style="width: 80px; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                <option value="lines">倍</option>
+                                <option value="pt">磅</option>
+                            </select>
+                        </div>
+                    </div>
+                    <!-- Space Before -->
+                    <div>
+                        <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">段前</label>
+                        <div style="display: flex; gap: 5px;">
+                            <input type="number" id="styleSpaceBefore" value="0" step="0.5" style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                            <select id="styleSpaceBeforeUnit" style="width: 80px; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                <option value="lines">行</option>
+                                <option value="pt">磅</option>
+                            </select>
+                        </div>
+                    </div>
+                    <!-- Space After -->
+                    <div>
+                        <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">段后</label>
+                        <div style="display: flex; gap: 5px;">
+                            <input type="number" id="styleSpaceAfter" value="0" step="0.5" style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                            <select id="styleSpaceAfterUnit" style="width: 80px; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                <option value="lines">行</option>
+                                <option value="pt">磅</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div style="text-align:right; margin-top:20px;">
                 <button onclick="closeAdvancedModal()" class="btn-small">确定</button>
             </div>
@@ -679,6 +748,20 @@
             const addCover = document.getElementById("addCover").checked;
             const unorderedListStyle = document.getElementById("unorderedListStyle").value;
             
+            // Collect Body Style Options
+            let bodyStyle = null;
+            if (document.getElementById("enableBodyStyle").checked) {
+                bodyStyle = {
+                    fontSize: parseFloat(document.getElementById("styleFontSize").value),
+                    lineSpacing: parseFloat(document.getElementById("styleLineSpacing").value),
+                    lineSpacingUnit: document.getElementById("styleLineSpacingUnit").value,
+                    spaceBefore: parseFloat(document.getElementById("styleSpaceBefore").value),
+                    spaceBeforeUnit: document.getElementById("styleSpaceBeforeUnit").value,
+                    spaceAfter: parseFloat(document.getElementById("styleSpaceAfter").value),
+                    spaceAfterUnit: document.getElementById("styleSpaceAfterUnit").value
+                };
+            }
+
             if (!url) return alert("请输入文档链接");
             
             fetch("/api/start", {
@@ -689,7 +772,8 @@
                     template: selectedTemplate, 
                     tableStyle: selectedStyle, 
                     addCover,
-                    unorderedListStyle 
+                    unorderedListStyle,
+                    bodyStyle
                 })
             }).then(r => r.json()).then(res => {
                 if (res.status !== "ok") {
@@ -863,6 +947,26 @@
         function showAdvancedModal() { document.getElementById("advancedModal").style.display = "flex"; }
         function closeAdvancedModal() { document.getElementById("advancedModal").style.display = "none"; }
         
+        function toggleBodyStyle() {
+            const checked = document.getElementById("enableBodyStyle").checked;
+            document.getElementById("bodyStyleConfig").style.display = checked ? "grid" : "none";
+        }
+
+        function syncFontSizeSelect(val) {
+            const select = document.getElementById('styleFontSizeSelect');
+            let found = false;
+            for (let i = 0; i < select.options.length; i++) {
+                if (select.options[i].value == val) {
+                    select.selectedIndex = i;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                select.value = "";
+            }
+        }
+
         function doUpload() {
             const file = document.getElementById("uploadFile").files[0];
             const password = document.getElementById("uploadPass").value;

@@ -5,6 +5,7 @@ from docx import Document
 from docx.oxml.ns import nsdecls
 from docx.oxml import parse_xml
 from docx.shared import Pt, Mm, RGBColor
+from docx.enum.text import WD_LINE_SPACING
 from copy import deepcopy
 from src.core.config_loader import ConfigLoader, config
 try:
@@ -15,7 +16,7 @@ except ImportError:
         IMAGE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image'
 logger = ConfigLoader.get_logger('format_cleaner')
 
-def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=False):
+def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=False, body_style=None):
     logger.debug('开始清理文档...')
     doc = Document(docx_path)
     ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
@@ -114,14 +115,100 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
     if progress_cb and (count_resized > 0 or count_centered > 0):
         progress_cb(97, f'已调整图片样式：处理大小 {count_resized} 张，居中对齐 {count_centered} 张', 'success')
     if progress_cb:
-        progress_cb(98, '正在清理文本缩进...', 'dynamic')
+        progress_cb(98, '正在清理文本缩进并应用样式...', 'dynamic')
+    
+    count_style_applied = 0
     for i, p in enumerate(doc.paragraphs):
         if i < cover_para_count:
             continue
         _clean_text_indent(p, ns)
+        
+        # 应用正文样式
+        if body_style:
+            # 排除标题样式 (Heading 1-9, Title, Subtitle)
+            style_name = p.style.name
+            is_heading = style_name.startswith('Heading') or style_name in ['Title', 'Subtitle']
+            # 排除列表 (可选，这里暂时不排除列表，让列表也应用字体大小，但缩进可能受影响，需谨慎)
+            # 这里的 _clean_text_indent 已经处理了缩进。
+            # 飞书列表通常是 List Paragraph。
+            
+            if not is_heading:
+                _apply_paragraph_style(p, body_style, ns)
+                count_style_applied += 1
+
     if progress_cb:
-        progress_cb(98, '已调整文本样式', 'success')
+        if body_style:
+            progress_cb(98, f'已调整文本样式 (应用正文样式到 {count_style_applied} 段)', 'success')
+        else:
+            progress_cb(98, '已调整文本样式', 'success')
     doc.save(docx_path)
+
+def _apply_paragraph_style(paragraph, style_config, ns):
+    """
+    style_config: {
+        'fontSize': float (pt),
+        'lineSpacing': float,
+        'lineSpacingUnit': 'lines'|'pt',
+        'spaceBefore': float,
+        'spaceBeforeUnit': 'lines'|'pt',
+        'spaceAfter': float,
+        'spaceAfterUnit': 'lines'|'pt'
+    }
+    """
+    # 1. Font Size (Apply to all runs to override existing formatting)
+    font_size = style_config.get('fontSize')
+    if font_size:
+        for run in paragraph.runs:
+            run.font.size = Pt(font_size)
+    
+    # 2. Line Spacing
+    line_spacing = style_config.get('lineSpacing')
+    line_spacing_unit = style_config.get('lineSpacingUnit')
+    if line_spacing is not None:
+        pf = paragraph.paragraph_format
+        if line_spacing_unit == 'pt':
+            pf.line_spacing_rule = WD_LINE_SPACING.EXACTLY
+            pf.line_spacing = Pt(line_spacing)
+        else: # lines (default or multiple)
+            # 1.5倍行距等
+            pf.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
+            pf.line_spacing = line_spacing
+
+    # 3. Space Before/After (Directly manipulating XML for 'lines' unit support)
+    space_before = style_config.get('spaceBefore')
+    space_before_unit = style_config.get('spaceBeforeUnit')
+    space_after = style_config.get('spaceAfter')
+    space_after_unit = style_config.get('spaceAfterUnit')
+    
+    if space_before is not None or space_after is not None:
+        pPr = paragraph._element.get_or_add_pPr()
+        spacing = pPr.find(f'{{{ns}}}spacing')
+        if spacing is None:
+            spacing = parse_xml(f'<w:spacing xmlns:w="{ns}"/>')
+            pPr.append(spacing)
+            
+        if space_before is not None:
+            if space_before_unit == 'lines':
+                # w:beforeLines is in 100th of a line
+                spacing.set(f'{{{ns}}}beforeLines', str(int(space_before * 100)))
+                # Remove pt setting if exists to avoid conflict
+                if f'{{{ns}}}before' in spacing.attrib:
+                    del spacing.attrib[f'{{{ns}}}before']
+            else: # pt
+                # w:before is in twips (1/20 pt)
+                spacing.set(f'{{{ns}}}before', str(int(space_before * 20)))
+                if f'{{{ns}}}beforeLines' in spacing.attrib:
+                    del spacing.attrib[f'{{{ns}}}beforeLines']
+                    
+        if space_after is not None:
+            if space_after_unit == 'lines':
+                spacing.set(f'{{{ns}}}afterLines', str(int(space_after * 100)))
+                if f'{{{ns}}}after' in spacing.attrib:
+                    del spacing.attrib[f'{{{ns}}}after']
+            else: # pt
+                spacing.set(f'{{{ns}}}after', str(int(space_after * 20)))
+                if f'{{{ns}}}afterLines' in spacing.attrib:
+                    del spacing.attrib[f'{{{ns}}}afterLines']
 
 def _copy_styles_from_template(template_path, target_doc):
     try:
