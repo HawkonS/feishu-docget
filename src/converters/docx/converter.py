@@ -7,12 +7,29 @@ from docx.shared import Pt, RGBColor, Cm
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement, parse_xml
 import docx.opc.constants
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
 from src.core.config_loader import ConfigLoader
 from src.core.image_processor import smart_crop
 logger = ConfigLoader.get_logger('feishu2docx')
 BLOCK_TYPES = {1: 'page', 2: 'text', 3: 'heading1', 4: 'heading2', 5: 'heading3', 6: 'heading4', 7: 'heading5', 8: 'heading6', 9: 'heading7', 10: 'heading8', 11: 'heading9', 12: 'bullet', 13: 'ordered', 14: 'code', 15: 'quote', 17: 'todo', 18: 'bitable', 19: 'highlight', 20: 'callout', 21: 'iframe', 22: 'divider', 23: 'file', 24: 'column', 25: 'column', 26: 'iframe', 27: 'image', 28: 'callout', 29: 'mindnote', 30: 'sheet', 31: 'table', 32: 'table_cell', 33: 'view', 34: 'quote_container', 35: 'task', 36: 'okr', 37: 'okr_objective', 38: 'okr_key_result', 39: 'okr_progress', 40: 'callout', 41: 'file', 42: 'callout', 43: 'whiteboard'}
 TEXT_COLOR_MAP = {1: 'E85E5E', 2: 'F08C4A', 3: 'F5D450', 4: '7ED321', 5: '4A90E2', 6: '9013FE', 7: '9B9B9B'}
+FEISHU_BG_TO_WORD_HIGHLIGHT = {
+    1: 'DARK_BLUE',         # 浅红 -> 深蓝
+    2: 'TEAL',              # 浅橙 -> 青色
+    3: 'YELLOW',            # 浅黄 -> 黄色
+    4: 'BRIGHT_GREEN',      # 浅绿 -> 鲜绿
+    5: 'TURQUOISE',         # 浅蓝 -> 青绿
+    6: 'PINK',              # 浅紫 -> 粉红
+    7: 'GRAY_50',           # 中灰 -> 50% 灰
+    8: 'RED',               # 红 -> 红
+    9: 'DARK_RED',          # 橙 -> 深红
+    10: 'DARK_YELLOW',      # 黄 -> 深黄
+    11: 'GREEN',            # 绿 -> 绿
+    12: 'BLUE',             # 蓝 -> 蓝
+    13: 'VIOLET',           # 紫 -> 紫罗兰
+    14: 'BLACK',            # 灰 -> 黑色
+    15: 'GRAY_25',          # 浅灰 -> 25% 灰
+}
 
 def add_hyperlink(paragraph, url, text, color='0000FF', underline=True):
     part = paragraph.part
@@ -681,6 +698,17 @@ class FeishuDocxConverter:
                     color_idx = style.get('text_color')
                     if color_idx and color_idx in TEXT_COLOR_MAP:
                         run.font.color.rgb = RGBColor.from_string(TEXT_COLOR_MAP[color_idx])
+                    
+                    # 背景颜色 (Highlight)
+                    bg_color_idx = style.get('background_color')
+                    if bg_color_idx and bg_color_idx in FEISHU_BG_TO_WORD_HIGHLIGHT:
+                        # 使用 Word 原生 highlight
+                        highlight_color = FEISHU_BG_TO_WORD_HIGHLIGHT[bg_color_idx]
+                        run.font.highlight_color = getattr(WD_COLOR_INDEX, highlight_color, WD_COLOR_INDEX.YELLOW)
+                        
+                        # 特殊处理：如果背景是黑色(14)或深蓝(1)，文字颜色自动改为白色，确保可读性
+                        if bg_color_idx == 14 or bg_color_idx == 1:
+                            run.font.color.rgb = RGBColor(255, 255, 255)
             elif 'mention_user' in el:
                 user = el['mention_user']
                 user_id = user.get('user_id')
