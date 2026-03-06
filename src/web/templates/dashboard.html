@@ -474,7 +474,13 @@
                         <div style="flex: 1; display: flex; flex-direction: column; height: 100%; background: #fff;">
                             <div style="padding: 12px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #fff;">
                                 <span id="currentLogName" style="font-weight: 600; color: #1e293b;">请选择日志文件</span>
-                                <button id="deleteLogBtn" onclick="deleteCurrentLog()" class="btn-start" style="padding: 6px 16px; background-color: #ef4444; font-size: 13px; display: none;">删除日志</button>
+                                <div id="logControls" style="display:none; align-items:center; gap:10px;">
+                                    <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:#64748b;">
+                                        刷新间隔: <input type="number" id="logMonitorInterval" value="3" min="1" style="width:40px; padding:4px; border:1px solid #d9e4f5; border-radius:4px; text-align:center;"> s
+                                    </div>
+                                    <button id="toggleLogMonitorBtn" onclick="toggleLogMonitor()" class="btn-start" style="padding: 6px 12px; font-size: 12px; background: #94a3b8;">开启监控</button>
+                                    <button id="deleteLogBtn" onclick="deleteCurrentLog()" class="btn-start" style="padding: 6px 16px; background-color: #ef4444; font-size: 13px;">删除日志</button>
+                                </div>
                             </div>
                             <pre id="logContent" style="flex: 1; overflow: auto; padding: 20px; margin: 0; font-family: 'Menlo', 'Monaco', 'Courier New', monospace; font-size: 13px; color: #334155; line-height: 1.6; white-space: pre-wrap; background: #fff;"></pre>
                         </div>
@@ -499,7 +505,7 @@
                                         </button>
                                         <button onclick="systemAction('update')" class="btn-start" style="background: #fff; color: #10b981; border: 1px solid #10b981; padding: 8px 16px; font-size: 13px; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                                            更新并重启程序
+                                            更新并重启服务
                                         </button>
                                     </div>
                                 </div>
@@ -693,6 +699,10 @@
             // 切换 Tab 时，如果是离开 system，则暂停监控
             if (name !== 'system' && isMonitoring) {
                 toggleSystemMonitor(); // 关闭
+            }
+            // 切换 Tab 时，如果是离开 logs，则暂停监控
+            if (name !== 'logs' && isLogMonitoring) {
+                stopLogMonitor(); // 关闭
             }
             
             document.querySelectorAll(".nav-item").forEach(i => i.classList.remove("active"));
@@ -964,6 +974,8 @@
         }
 
         let currentLog = null;
+        let logMonitorTimer = null;
+        let isLogMonitoring = false;
 
         async function loadLogs() {
             try {
@@ -1012,14 +1024,16 @@
         }
 
         async function selectLog(name) {
+            // 切换日志时强制停止监控
+            stopLogMonitor();
+            
             currentLog = name;
             document.getElementById('currentLogName').innerText = name;
-            document.getElementById('deleteLogBtn').style.display = 'block';
+            document.getElementById('logControls').style.display = 'flex';
             
             // Re-render list to update selection style
             const list = document.getElementById('logList');
             Array.from(list.children).forEach(child => {
-                 // Simple way to reset styles, ideally we should just toggle classes but inline styles are used here
                  if (child.innerText.includes(name)) {
                      child.style.background = '#eef6ff';
                      child.style.color = '#3b82f6';
@@ -1033,20 +1047,83 @@
             
             document.getElementById('logContent').innerText = '正在加载日志内容...';
             
+            fetchLogContent(name);
+        }
+        
+        async function fetchLogContent(name) {
+            if (!name) return;
             try {
                 const res = await fetch('/api/admin/logs/' + encodeURIComponent(name));
                 const data = await res.json();
+                
+                // 防止请求返回时已经切换了日志
+                if (name !== currentLog) return;
+                
                 if (data.status === 'ok') {
-                    document.getElementById('logContent').innerText = data.content || '(空文件)';
+                    const el = document.getElementById('logContent');
+                    const wasScrolledBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 50; // 50px buffer
+                    
+                    el.innerText = data.content || '(空文件)';
+                    
+                    // 如果正在监控且之前在底部，保持在底部
+                    if (isLogMonitoring && wasScrolledBottom) {
+                        el.scrollTop = el.scrollHeight;
+                    }
                 } else {
                      document.getElementById('logContent').innerText = '加载失败: ' + data.message;
+                     stopLogMonitor(); // 出错停止监控
                 }
             } catch(e) {
+                if (name !== currentLog) return;
                 document.getElementById('logContent').innerText = '请求错误: ' + e.message;
+                stopLogMonitor();
+            }
+        }
+        
+        function stopLogMonitor() {
+            if (!isLogMonitoring) return;
+            
+            isLogMonitoring = false;
+            if (logMonitorTimer) {
+                clearInterval(logMonitorTimer);
+                logMonitorTimer = null;
+            }
+            
+            const btn = document.getElementById("toggleLogMonitorBtn");
+            const intervalInput = document.getElementById("logMonitorInterval");
+            
+            btn.innerText = "开启监控";
+            btn.style.background = "#94a3b8";
+            intervalInput.disabled = false;
+        }
+
+        function toggleLogMonitor() {
+            if (isLogMonitoring) {
+                stopLogMonitor();
+            } else {
+                // 开启
+                if (!currentLog) return alert("请先选择日志文件");
+                
+                const intervalInput = document.getElementById("logMonitorInterval");
+                const interval = parseInt(intervalInput.value) || 3;
+                if (interval < 1) {
+                    return alert("刷新间隔不能小于 1 秒");
+                }
+                
+                const btn = document.getElementById("toggleLogMonitorBtn");
+                isLogMonitoring = true;
+                intervalInput.disabled = true;
+                
+                btn.innerText = "暂停监控";
+                btn.style.background = "#ef4444";
+                
+                fetchLogContent(currentLog); // 立即刷新一次
+                logMonitorTimer = setInterval(() => fetchLogContent(currentLog), interval * 1000);
             }
         }
 
         async function deleteCurrentLog() {
+            stopLogMonitor(); // 停止监控
             if (!currentLog) return;
             if (!confirm('确定删除日志文件 "' + currentLog + '" 吗？此操作不可恢复。')) return;
             
@@ -1057,7 +1134,7 @@
                     currentLog = null;
                     document.getElementById('currentLogName').innerText = '请选择日志文件';
                     document.getElementById('logContent').innerText = '';
-                    document.getElementById('deleteLogBtn').style.display = 'none';
+                    document.getElementById('logControls').style.display = 'none';
                     loadLogs();
                     alert('日志文件已删除');
                 } else {
