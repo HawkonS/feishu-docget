@@ -617,6 +617,14 @@
         }
 
         function switchTab(name) {
+            if (window.location.hash.substring(1) === name) {
+                renderTab(name);
+            } else {
+                window.location.hash = name;
+            }
+        }
+
+        function renderTab(name) {
             document.querySelectorAll(".nav-item").forEach(i => i.classList.remove("active"));
             const target = document.querySelector(`.nav-item[onclick="switchTab('${name}')"]`);
             if(target) target.classList.add("active");
@@ -632,7 +640,7 @@
                 'stats': '下载统计',
                 'logs': '日志检查'
             };
-            document.getElementById('pageTitle').innerText = titles[name];
+            document.getElementById('pageTitle').innerText = titles[name] || '项目管理';
             
             if (name === 'projects') loadProjects();
             if (name === 'config') loadConfig();
@@ -643,8 +651,23 @@
         // 初始化加载
         document.addEventListener('DOMContentLoaded', () => {
              loadData(); // 加载基础数据 (templates, styles)
-             switchTab('projects'); // 默认加载项目管理页的数据
+             
+             const hash = window.location.hash.substring(1);
+             const validTabs = ['projects', 'config', 'stats', 'logs'];
+             if (validTabs.includes(hash)) {
+                 renderTab(hash);
+             } else {
+                 renderTab('projects');
+             }
         });
+        
+        window.onhashchange = () => {
+             const hash = window.location.hash.substring(1);
+             const validTabs = ['projects', 'config', 'stats', 'logs'];
+             if (validTabs.includes(hash)) {
+                 renderTab(hash);
+             }
+        };
         let statsData = [];
         let filteredStats = [];
         let currentPage = 1;
@@ -1420,8 +1443,6 @@
                 }
             });
         }
-
-        loadData();
     </script>
     <div class="footer-copyright">© Hawkon 2025 | <a href="[/* usage_url */]" target="_blank" style="color: #94a3b8; text-decoration: none;">联系我</a></div>
 </body>
