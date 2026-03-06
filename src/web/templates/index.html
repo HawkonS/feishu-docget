@@ -353,6 +353,32 @@
             display: flex;
             gap: 10px;
         }
+        /* Input Group Styles */
+        .input-group {
+            display: flex;
+            align-items: center;
+        }
+        .input-group input {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+            flex: 1;
+            /* 移除可能存在的右边框，避免双重边框，但这里因为addon有左边框0，所以input保留右边框即可 */
+        }
+        .input-group input[type="file"] {
+             /* 文件输入框特殊处理 */
+             padding: 6px;
+        }
+        .input-group-addon {
+            padding: 8px 12px;
+            background: #f1f5f9;
+            border: 1px solid #d9e4f5;
+            border-left: 0;
+            border-top-right-radius: 6px;
+            border-bottom-right-radius: 6px;
+            color: #64748b;
+            font-size: 13px;
+            white-space: nowrap;
+        }
     </style>
 </head>
 <body>
@@ -430,27 +456,48 @@
         </div>
     </div>
 
+    <!-- Upload Modal -->
     <div id="uploadModal" class="modal">
-        <div class="modal-content">
-            <h3 style="margin-top:0">上传 Word 模板</h3>
+        <div class="modal-content" style="width: 400px;">
+            <h3 style="margin-top:0;">上传自定义模板</h3>
+            
             <div class="form-group">
-                <label>选择文件 (.docx)</label>
-                <input type="file" id="uploadFile" accept=".docx" />
+                <label>模板名称 <span style="color:red">*</span></label>
+                <div class="input-group">
+                    <input type="text" id="tplName" class="form-select" placeholder="给模板起个名字(无需填写后缀)">
+                    <span class="input-group-addon">.docx/.png</span>
+                </div>
             </div>
+            
             <div class="form-group">
-                <label>上传密码</label>
-                <input type="password" id="uploadPass" />
+                <label>模板文件<span style="color:red">*</span></label>
+                <input type="file" id="tplFile" class="form-select" accept=".docx">
             </div>
+            
             <div class="form-group">
-                <label>存储模式</label>
-                <select id="uploadMode">
-                    <option value="current">仅本次使用 (用完即删)</option>
-                    <option value="long_term">长期存储</option>
+                <label>预览图片 (选填)</label>
+                <div class="input-group">
+                    <input type="file" id="tplImage" class="form-select" accept="image/*" style="flex:1;">
+                </div>
+                <div style="font-size:11px; color:#94a3b8; margin-top:4px;">图片名称将自动与模板同步</div>
+            </div>
+            
+            <div class="form-group">
+                <label>存储模式 <span style="color:red">*</span></label>
+                <select id="tplMode" class="form-select">
+                    <option value="one_time">仅本次使用 (临时)</option>
+                    <option value="long_term">长期存储 (永久)</option>
                 </select>
             </div>
-            <div style="text-align:right; margin-top:20px;">
-                <button onclick="closeUploadModal()" class="btn-small" style="background:#94a3b8">取消</button>
-                <button onclick="doUpload()" class="btn-small">上传</button>
+            
+            <div class="form-group">
+                <label>上传密码 <span style="color:red">*</span></label>
+                <input type="password" id="tplPassword" class="form-select" placeholder="请输入对应模式的密码">
+            </div>
+            
+            <div style="text-align:right; display:flex; justify-content:flex-end; gap:10px;">
+                <button onclick="closeUploadModal()" style="padding:8px 16px; border:1px solid #ddd; background:#fff; border-radius:6px; cursor:pointer;">取消</button>
+                <button onclick="uploadTemplate()" class="btn-start" style="padding:8px 16px;">上传</button>
             </div>
         </div>
     </div>
@@ -552,8 +599,12 @@
                 </div>
             </div>
 
-            <div style="text-align:right; margin-top:20px;">
-                <button onclick="closeAdvancedModal()" class="btn-small">确定</button>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px;">
+                <button onclick="resetAdvancedOptions()" class="btn-small" style="background:#fff; color:#64748b; border:1px solid #cbd5e1;">恢复默认</button>
+                <div style="display:flex; gap:10px;">
+                    <button onclick="closeAdvancedModal()" class="btn-small" style="background:#fff; border:1px solid #cbd5e1; color:#333;">取消</button>
+                    <button onclick="closeAdvancedModal()" class="btn-small">确定</button>
+                </div>
             </div>
         </div>
     </div>
@@ -588,11 +639,25 @@
             tSelect.innerHTML = '<option value="">请选择模板</option>';
             
             templates.forEach(t => {
+                // 如果是临时模板，不显示在列表中（除非是刚刚上传的？）
+                // 或者我们可以显示，但标记为临时
+                // 这里我们选择显示所有，但可能需要区分样式
+                
                 // 列表项
                 const div = document.createElement("div");
                 div.className = "list-item";
                 div.dataset.value = t.name;
-                div.innerText = t.name;
+                
+                // 显示名称处理
+                let displayName = t.name;
+                if (t.display_name) {
+                    displayName = t.display_name;
+                } else if (t.is_temp) {
+                    const parts = t.name.split('_', 2);
+                    if (parts.length >= 3) displayName = parts[2];
+                }
+                
+                div.innerText = displayName + (t.is_temp ? " (临时)" : "");
                 div.onclick = () => {
                     selectTemplate(t.name);
                 };
@@ -601,7 +666,7 @@
                 // 下拉选项
                 const opt = document.createElement("option");
                 opt.value = t.name;
-                opt.innerText = t.name;
+                opt.innerText = displayName + (t.is_temp ? " (临时)" : "");
                 tSelect.appendChild(opt);
                 
                 if (t.name === defaultTemplate) {
@@ -810,7 +875,10 @@
                 renderTaskList();
                 renderLogs();
                 if (res.status === "done") {
-                    // 完成
+                    // 任务完成，如果使用了临时模板，则移除它
+                    if (res.template && res.template.startsWith('temp_')) {
+                        removeTempTemplate(res.template);
+                    }
                 } else {
                     // 继续轮询，间隔 2000ms
                     timer = setTimeout(pollStatus, 2000);
@@ -819,6 +887,38 @@
                 // 出错重试
                 timer = setTimeout(pollStatus, 3000);
             });
+        }
+        
+        function removeTempTemplate(name) {
+            // 找到索引
+            const idx = templates.findIndex(t => t.name === name);
+            if (idx === -1) return;
+            
+            // 从全局数组中移除
+            templates.splice(idx, 1);
+            
+            // 从下拉框移除
+            const select = document.getElementById("templateSelectMobile");
+            const option = Array.from(select.options).find(o => o.value === name);
+            if (option) select.removeChild(option);
+            
+            // 从列表移除
+            const list = document.getElementById("templateList");
+            const item = Array.from(list.children).find(d => d.dataset.value === name);
+            if (item) list.removeChild(item);
+            
+            // 如果当前选中该模板，切换回默认或第一个
+            if (selectedTemplate === name) {
+                const defaultTpl = templates.find(t => t.is_default);
+                if (defaultTpl) {
+                    selectTemplate(defaultTpl.name);
+                } else if (templates.length > 0) {
+                    selectTemplate(templates[0].name);
+                } else {
+                    selectedTemplate = "";
+                    document.getElementById("templatePreview").innerHTML = '<div class="centered-placeholder">请选择模板</div>';
+                }
+            }
         }
 
         function addTask(id, name) {
@@ -910,12 +1010,24 @@
             
             let html = "";
             
+            // 使用 icon-btn 类保持大小和布局一致，但覆盖颜色
+            const commonStyle = "padding: 6px 10px; border-radius: 8px; font-size: 13px; font-weight: 600; text-decoration: none; border: none; display: flex; align-items: center; gap: 6px;";
+            
             if (task.status === "done") {
-                html = `<button onclick="downloadDoc('${task.job_id}')" class="btn-small btn-success" style="margin:0;">下载文档</button>`;
+                html = `<button onclick="downloadDoc('${task.job_id}')" class="icon-btn" style="${commonStyle} background-color: #10b981; color: white;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    下载文档
+                </button>`;
             } else if (task.status === "running" || task.status === "pending") {
-                html = `<button onclick="stopTask('${task.job_id}')" class="btn-small" style="margin:0; background-color: #ef4444;">停止下载</button>`;
+                html = `<button onclick="stopTask('${task.job_id}')" class="icon-btn" style="${commonStyle} background-color: #ef4444; color: white;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><rect x="9" y="9" width="6" height="6"></rect></svg>
+                    停止下载
+                </button>`;
             } else if (task.status === "stopped") {
-                html = `<span style="color:#ef4444; font-size:13px; font-weight:600;">已停止</span>`;
+                html = `<span style="color:#ef4444; font-size:13px; font-weight:600; display: flex; align-items: center; gap: 6px; padding: 6px 10px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+                    已停止
+                </span>`;
             }
             
             area.innerHTML = html;
@@ -962,6 +1074,27 @@
         function showAdvancedModal() { document.getElementById("advancedModal").style.display = "flex"; }
         function closeAdvancedModal() { document.getElementById("advancedModal").style.display = "none"; }
         
+        function resetAdvancedOptions() {
+            if (!confirm("确定要恢复所有高级选项到默认值吗？")) return;
+            
+            document.getElementById("addCover").checked = true;
+            
+            document.getElementById("enableListStyle").checked = true;
+            document.getElementById("unorderedListStyle").value = "default";
+            toggleListStyle();
+            
+            document.getElementById("enableBodyStyle").checked = false;
+            document.getElementById("styleFontSize").value = "12";
+            document.getElementById("styleFontSizeSelect").value = "12";
+            document.getElementById("styleLineSpacing").value = "1.5";
+            document.getElementById("styleLineSpacingUnit").value = "lines";
+            document.getElementById("styleSpaceBefore").value = "0";
+            document.getElementById("styleSpaceBeforeUnit").value = "lines";
+            document.getElementById("styleSpaceAfter").value = "0";
+            document.getElementById("styleSpaceAfterUnit").value = "lines";
+            toggleBodyStyle();
+        }
+
         function toggleListStyle() {
             const checked = document.getElementById("enableListStyle").checked;
             document.getElementById("listStyleConfig").style.display = checked ? "block" : "none";
@@ -987,27 +1120,87 @@
             }
         }
 
-        function doUpload() {
-            const file = document.getElementById("uploadFile").files[0];
-            const password = document.getElementById("uploadPass").value;
-            const mode = document.getElementById("uploadMode").value;
-            if (!file || !password) return alert("请填写完整");
+        function clearUploadForm() {
+            document.getElementById("tplName").value = "";
+            document.getElementById("tplFile").value = "";
+            document.getElementById("tplImage").value = "";
+            document.getElementById("tplPassword").value = "";
+        }
+
+        function uploadTemplate() {
+            const name = document.getElementById("tplName").value.trim();
+            const fileInput = document.getElementById("tplFile");
+            const imgInput = document.getElementById("tplImage");
+            const mode = document.getElementById("tplMode").value;
+            const password = document.getElementById("tplPassword").value;
+            
+            if (!name) return alert("请输入模板名称");
+            if (fileInput.files.length === 0) return alert("请选择 Word 模板文件");
+            if (!password) return alert("请输入上传密码");
             
             const formData = new FormData();
-            formData.append("file", file);
-            formData.append("password", password);
+            formData.append("name", name);
+            formData.append("file", fileInput.files[0]);
+            if (imgInput.files.length > 0) {
+                formData.append("image", imgInput.files[0]);
+            }
             formData.append("mode", mode);
+            formData.append("password", password);
             
             fetch("/api/upload_template", {
                 method: "POST",
                 body: formData
             }).then(r => r.json()).then(res => {
                 if (res.status === "ok") {
-                    alert("上传成功");
-                    location.reload();
+                    alert("上传成功！");
+                    if (mode === 'one_time') {
+                        // 临时模式，手动添加到列表，不刷新页面
+                        const filename = res.filename;
+                        const displayName = name;
+                        const fullDisplayName = displayName + " (临时)";
+                        
+                        // 更新全局数据，以便预览功能正常工作
+                        templates.push({
+                            name: filename,
+                            display_name: displayName,
+                            is_temp: true,
+                            has_png: imgInput.files.length > 0,
+                            is_default: false
+                        });
+                        
+                        // 添加到下拉框
+                        const select = document.getElementById("templateSelectMobile");
+                        const opt = document.createElement("option");
+                        opt.value = filename;
+                        opt.innerText = fullDisplayName;
+                        select.appendChild(opt);
+                        
+                        // 添加到列表视图
+                        const list = document.getElementById("templateList");
+                        const div = document.createElement("div");
+                        div.className = "list-item";
+                        div.dataset.value = filename;
+                        div.innerText = fullDisplayName;
+                        div.onclick = () => selectTemplate(filename);
+                        
+                        // 插入到列表末尾
+                        list.appendChild(div);
+                        
+                        // 选中新模板
+                        selectTemplate(filename);
+                        
+                        // 关闭弹窗
+                        closeUploadModal();
+                        clearUploadForm();
+                    } else {
+                        // 长期模式，刷新页面以更新列表
+                        location.reload();
+                    }
                 } else {
-                    alert(res.message);
+                    alert("上传失败: " + res.message);
                 }
+            }).catch(e => {
+                alert("请求错误: " + e.message);
             });
         }
 
