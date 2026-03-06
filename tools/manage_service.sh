@@ -7,6 +7,18 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 RUN_SCRIPT="${PROJECT_ROOT}/run.sh"
 CURRENT_USER="${SUDO_USER:-$USER}"
 
+CONFIG_FILE="${PROJECT_ROOT}/feishu-docget.properties"
+SUDO_PASS=""
+
+if [ -f "$CONFIG_FILE" ]; then
+    SUDO_PASS=$(grep "^system.sudo_password=" "$CONFIG_FILE" | cut -d'=' -f2 | tr -d '\r')
+fi
+
+SUDO_CMD="sudo"
+if [ -n "$SUDO_PASS" ]; then
+    SUDO_CMD="echo \"$SUDO_PASS\" | sudo -S"
+fi
+
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
@@ -35,11 +47,24 @@ install_service() {
     
     if [ "$EUID" -ne 0 ]; then
         echo -e "${YELLOW}安装服务需要管理员权限。${NC}"
-        if ! sudo -v; then
-             echo -e "${RED}认证失败，操作已中止。${NC}"
-             exit 1
+        
+        # 尝试使用配置的密码
+        if [ -n "$SUDO_PASS" ]; then
+             echo "$SUDO_PASS" | sudo -S -v >/dev/null 2>&1
+             if [ $? -ne 0 ]; then
+                 echo -e "${RED}配置的 sudo 密码验证失败。${NC}"
+                 if ! sudo -v; then
+                     echo -e "${RED}认证失败，操作已中止。${NC}"
+                     exit 1
+                 fi
+             fi
+        else
+            if ! sudo -v; then
+                 echo -e "${RED}认证失败，操作已中止。${NC}"
+                 exit 1
+            fi
         fi
-        SUDO="sudo"
+        SUDO="$SUDO_CMD"
     else
         SUDO=""
     fi
@@ -120,8 +145,8 @@ check_config() {
         echo -e "${YELLOW}检测到缺少飞书配置，请根据提示输入。${NC}"
         echo -e "这些信息将被保存到 ${BLUE}$TARGET_CONFIG${NC} 中。"
         
-        read -p "请输入飞书 App ID: " INPUT_APP_ID
-        read -p "请输入飞书 App Secret: " INPUT_APP_SECRET
+        read -e -p "请输入飞书 App ID: " INPUT_APP_ID
+        read -e -p "请输入飞书 App Secret: " INPUT_APP_SECRET
         
         
         if grep -q "^feishu.app_id=" "$TARGET_CONFIG"; then
@@ -147,7 +172,7 @@ check_config
 
 if ! is_installed; then
     echo -e "${YELLOW}服务 '$SERVICE_NAME' 尚未在 systemd 中配置。${NC}"
-    read -p "是否立即自动配置？(yes/no): " choice
+    read -e -p "是否立即自动配置？(yes/no): " choice
     case "$choice" in 
         y|Y|yes|YES)
             install_service
@@ -179,22 +204,33 @@ while true; do
     echo -e "当前状态: $STATUS_DISPLAY  |  开机自启: $ENABLE_DISPLAY"
     echo "请选择操作 (输入数字):"
     
-    PS3="> "
     options=("启动 (Start)" "停止 (Stop)" "重启 (Restart)" "开机自启 (Enable)" "取消自启 (Disable)" "状态 (Status)" "日志 (Logs)" "退出 (Exit)")
-    select opt in "${options[@]}"
-    do
-        case $opt in
-            "启动 (Start)")
-                if [ "$CURRENT_STATUS" == "running" ]; then
+    
+    for i in "${!options[@]}"; do
+        printf "%d) %s\n" "$((i+1))" "${options[$i]}"
+    done
+
+    read -e -p "> " choice
+    
+    # 验证输入是否为有效数字
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#options[@]}" ]; then
+        opt="${options[$((choice-1))]}"
+    else
+        opt=""
+    fi
+
+    case $opt in
+        "启动 (Start)")
+            if [ "$CURRENT_STATUS" == "running" ]; then
                     echo -e "${YELLOW}服务已经在运行中。${NC}"
                 else
                     if [ -f "$RUN_SCRIPT" ] && [ ! -x "$RUN_SCRIPT" ]; then
                         echo -e "${YELLOW}正在修复脚本权限...${NC}"
-                        sudo chmod +x "$RUN_SCRIPT"
-                        sudo sed -i 's/\r$//' "$RUN_SCRIPT" 2>/dev/null || true
+                        eval "$SUDO_CMD chmod +x \"$RUN_SCRIPT\""
+                        eval "$SUDO_CMD sed -i 's/\r$//' \"$RUN_SCRIPT\" 2>/dev/null || true"
                     fi
 
-                    sudo systemctl start "$SERVICE_NAME"
+                    eval "$SUDO_CMD systemctl start \"$SERVICE_NAME\""
                     echo -e "${BLUE}正在启动...${NC}"
                     sleep 2
                     if systemctl is-active --quiet "$SERVICE_NAME"; then
@@ -211,13 +247,13 @@ while true; do
                 if [ "$CURRENT_STATUS" == "stopped" ]; then
                     echo -e "${YELLOW}服务已经是停止状态。${NC}"
                 else
-                    sudo systemctl stop "$SERVICE_NAME"
+                    eval "$SUDO_CMD systemctl stop \"$SERVICE_NAME\""
                     echo -e "${RED}服务已停止。${NC}"
                 fi
                 break
                 ;;
             "重启 (Restart)")
-                sudo systemctl restart "$SERVICE_NAME"
+                eval "$SUDO_CMD systemctl restart \"$SERVICE_NAME\""
                 echo -e "${GREEN}服务已重启。${NC}"
                 break
                 ;;
@@ -225,7 +261,7 @@ while true; do
                 if [ "$ENABLE_STATUS" == "enabled" ]; then
                     echo -e "${YELLOW}开机自启已经是开启状态。${NC}"
                 else
-                    sudo systemctl enable "$SERVICE_NAME"
+                    eval "$SUDO_CMD systemctl enable \"$SERVICE_NAME\""
                     echo -e "${GREEN}开机自启已开启。${NC}"
                 fi
                 break
@@ -234,7 +270,7 @@ while true; do
                 if [ "$ENABLE_STATUS" == "disabled" ]; then
                     echo -e "${YELLOW}开机自启已经是关闭状态。${NC}"
                 else
-                    sudo systemctl disable "$SERVICE_NAME"
+                    eval "$SUDO_CMD systemctl disable \"$SERVICE_NAME\""
                     echo -e "${RED}开机自启已关闭。${NC}"
                 fi
                 break
@@ -248,13 +284,12 @@ while true; do
                 journalctl -u "$SERVICE_NAME" -f
                 break
                 ;;
-            "退出 (Exit)")
-                echo "再见。"
-                exit 0
-                ;;
-            *) 
-                echo -e "${YELLOW}无效选项 $REPLY${NC}"
-                ;;
-        esac
-    done
+        "退出 (Exit)")
+            echo "再见。"
+            exit 0
+            ;;
+        *) 
+            echo -e "${YELLOW}无效选项${NC}"
+            ;;
+    esac
 done
