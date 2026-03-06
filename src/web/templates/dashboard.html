@@ -401,6 +401,7 @@
             <div class="nav-item active" onclick="switchTab('projects')">项目管理</div>
             <div class="nav-item" onclick="switchTab('config')">配置管理</div>
             <div class="nav-item" onclick="switchTab('stats')">下载统计</div>
+            <div class="nav-item" onclick="switchTab('logs')">日志检查</div>
         </div>
 
         <!-- Main Content -->
@@ -458,6 +459,23 @@
                         <button onclick="prevPage()" id="prevBtn" class="magnify-btn" style="position:static; width:80px;">上一页</button>
                         <span id="pageInfo" style="line-height:26px; font-size:13px;">1 / 1</span>
                         <button onclick="nextPage()" id="nextBtn" class="magnify-btn" style="position:static; width:80px;">下一页</button>
+                    </div>
+                </div>
+
+                <!-- Tab: Logs -->
+                <div id="tab-logs" class="tab-pane" style="height:100%;">
+                    <div style="display: flex; height: 100%; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+                        <div style="width: 250px; border-right: 1px solid #e2e8f0; overflow-y: auto; background: #f8fafc; display: flex; flex-direction: column;">
+                             <div style="padding: 12px; font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0; background: #f1f5f9;">日志文件列表</div>
+                             <div id="logList" style="flex: 1; overflow-y: auto;"></div>
+                        </div>
+                        <div style="flex: 1; display: flex; flex-direction: column; height: 100%; background: #fff;">
+                            <div style="padding: 12px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #fff;">
+                                <span id="currentLogName" style="font-weight: 600; color: #1e293b;">请选择日志文件</span>
+                                <button id="deleteLogBtn" onclick="deleteCurrentLog()" class="btn-start" style="padding: 6px 16px; background-color: #ef4444; font-size: 13px; display: none;">删除日志</button>
+                            </div>
+                            <pre id="logContent" style="flex: 1; overflow: auto; padding: 20px; margin: 0; font-family: 'Menlo', 'Monaco', 'Courier New', monospace; font-size: 13px; color: #334155; line-height: 1.6; white-space: pre-wrap; background: #fff;"></pre>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -538,13 +556,15 @@
             const titles = {
                 'projects': '项目管理',
                 'config': '配置管理',
-                'stats': '下载统计'
+                'stats': '下载统计',
+                'logs': '日志检查'
             };
             document.getElementById('pageTitle').innerText = titles[name];
             
             if (name === 'projects') loadProjects();
             if (name === 'config') loadConfig();
             if (name === 'stats') loadStats();
+            if (name === 'logs') loadLogs();
         }
 
         // 初始化加载
@@ -772,6 +792,112 @@
              if(document.getElementById('tab-projects').classList.contains('active')) loadProjects();
              if(document.getElementById('tab-config').classList.contains('active')) loadConfig();
              if(document.getElementById('tab-stats').classList.contains('active')) loadStats();
+             if(document.getElementById('tab-logs').classList.contains('active')) loadLogs();
+        }
+
+        let currentLog = null;
+
+        async function loadLogs() {
+            try {
+                const res = await fetch('/api/admin/logs');
+                const files = await res.json();
+                const list = document.getElementById('logList');
+                list.innerHTML = '';
+                
+                if (files.length === 0) {
+                     list.innerHTML = '<div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 13px;">无日志文件</div>';
+                     return;
+                }
+
+                files.forEach(f => {
+                    const div = document.createElement('div');
+                    div.style.padding = '10px 16px';
+                    div.style.cursor = 'pointer';
+                    div.style.fontSize = '13px';
+                    div.style.borderBottom = '1px solid #f1f5f9';
+                    div.style.color = '#475569';
+                    div.style.display = 'flex';
+                    div.style.justifyContent = 'space-between';
+                    div.style.alignItems = 'center';
+                    div.style.transition = 'background 0.2s';
+                    
+                    div.innerHTML = `
+                        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 8px;" title="${f.name}">${f.name}</span>
+                        <span style="font-size: 11px; color: #94a3b8; flex-shrink: 0;">${formatSize(f.size)}</span>
+                    `;
+                    
+                    div.onclick = () => selectLog(f.name);
+                    div.onmouseover = () => { if(currentLog !== f.name) div.style.background = '#f8fafc'; };
+                    div.onmouseout = () => { if(currentLog !== f.name) div.style.background = ''; };
+                    
+                    if (currentLog === f.name) {
+                        div.style.background = '#eef6ff';
+                        div.style.color = '#3b82f6';
+                        div.style.fontWeight = '500';
+                    }
+                    
+                    list.appendChild(div);
+                });
+            } catch(e) {
+                console.error(e);
+            }
+        }
+
+        async function selectLog(name) {
+            currentLog = name;
+            document.getElementById('currentLogName').innerText = name;
+            document.getElementById('deleteLogBtn').style.display = 'block';
+            
+            // Re-render list to update selection style
+            const list = document.getElementById('logList');
+            Array.from(list.children).forEach(child => {
+                 // Simple way to reset styles, ideally we should just toggle classes but inline styles are used here
+                 if (child.innerText.includes(name)) {
+                     child.style.background = '#eef6ff';
+                     child.style.color = '#3b82f6';
+                     child.style.fontWeight = '500';
+                 } else {
+                     child.style.background = '';
+                     child.style.color = '#475569';
+                     child.style.fontWeight = 'normal';
+                 }
+            });
+            
+            document.getElementById('logContent').innerText = '正在加载日志内容...';
+            
+            try {
+                const res = await fetch('/api/admin/logs/' + encodeURIComponent(name));
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    document.getElementById('logContent').innerText = data.content || '(空文件)';
+                } else {
+                     document.getElementById('logContent').innerText = '加载失败: ' + data.message;
+                }
+            } catch(e) {
+                document.getElementById('logContent').innerText = '请求错误: ' + e.message;
+            }
+        }
+
+        async function deleteCurrentLog() {
+            if (!currentLog) return;
+            if (!confirm('确定删除日志文件 "' + currentLog + '" 吗？此操作不可恢复。')) return;
+            
+            try {
+                const res = await fetch('/api/admin/logs/' + encodeURIComponent(currentLog), { method: 'DELETE' });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    currentLog = null;
+                    document.getElementById('currentLogName').innerText = '请选择日志文件';
+                    document.getElementById('logContent').innerText = '';
+                    document.getElementById('deleteLogBtn').style.display = 'none';
+                    loadLogs();
+                    alert('日志文件已删除');
+                } else {
+                    alert('删除失败: ' + data.message);
+                }
+            } catch(e) {
+                alert('请求错误: ' + e.message);
+            }
         }
 
         function loadData() {

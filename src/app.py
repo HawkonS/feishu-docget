@@ -9,7 +9,7 @@ from functools import wraps
 from datetime import datetime
 from flask import Flask, jsonify, request, send_file, send_from_directory, session, redirect, url_for
 from src.services.doc_service import process_document
-from src.core.config_loader import config, ConfigLoader
+from src.core.config_loader import config, ConfigLoader, parse_size
 from src.converters.docx.style_manager import TableStyleManager
 from src.core.stats import update_download_stat, get_download_stats
 base_dir = os.path.abspath(config.get('workspace.dir', '.'))
@@ -70,7 +70,7 @@ def check_cleanup_output():
                             size += os.path.getsize(fp)
                 items.append({'path': path, 'size': size, 'ctime': os.path.getctime(path)})
                 total_size += size
-        limit = 10 * 1024 * 1024 * 1024
+        limit = parse_size(config.get('output.max_size', '10G'))
         if total_size > limit:
             items.sort(key=lambda x: x['ctime'])
             for item in items:
@@ -559,6 +559,54 @@ def download_all_api():
                 rel_path = os.path.relpath(abs_path, output_dir)
                 zipf.write(abs_path, rel_path)
     return send_file(zip_path, as_attachment=True, download_name='all_downloads.zip')
+
+@app.route('/api/admin/logs', methods=['GET'])
+@admin_required
+def api_admin_logs():
+    log_dir = os.path.join(base_dir, config.get('log.dir', 'logs'))
+    if not os.path.exists(log_dir):
+        return jsonify([])
+    files = []
+    for f in os.listdir(log_dir):
+        if f == 'download_stats.jsonl':
+            continue
+        path = os.path.join(log_dir, f)
+        if os.path.isfile(path):
+            files.append({'name': f, 'size': os.path.getsize(path), 'mtime': os.path.getmtime(path)})
+    files.sort(key=lambda x: x['mtime'], reverse=True)
+    return jsonify(files)
+
+@app.route('/api/admin/logs/<filename>', methods=['GET'])
+@admin_required
+def api_admin_get_log(filename):
+    if filename == 'download_stats.jsonl':
+         return jsonify({'status': 'error', 'message': 'Cannot read stats file'})
+    log_dir = os.path.join(base_dir, config.get('log.dir', 'logs'))
+    path = os.path.join(log_dir, filename)
+    if not os.path.exists(path) or not os.path.isfile(path):
+        return jsonify({'status': 'error', 'message': 'File not found'})
+    try:
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+        return jsonify({'status': 'ok', 'content': content})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/api/admin/logs/<filename>', methods=['DELETE'])
+@admin_required
+def api_admin_delete_log(filename):
+    if filename == 'download_stats.jsonl':
+         return jsonify({'status': 'error', 'message': 'Cannot delete stats file'})
+    log_dir = os.path.join(base_dir, config.get('log.dir', 'logs'))
+    path = os.path.join(log_dir, filename)
+    if not os.path.exists(path):
+        return jsonify({'status': 'error', 'message': 'File not found'})
+    try:
+        os.remove(path)
+        return jsonify({'status': 'ok'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
 if __name__ == '__main__':
     port = int(config.get('server.port', '7800'))
     logger.info(f'服务启动于端口 {port}...')
