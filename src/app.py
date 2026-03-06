@@ -96,7 +96,11 @@ def list_templates():
     items = []
     default_template = config.get('template.default', 'template.docx')
     for name in os.listdir(template_dir):
-        if name.lower().endswith('.docx') and (not name.startswith('temp_')):
+        # 过滤掉临时文件，不显示在列表中
+        if name.startswith('temp_'):
+            continue
+            
+        if name.lower().endswith('.docx'):
             path = os.path.join(template_dir, name)
             size = os.path.getsize(path) if os.path.exists(path) else 0
             png_name = os.path.splitext(name)[0] + '.png'
@@ -106,7 +110,8 @@ def list_templates():
             pdf_path = os.path.join(template_dir, pdf_name)
             has_pdf = os.path.exists(pdf_path)
             is_default = name == default_template
-            items.append({'name': name, 'size': size, 'has_png': has_png, 'png_name': png_name if has_png else None, 'has_pdf': has_pdf, 'pdf_name': pdf_name if has_pdf else None, 'is_default': is_default})
+            
+            items.append({'name': name, 'display_name': name, 'size': size, 'has_png': has_png, 'png_name': png_name if has_png else None, 'has_pdf': has_pdf, 'pdf_name': pdf_name if has_pdf else None, 'is_default': is_default, 'is_temp': False})
     items.sort(key=lambda x: (not x['is_default'], x['name']))
     return items
 
@@ -178,11 +183,19 @@ def run_job(job_id, doc_url, template_name, table_style, delete_template=False, 
             template_path = os.path.join(base_dir, config['template.dir'], template_name)
         output_root = os.path.join(base_dir, config['output.dir'])
         result = process_document(doc_url=doc_url, template_path=template_path, table_style=table_style, base_dir=base_dir, output_root=output_root, progress_cb=lambda p, m, t='info': update_job(job_id, progress=p, message=m, log_type=t), add_cover=add_cover, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, body_style=body_style)
-        if delete_template and template_path and os.path.exists(template_path):
-            try:
-                os.remove(template_path)
-            except Exception:
-                pass
+        if delete_template and template_path:
+            if os.path.exists(template_path):
+                try:
+                    os.remove(template_path)
+                except Exception:
+                    pass
+            # 同时删除对应的预览图片
+            png_path = os.path.splitext(template_path)[0] + '.png'
+            if os.path.exists(png_path):
+                try:
+                    os.remove(png_path)
+                except Exception:
+                    pass
         update_job(job_id, status='done', progress=100, message='已完成', docx_path=result['docx_path'], folder=result['folder'])
         update_download_stat(base_dir, config, job_id, '已完成', doc_url, result['docx_path'], title=result.get('title', os.path.basename(result['docx_path'])), ip_address=client_ip)
         threading.Thread(target=check_cleanup_output).start()
@@ -339,26 +352,76 @@ def api_admin_delete_file():
         return jsonify({'status': 'error', 'message': str(e)})
 
 @app.route('/api/upload_template', methods=['POST'])
-@admin_required
 def api_upload_template():
+    # 验证请求数据
     password = request.form.get('password')
     mode = request.form.get('mode')
     file = request.files.get('file')
-    if password != config.get('template.upload_password'):
-        return jsonify({'status': 'error', 'message': '密码错误'})
-    if not file or not file.filename.endswith('.docx'):
-        return jsonify({'status': 'error', 'message': '无效文件'})
-    template_dir = os.path.join(base_dir, config['template.dir'])
-    if mode == 'current':
-        filename = f'temp_{uuid.uuid4().hex[:8]}_{file.filename}'
-        path = os.path.join(template_dir, filename)
-        file.save(path)
-        return jsonify({'status': 'ok', 'temp_name': filename})
+    image_file = request.files.get('image')
+    name = request.form.get('name')
+    
+    # 验证模式
+    if mode not in ['long_term', 'one_time']:
+         return jsonify({'status': 'error', 'message': '无效的存储模式'})
+    
+    # 验证密码
+    if mode == 'long_term':
+        correct_password = config.get('template.password.long_term')
+    elif mode == 'one_time':
+        correct_password = config.get('template.password.one_time')
     else:
-        filename = file.filename
-        path = os.path.join(template_dir, filename)
+        correct_password = None
+    
+    if not correct_password or password != correct_password:
+        return jsonify({'status': 'error', 'message': '密码错误'})
+
+    # 验证文件和名称
+    if not file or not file.filename.endswith('.docx'):
+        return jsonify({'status': 'error', 'message': '无效的 Word 文件'})
+    if not name:
+         return jsonify({'status': 'error', 'message': '模板名称不能为空'})
+
+    template_dir = os.path.join(base_dir, config['template.dir'])
+    
+    # 生成文件名
+    # 使用用户提供的 name 作为文件名的一部分
+    # 过滤特殊字符，只保留字母、数字、中文、空格、下划线、中划线
+    # 注意：这里假设系统支持中文文件名
+    safe_name = name.strip()
+    # 如果文件名包含路径分隔符，只取文件名部分
+    safe_name = os.path.basename(safe_name)
+    
+    # 移除 .docx 后缀（如果用户输入了），避免重复
+    if safe_name.lower().endswith('.docx'):
+        safe_name = safe_name[:-5]
+    
+    if not safe_name:
+        safe_name = 'template'
+    
+    # 长期存储模式下，文件名就是用户输入的名称
+    if mode == 'long_term':
+        final_filename = f'{safe_name}.docx'
+    else:
+        # 仅本次使用模式下，加上 temp_ 前缀和 uuid，避免冲突和方便清理
+        final_filename = f'temp_{uuid.uuid4().hex[:8]}_{safe_name}.docx'
+
+    path = os.path.join(template_dir, final_filename)
+    
+    try:
         file.save(path)
-        return jsonify({'status': 'ok'})
+        
+        # 处理预览图
+        if image_file:
+            # 图片文件名与模板同名，后缀改为 .png
+            img_filename = os.path.splitext(final_filename)[0] + '.png'
+            img_path = os.path.join(template_dir, img_filename)
+            image_file.save(img_path)
+            
+        return jsonify({'status': 'ok', 'filename': final_filename})
+        
+    except Exception as e:
+        logger.error(f'上传模板失败: {e}')
+        return jsonify({'status': 'error', 'message': str(e)})
 
 @app.route('/api/start', methods=['POST'])
 def api_start():
