@@ -9,7 +9,7 @@ from functools import wraps
 from datetime import datetime
 from flask import Flask, jsonify, request, send_file, send_from_directory, session, redirect, url_for
 from src.services.doc_service import process_document
-from src.core.config_loader import config, ConfigLoader
+from src.core.config_loader import config, ConfigLoader, parse_size
 from src.converters.docx.style_manager import TableStyleManager
 from src.core.stats import update_download_stat, get_download_stats
 base_dir = os.path.abspath(config.get('workspace.dir', '.'))
@@ -70,7 +70,7 @@ def check_cleanup_output():
                             size += os.path.getsize(fp)
                 items.append({'path': path, 'size': size, 'ctime': os.path.getctime(path)})
                 total_size += size
-        limit = 10 * 1024 * 1024 * 1024
+        limit = parse_size(config.get('output.max_size', '10G'))
         if total_size > limit:
             items.sort(key=lambda x: x['ctime'])
             for item in items:
