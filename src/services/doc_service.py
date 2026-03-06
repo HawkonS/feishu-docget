@@ -6,7 +6,7 @@ from src.core.config_loader import config, ConfigLoader
 from src.core.utils import sanitize_name
 from docx import Document
 
-def process_document(doc_url, template_path=None, table_style=None, base_dir='.', output_root='output', progress_cb=None, add_cover=False, check_stop_func=None, unordered_list_style='default'):
+def process_document(doc_url, template_path=None, table_style=None, base_dir='.', output_root='output', progress_cb=None, add_cover=False, check_stop_func=None, unordered_list_style='default', body_style=None):
     logger = ConfigLoader.get_logger('service')
     if check_stop_func and check_stop_func():
         raise InterruptedError('任务已停止')
@@ -83,7 +83,7 @@ def process_document(doc_url, template_path=None, table_style=None, base_dir='.'
         if progress_cb:
             progress_cb(80, '已完成样式应用', 'success')
         try:
-            clean_document(docx_path, progress_cb=progress_cb, template_path=template_path, add_cover=add_cover)
+            clean_document(docx_path, progress_cb=progress_cb, template_path=template_path, add_cover=add_cover, body_style=body_style)
         except Exception as e:
             logger.error(f'格式清理错误: {e}')
         logger.info('处理成功: ' + docx_path)

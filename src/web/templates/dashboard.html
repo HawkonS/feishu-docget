@@ -180,6 +180,7 @@
             line-height: 1.4;
             display: -webkit-box;
             -webkit-line-clamp: 2;
+            line-clamp: 2;
             -webkit-box-orient: vertical;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -512,10 +513,82 @@
                 <select id="newStyleSelect" class="form-select"></select>
             </div>
             
-            <div style="margin-bottom:20px;">
-                 <label class="checkbox-label">
+            <div style="margin-bottom:15px;">
+                <label class="checkbox-label">
                     <input type="checkbox" id="newAddCover" checked> 添加模板首页
                 </label>
+            </div>
+
+            <div style="margin-bottom:15px; border-top: 1px dashed #eee; padding-top: 10px;">
+                <div style="margin-bottom: 8px; font-weight: 600; font-size: 13px; color: #475569; cursor: pointer; display: flex; align-items: center;" onclick="toggleAdvanced()">
+                    <span id="advancedArrow">▶</span> <span style="margin-left: 4px;">高级选项</span>
+                </div>
+                <div id="advancedOptions" style="display: none; padding-left: 8px;">
+                    <label class="checkbox-label" style="margin-bottom: 10px;">
+                        <input type="checkbox" id="enableBodyStyle" onchange="toggleBodyStyle()"> 调整正文样式
+                    </label>
+                    <div id="bodyStyleConfig" style="display: none; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <!-- Font Size -->
+                        <div>
+                            <label style="font-size: 12px; color: #64748b;">字号 (磅)</label>
+                            <div style="display: flex; gap: 5px;">
+                                <input type="number" id="styleFontSize" class="form-select" value="12" step="0.5" style="padding: 6px; flex: 1; min-width: 0;" oninput="syncFontSizeSelect(this.value)">
+                                <select id="styleFontSizeSelect" onchange="document.getElementById('styleFontSize').value=this.value" class="form-select" style="width: 80px; padding: 6px;">
+                                    <option value="">-</option>
+                                    <option value="42">初号</option>
+                                    <option value="36">小初</option>
+                                    <option value="26">一号</option>
+                                    <option value="24">小一</option>
+                                    <option value="22">二号</option>
+                                    <option value="18">小二</option>
+                                    <option value="16">三号</option>
+                                    <option value="15">小三</option>
+                                    <option value="14">四号</option>
+                                    <option value="12" selected>小四</option>
+                                    <option value="10.5">五号</option>
+                                    <option value="9">小五</option>
+                                    <option value="7.5">六号</option>
+                                    <option value="6.5">小六</option>
+                                    <option value="5.5">七号</option>
+                                    <option value="5">八号</option>
+                                </select>
+                            </div>
+                        </div>
+                        <!-- Line Spacing -->
+                        <div>
+                            <label style="font-size: 12px; color: #64748b;">行间距</label>
+                            <div style="display: flex; gap: 5px;">
+                                <input type="number" id="styleLineSpacing" class="form-select" value="1.5" step="0.1" style="padding: 6px; flex: 1; min-width: 0;">
+                                <select id="styleLineSpacingUnit" class="form-select" style="width: 80px; padding: 6px;">
+                                    <option value="lines">倍</option>
+                                    <option value="pt">磅</option>
+                                </select>
+                            </div>
+                        </div>
+                        <!-- Space Before -->
+                        <div>
+                            <label style="font-size: 12px; color: #64748b;">段前</label>
+                            <div style="display: flex; gap: 5px;">
+                                <input type="number" id="styleSpaceBefore" class="form-select" value="0" step="0.5" style="padding: 6px; flex: 1; min-width: 0;">
+                                <select id="styleSpaceBeforeUnit" class="form-select" style="width: 80px; padding: 6px;">
+                                    <option value="lines">行</option>
+                                    <option value="pt">磅</option>
+                                </select>
+                            </div>
+                        </div>
+                        <!-- Space After -->
+                        <div>
+                            <label style="font-size: 12px; color: #64748b;">段后</label>
+                            <div style="display: flex; gap: 5px;">
+                                <input type="number" id="styleSpaceAfter" class="form-select" value="0" step="0.5" style="padding: 6px; flex: 1; min-width: 0;">
+                                <select id="styleSpaceAfterUnit" class="form-select" style="width: 80px; padding: 6px;">
+                                    <option value="lines">行</option>
+                                    <option value="pt">磅</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
             
             <div style="text-align:right; display:flex; justify-content:flex-end; gap:10px;">
@@ -1129,6 +1202,38 @@
         function closeNewTaskModal() {
             document.getElementById("newTaskModal").style.display = "none";
         }
+
+        function toggleAdvanced() {
+            const el = document.getElementById("advancedOptions");
+            const arrow = document.getElementById("advancedArrow");
+            if (el.style.display === "none") {
+                el.style.display = "block";
+                arrow.innerText = "▼";
+            } else {
+                el.style.display = "none";
+                arrow.innerText = "▶";
+            }
+        }
+
+        function toggleBodyStyle() {
+            const checked = document.getElementById("enableBodyStyle").checked;
+            document.getElementById("bodyStyleConfig").style.display = checked ? "grid" : "none";
+        }
+
+        function syncFontSizeSelect(val) {
+            const select = document.getElementById('styleFontSizeSelect');
+            let found = false;
+            for (let i = 0; i < select.options.length; i++) {
+                if (select.options[i].value == val) {
+                    select.selectedIndex = i;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                select.value = "";
+            }
+        }
         
         function submitNewTask() {
             const docUrl = document.getElementById("newDocUrl").value;
@@ -1137,6 +1242,20 @@
             const tpl = document.getElementById("newTemplateSelect").value;
             const style = document.getElementById("newStyleSelect").value;
             const addCover = document.getElementById("newAddCover").checked;
+
+            // Collect Body Style Options
+            let bodyStyle = null;
+            if (document.getElementById("enableBodyStyle").checked) {
+                bodyStyle = {
+                    fontSize: parseFloat(document.getElementById("styleFontSize").value),
+                    lineSpacing: parseFloat(document.getElementById("styleLineSpacing").value),
+                    lineSpacingUnit: document.getElementById("styleLineSpacingUnit").value,
+                    spaceBefore: parseFloat(document.getElementById("styleSpaceBefore").value),
+                    spaceBeforeUnit: document.getElementById("styleSpaceBeforeUnit").value,
+                    spaceAfter: parseFloat(document.getElementById("styleSpaceAfter").value),
+                    spaceAfterUnit: document.getElementById("styleSpaceAfterUnit").value
+                };
+            }
             
             closeNewTaskModal();
             document.getElementById("progressModal").style.display = "flex";
@@ -1148,7 +1267,13 @@
             fetch("/api/start", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url: docUrl, template: tpl, tableStyle: style, addCover: addCover })
+                body: JSON.stringify({ 
+                    url: docUrl, 
+                    template: tpl, 
+                    tableStyle: style, 
+                    addCover: addCover,
+                    bodyStyle: bodyStyle
+                })
             }).then(r => r.json()).then(res => {
                 if (res.status === "ok") {
                     logEl.innerHTML += `<div>任务已开始，ID: ${res.job_id}</div>`;
