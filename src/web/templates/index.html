@@ -773,6 +773,8 @@
 
             if (!url) return alert("请输入文档链接");
             
+            if (timer) clearTimeout(timer);
+            
             fetch("/api/start", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -791,8 +793,7 @@
                 }
                 jobId = res.job_id;
                 addTask(res.job_id, url || "任务待开始");
-                if (timer) clearInterval(timer);
-                timer = setInterval(pollStatus, 1000);
+                pollStatus();
             });
         }
         
@@ -800,7 +801,6 @@
             if (!jobId) return;
             fetch(`/api/status/${jobId}`).then(r => r.json()).then(res => {
                 if (res.status === "error") {
-                    clearInterval(timer);
                     updateTaskFromStatus(res);
                     renderTaskList();
                     renderLogs();
@@ -810,8 +810,14 @@
                 renderTaskList();
                 renderLogs();
                 if (res.status === "done") {
-                    clearInterval(timer);
+                    // 完成
+                } else {
+                    // 继续轮询，间隔 2000ms
+                    timer = setTimeout(pollStatus, 2000);
                 }
+            }).catch(() => {
+                // 出错重试
+                timer = setTimeout(pollStatus, 3000);
             });
         }
 

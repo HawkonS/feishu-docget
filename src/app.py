@@ -26,6 +26,7 @@ active_downloads = 0
 
 def worker_thread():
     global active_downloads
+    logger.info("工作线程已启动，等待任务...")
     while True:
         try:
             max_concurrent = int(config.get('max.concurrent.downloads', 1))
@@ -37,6 +38,8 @@ def worker_thread():
                 job_args = download_queue.get(timeout=1)
             except queue.Empty:
                 continue
+            
+            logger.info(f"工作线程获取到任务，当前活动任务数: {active_downloads}")
             with active_downloads_lock:
                 active_downloads += 1
             try:
@@ -47,6 +50,7 @@ def worker_thread():
                 with active_downloads_lock:
                     active_downloads -= 1
                 download_queue.task_done()
+                logger.info(f"任务完成，当前活动任务数: {active_downloads}")
         except Exception as e:
             logger.error(f'工作线程循环错误: {e}')
             time.sleep(1)
@@ -162,6 +166,7 @@ def update_job(job_id, **fields):
 
 def run_job(job_id, doc_url, template_name, table_style, delete_template=False, add_cover=False, client_ip='', check_stop_func=None, unordered_list_style='default', body_style=None, was_queued=False):
     try:
+        logger.info(f"开始执行任务 {job_id}: {doc_url}")
         if check_stop_func and check_stop_func():
             raise InterruptedError('任务已停止')
         if was_queued:
