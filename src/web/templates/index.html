@@ -460,22 +460,27 @@
             <h3 style="margin-top:0">高级选项</h3>
             <div class="form-group">
                 <label>常规设置</label>
-                <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
-                    <input type="checkbox" id="addCover" style="width:auto;" checked>
-                    <span style="font-size:14px;">自动添加封面/首页</span>
-                </div>
+                <label style="display:flex; align-items:center; cursor:pointer;">
+                    <input type="checkbox" id="addCover" style="width:auto; margin-right:8px;" checked> 
+                    添加模板封面/首页
+                </label>
             </div>
             <div class="form-group">
-                <label>无序列表样式</label>
-                <select id="unorderedListStyle">
-                    <option value="default">一级 ● | 二级 ○</option>
-                    <option value="square">一级 ■ | 二级 □</option>
-                    <option value="diamond">一级 ◆ | 二级 ◇</option>
-                    <option value="arrow">一级 ➢ | 二级 ➤</option>
-                    <option value="none">作为正文处理 (无符号)</option>
-                </select>
-                <div style="font-size:12px; color:#666; margin-top:4px;">
-                    当选择“作为正文处理”时，列表项将不再有前面的符号，且缩进与正文一致。
+                <label style="display:flex; align-items:center; cursor:pointer;">
+                    <input type="checkbox" id="enableListStyle" onchange="toggleListStyle()" style="width:auto; margin-right:8px;" checked> 
+                    添加无序列表样式
+                </label>
+                <div id="listStyleConfig" style="margin-top: 10px;">
+                    <select id="unorderedListStyle" style="width: 100%; padding: 8px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                        <option value="default" selected>一级 ● | 二级 ○</option>
+                        <option value="square">一级 ■ | 二级 □</option>
+                        <option value="diamond">一级 ◆ | 二级 ◇</option>
+                        <option value="arrow">一级 ➢ | 二级 ➤</option>
+                        <option value="none">无符号</option>
+                    </select>
+                    <div style="font-size:12px; color:#666; margin-top:4px;">
+                        当选择“作为正文处理”时，列表项将不再有前面的符号，且缩进与正文一致。
+                    </div>
                 </div>
             </div>
             
@@ -746,7 +751,11 @@
         function startDownload() {
             const url = document.getElementById("docUrl").value.trim();
             const addCover = document.getElementById("addCover").checked;
-            const unorderedListStyle = document.getElementById("unorderedListStyle").value;
+            
+            let unorderedListStyle = "none";
+            if (document.getElementById("enableListStyle").checked) {
+                unorderedListStyle = document.getElementById("unorderedListStyle").value;
+            }
             
             // Collect Body Style Options
             let bodyStyle = null;
@@ -947,6 +956,11 @@
         function showAdvancedModal() { document.getElementById("advancedModal").style.display = "flex"; }
         function closeAdvancedModal() { document.getElementById("advancedModal").style.display = "none"; }
         
+        function toggleListStyle() {
+            const checked = document.getElementById("enableListStyle").checked;
+            document.getElementById("listStyleConfig").style.display = checked ? "block" : "none";
+        }
+
         function toggleBodyStyle() {
             const checked = document.getElementById("enableBodyStyle").checked;
             document.getElementById("bodyStyleConfig").style.display = checked ? "grid" : "none";
