@@ -362,6 +362,39 @@
         .style-6 td, .style-6 th { border: 1px solid #D9D9D9; color: black; }
         .docx { margin: 0 !important; box-shadow: none !important; width: auto !important; }
 
+        /* Dropdown */
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: #fff;
+            min-width: 100px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 100;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 4px 0;
+            left: 0;
+            top: 100%;
+        }
+        .dropdown:hover .dropdown-content {
+            display: block;
+        }
+        .dropdown-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #334155;
+            transition: all 0.2s;
+        }
+        .dropdown-item:hover {
+            background-color: #f8fafc;
+            color: #3b82f6;
+        }
+
         /* Modals */
         .modal {
             display: none;
@@ -403,6 +436,7 @@
             <div class="nav-item" onclick="switchTab('config')">配置管理</div>
             <div class="nav-item" onclick="switchTab('stats')">下载统计</div>
             <div class="nav-item" onclick="switchTab('logs')">日志检查</div>
+            <div class="nav-item" onclick="switchTab('templates')">模板维护</div>
             <div class="nav-item" onclick="switchTab('system')">系统管理</div>
         </div>
 
@@ -487,6 +521,21 @@
                     </div>
                 </div>
 
+                <!-- Tab: Templates -->
+                <div id="tab-templates" class="tab-pane">
+                    <div style="padding: 0 20px 20px 20px; display: flex; flex-direction: column; flex: 1; min-height: 0; box-sizing: border-box;">
+                        <!-- Toolbar -->
+                        <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
+                            <div style="font-size: 14px; color: #64748b;">管理用于文档生成的 Word 模板文件</div>
+                            <div>
+                                <button onclick="openUploadModal()" class="btn-start" style="padding: 8px 16px;">+ 上传模板</button>
+                            </div>
+                        </div>
+                        <!-- Grid -->
+                        <div id="templateGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px; overflow-y: auto; padding-bottom: 20px; flex: 1; align-content: start; min-height: 0;"></div>
+                    </div>
+                </div>
+
                 <!-- Tab: System -->
                 <div id="tab-system" class="tab-pane" style="height: 100%;">
                     <div style="display: flex; flex-direction: column; height: 100%; background: #f8fafc; padding: 24px; box-sizing: border-box;">
@@ -551,6 +600,53 @@
     </div>
 
     <!-- Modals -->
+    <div id="uploadTemplateModal" class="modal">
+        <div class="modal-content" style="width: 500px;">
+            <h3 style="margin-top:0;" id="uploadModalTitle">上传模板</h3>
+            <form id="uploadTemplateForm" onsubmit="event.preventDefault(); submitUploadTemplate();">
+                <input type="hidden" id="uploadMode" value="new">
+                <div style="margin-bottom:15px;" id="uploadNameGroup">
+                    <label style="display:block; margin-bottom:5px; font-size:14px; font-weight:600;">模板名称</label>
+                    <input type="text" id="uploadName" class="form-select" placeholder="例如：我的通用模板" required style="width:100%; box-sizing:border-box;">
+                    <div style="font-size:12px; color:#94a3b8; margin-top:4px;" id="uploadNameHint">如果名称已存在，将覆盖原有模板文件</div>
+                </div>
+                
+                <div style="margin-bottom:15px;" id="uploadFileGroup">
+                    <label style="display:block; margin-bottom:5px; font-size:14px; font-weight:600;">Word 模板文件 (.docx)</label>
+                    <input type="file" id="uploadFile" accept=".docx" class="form-select" style="width:100%; box-sizing:border-box; padding: 6px;">
+                </div>
+
+                <div style="margin-bottom:15px;" id="uploadImageGroup">
+                    <label style="display:block; margin-bottom:5px; font-size:14px; font-weight:600;">预览图片 (.png) <span style="font-weight:normal; color:#94a3b8;">(可选)</span></label>
+                    <input type="file" id="uploadImage" accept=".png" class="form-select" style="width:100%; box-sizing:border-box; padding: 6px;">
+                </div>
+                
+                <div style="text-align:right; display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+                    <button type="button" onclick="closeUploadModal()" class="magnify-btn" style="position:static; width:80px; background:#f1f5f9;">取消</button>
+                    <button type="submit" class="btn-start">确定</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="renameTemplateModal" class="modal">
+        <div class="modal-content" style="width: 400px;">
+            <h3 style="margin-top:0;">重命名模板</h3>
+            <form id="renameTemplateForm" onsubmit="event.preventDefault(); submitRenameTemplate();">
+                <input type="hidden" id="renameOldName">
+                <div style="margin-bottom:15px;">
+                    <label style="display:block; margin-bottom:5px; font-size:14px; font-weight:600;">新名称</label>
+                    <input type="text" id="renameNewName" class="form-select" required style="width:100%; box-sizing:border-box;">
+                    <div style="font-size:12px; color:#94a3b8; margin-top:4px;">无需包含 .docx 后缀</div>
+                </div>
+                <div style="text-align:right; display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+                    <button type="button" onclick="document.getElementById('renameTemplateModal').style.display='none'" class="magnify-btn" style="position:static; width:80px; background:#f1f5f9;">取消</button>
+                    <button type="submit" class="btn-start">确定</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div id="progressModal" class="modal">
         <div class="modal-content">
             <h3 style="margin-top:0; font-size:18px; margin-bottom:15px; border-bottom:1px solid #f1f5f9; padding-bottom:10px;">转换进度</h3>
@@ -719,6 +815,7 @@
                 'config': '配置管理',
                 'stats': '下载统计',
                 'logs': '日志检查',
+                'templates': '模板维护',
                 'system': '系统管理'
             };
             document.getElementById('pageTitle').innerText = titles[name] || '项目管理';
@@ -727,6 +824,7 @@
             if (name === 'config') loadConfig();
             if (name === 'stats') loadStats();
             if (name === 'logs') loadLogs();
+            if (name === 'templates') loadTemplates();
             // system tab 不再自动开始，需要用户手动点开启
         }
 
@@ -735,7 +833,7 @@
              loadData(); // 加载基础数据 (templates, styles)
              
              const hash = window.location.hash.substring(1);
-             const validTabs = ['projects', 'config', 'stats', 'logs', 'system'];
+             const validTabs = ['projects', 'config', 'stats', 'logs', 'templates', 'system'];
              if (validTabs.includes(hash)) {
                  renderTab(hash);
              } else {
@@ -745,7 +843,7 @@
         
         window.onhashchange = () => {
              const hash = window.location.hash.substring(1);
-             const validTabs = ['projects', 'config', 'stats', 'logs', 'system'];
+             const validTabs = ['projects', 'config', 'stats', 'logs', 'templates', 'system'];
              if (validTabs.includes(hash)) {
                  renderTab(hash);
              }
@@ -971,6 +1069,7 @@
              if(document.getElementById('tab-config').classList.contains('active')) loadConfig();
              if(document.getElementById('tab-stats').classList.contains('active')) loadStats();
              if(document.getElementById('tab-logs').classList.contains('active')) loadLogs();
+             if(document.getElementById('tab-templates').classList.contains('active')) loadTemplates();
         }
 
         let currentLog = null;
@@ -1146,15 +1245,28 @@
         }
 
         function loadData() {
-        fetch("/api/admin/info").then(r => r.json()).then(res => {
-            adminData = res;
-            renderTemplates(res.templates);
-            renderStyles(res.table_styles);
-        });
-    }
+            fetch("/api/admin/info").then(r => r.json()).then(res => {
+                adminData = res;
+                // 先渲染模板列表，确保不被后面的报错影响
+                if (document.getElementById('tab-templates').classList.contains('active')) {
+                    renderTemplateManager(res.templates);
+                }
+                
+                try { renderTemplates(res.templates); } catch(e) { console.error(e); }
+                try { renderStyles(res.table_styles); } catch(e) { console.error(e); }
+            }).catch(e => {
+                console.error("加载数据失败:", e);
+                // alert("加载数据失败: " + e.message);
+            });
+        }
+        
+        function loadTemplates() {
+            loadData();
+        }
 
     function renderTemplates(list) {
             const select = document.getElementById("templateSelect");
+            if (!select) return; // 容错处理
             select.innerHTML = "";
             
             const defaultTemplate = "[/* default_template */]";
@@ -1195,6 +1307,7 @@
 
         function renderStyles(list) {
             const select = document.getElementById("styleSelect");
+            if (!select) return; // 容错处理
             select.innerHTML = "";
             
             list.forEach(s => {
@@ -1682,6 +1795,322 @@
                     }
                 } else {
                     alert("操作失败: " + res.message);
+                }
+            });
+        }
+        
+        function renderTemplateManager(list) {
+            const grid = document.getElementById("templateGrid");
+            if (!grid) return;
+            grid.innerHTML = "";
+            
+            if (!list || list.length === 0) {
+                grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; color:#94a3b8; padding:40px; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%;"><div>暂无模板文件</div><div style="font-size:12px; margin-top:8px;">请点击右上角上传按钮添加模板</div></div>';
+                return;
+            }
+            
+            list.forEach(t => {
+                const card = document.createElement("div");
+                card.style.border = "1px solid #e2e8f0";
+                card.style.borderRadius = "8px";
+                // card.style.overflow = "hidden"; // Remove overflow hidden to show dropdown
+                card.style.background = "#fff";
+                card.style.display = "flex";
+                card.style.flexDirection = "column";
+                card.style.transition = "box-shadow 0.2s";
+                // card.style.minHeight = "300px"; // Remove fixed min-height
+                card.style.position = "relative"; // Ensure z-index works
+                card.onmouseover = () => { card.style.boxShadow = "0 4px 12px rgba(0,0,0,0.1)"; card.style.zIndex = "10"; };
+                card.onmouseout = () => { card.style.boxShadow = "none"; card.style.zIndex = "1"; };
+                
+                // Preview Image
+                const imgContainer = document.createElement("div");
+                imgContainer.style.height = "180px";
+                imgContainer.style.background = "#f8fafc";
+                imgContainer.style.borderTopLeftRadius = "8px";
+                imgContainer.style.borderTopRightRadius = "8px";
+                imgContainer.style.overflow = "hidden";
+                imgContainer.style.display = "flex";
+                imgContainer.style.alignItems = "center";
+                imgContainer.style.justifyContent = "center";
+                imgContainer.style.borderBottom = "1px solid #f1f5f9";
+                imgContainer.style.position = "relative";
+                
+                if (t.has_png) {
+                    const img = document.createElement("img");
+                    img.src = `/api/template_preview/${encodeURIComponent(t.name)}`;
+                    img.style.maxWidth = "100%";
+                    img.style.maxHeight = "100%";
+                    imgContainer.appendChild(img);
+                } else {
+                    imgContainer.innerHTML = `<span style="color:#94a3b8; font-size:12px;">无预览图</span>`;
+                }
+                
+                // Info
+                const info = document.createElement("div");
+                info.style.padding = "16px";
+                info.style.display = "flex";
+                info.style.flexDirection = "column";
+                info.style.gap = "8px";
+                
+                const header = document.createElement("div");
+                header.style.display = "flex";
+                header.style.justifyContent = "space-between";
+                header.style.alignItems = "flex-start";
+                header.style.gap = "8px";
+                // header.style.minHeight = "44px"; // Remove fixed height constraint
+
+                const name = document.createElement("div");
+                name.style.fontWeight = "600";
+                name.style.fontSize = "15px";
+                name.style.color = "#334155";
+                name.style.lineHeight = "1.4";
+                name.style.wordBreak = "break-all";
+                name.style.display = "-webkit-box";
+                name.style.webkitLineClamp = "2";
+                name.style.webkitBoxOrient = "vertical";
+                name.style.overflow = "hidden";
+                name.innerText = t.name;
+                
+                header.appendChild(name);
+
+                if (t.is_default) {
+                    const badge = document.createElement("span");
+                    badge.style.background = "#dbeafe";
+                    badge.style.color = "#1e40af";
+                    badge.style.padding = "2px 8px";
+                    badge.style.borderRadius = "4px";
+                    badge.style.fontSize = "11px";
+                    badge.style.whiteSpace = "nowrap";
+                    badge.style.height = "fit-content";
+                    badge.style.marginTop = "2px";
+                    badge.innerText = "默认";
+                    header.appendChild(badge);
+                }
+
+                // Bottom Row (Meta + Actions)
+                const bottomRow = document.createElement("div");
+                bottomRow.style.display = "flex";
+                bottomRow.style.justifyContent = "space-between";
+                bottomRow.style.alignItems = "center";
+                bottomRow.style.marginTop = "4px"; // Small gap between title and controls
+
+                // Meta (Left)
+                const meta = document.createElement("div");
+                meta.style.fontSize = "13px";
+                meta.style.color = "#94a3b8";
+                meta.innerText = formatSize(t.size);
+                bottomRow.appendChild(meta);
+                
+                // Actions (Right)
+                const actions = document.createElement("div");
+                actions.style.display = "flex";
+                actions.style.gap = "12px";
+                actions.style.alignItems = "center";
+                
+                // Edit Dropdown
+                const editDropdown = document.createElement("div");
+                editDropdown.className = "dropdown";
+                editDropdown.innerHTML = `
+                    <span class="action-link blue" style="cursor:pointer; display:flex; align-items:center; font-size: 13px;">编辑 <span style="font-size:10px; margin-left:2px;">▼</span></span>
+                    <div class="dropdown-content">
+                        <div class="dropdown-item" onclick="openRenameModal('${t.name}')">重命名</div>
+                        <div class="dropdown-item" onclick="openUploadModal('file', '${t.name}')">更换文件</div>
+                        <div class="dropdown-item" onclick="openUploadModal('image', '${t.name}')">更换图片</div>
+                    </div>
+                `;
+                actions.appendChild(editDropdown);
+
+                if (!t.is_default) {
+                    const setDefBtn = document.createElement("span");
+                    setDefBtn.className = "action-link blue";
+                    setDefBtn.innerText = "设为默认";
+                    setDefBtn.style.fontSize = "13px";
+                    setDefBtn.onclick = () => setDefaultTemplate(t.name);
+                    actions.appendChild(setDefBtn);
+                }
+                
+                const downloadBtn = document.createElement("a");
+                downloadBtn.href = `/api/template/${encodeURIComponent(t.name)}`;
+                downloadBtn.className = "action-link blue";
+                downloadBtn.innerText = "下载";
+                downloadBtn.style.fontSize = "13px";
+                downloadBtn.style.textDecoration = "none";
+                actions.appendChild(downloadBtn);
+                
+                if (!t.is_default) {
+                    const delBtn = document.createElement("span");
+                    delBtn.className = "action-link red";
+                    delBtn.innerText = "删除";
+                    delBtn.style.fontSize = "13px";
+                    delBtn.onclick = () => deleteTemplate(t.name);
+                    actions.appendChild(delBtn);
+                }
+                
+                bottomRow.appendChild(actions);
+                
+                info.appendChild(header);
+                info.appendChild(bottomRow);
+                
+                card.appendChild(imgContainer);
+                card.appendChild(info);
+                grid.appendChild(card);
+            });
+        }
+        
+        function setDefaultTemplate(name) {
+            if (!confirm(`确定将 "${name}" 设为默认模板吗？`)) return;
+            
+            fetch("/api/admin/set_default_template", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: name })
+            }).then(r => r.json()).then(res => {
+                if (res.status === "ok") {
+                    loadTemplates();
+                } else {
+                    alert("设置失败: " + res.message);
+                }
+            });
+        }
+        
+        function openUploadModal(mode, editName) {
+            // mode: 'new' | 'file' | 'image'
+            if (!mode) mode = 'new';
+            
+            const modal = document.getElementById("uploadTemplateModal");
+            const title = document.getElementById("uploadModalTitle");
+            const nameInput = document.getElementById("uploadName");
+            const fileInput = document.getElementById("uploadFile");
+            const imgInput = document.getElementById("uploadImage");
+            const modeInput = document.getElementById("uploadMode");
+            
+            const nameGroup = document.getElementById("uploadNameGroup");
+            const fileGroup = document.getElementById("uploadFileGroup");
+            const imgGroup = document.getElementById("uploadImageGroup");
+            const nameHint = document.getElementById("uploadNameHint");
+            
+            // Reset form
+            document.getElementById("uploadTemplateForm").reset();
+            modeInput.value = mode;
+            
+            if (mode === 'new') {
+                title.innerText = "上传新模板";
+                nameInput.value = "";
+                nameInput.readOnly = false;
+                nameGroup.style.display = "block";
+                fileGroup.style.display = "block";
+                imgGroup.style.display = "block";
+                nameHint.style.display = "block";
+            } else if (mode === 'file') {
+                title.innerText = "更换 Word 文件";
+                nameInput.value = editName;
+                nameInput.readOnly = true;
+                // Hide Name input visually but keep value? Better to show as read-only text.
+                // Or just keep it readonly.
+                nameGroup.style.display = "block"; 
+                fileGroup.style.display = "block";
+                imgGroup.style.display = "none";
+                nameHint.style.display = "none";
+            } else if (mode === 'image') {
+                title.innerText = "更换预览图片";
+                nameInput.value = editName;
+                nameInput.readOnly = true;
+                nameGroup.style.display = "block";
+                fileGroup.style.display = "none";
+                imgGroup.style.display = "block";
+                nameHint.style.display = "none";
+            }
+            
+            modal.style.display = "flex";
+        }
+        
+        function openRenameModal(name) {
+             const modal = document.getElementById("renameTemplateModal");
+             document.getElementById("renameOldName").value = name;
+             // 去掉后缀显示给用户
+             let showName = name;
+             if (showName.toLowerCase().endsWith('.docx')) showName = showName.substring(0, showName.length - 5);
+             document.getElementById("renameNewName").value = showName;
+             modal.style.display = "flex";
+        }
+        
+        function submitRenameTemplate() {
+            const oldName = document.getElementById("renameOldName").value;
+            const newName = document.getElementById("renameNewName").value.trim();
+            if (!newName) return alert("请输入新名称");
+            
+            fetch("/api/admin/rename_template", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ old_name: oldName, new_name: newName })
+            }).then(r => r.json()).then(res => {
+                if (res.status === "ok") {
+                    document.getElementById("renameTemplateModal").style.display = "none";
+                    loadTemplates();
+                } else {
+                    alert("重命名失败: " + res.message);
+                }
+            });
+        }
+
+        function closeUploadModal() {
+            document.getElementById("uploadTemplateModal").style.display = "none";
+        }
+
+        function submitUploadTemplate() {
+            const name = document.getElementById("uploadName").value.trim();
+            const file = document.getElementById("uploadFile").files[0];
+            const image = document.getElementById("uploadImage").files[0];
+            const mode = document.getElementById("uploadMode").value;
+            
+            if (!name) return alert("请输入模板名称");
+            
+            if (mode === 'new') {
+                 // Check duplicate in frontend (optional, backend handles overwrite)
+                 const isExisting = adminData.templates.some(t => t.name === name || t.name === name + '.docx');
+                 if (!isExisting && !file) {
+                     return alert("新模板必须上传 Word 文件");
+                 }
+            } else if (mode === 'file') {
+                 if (!file) return alert("请选择 Word 文件");
+            } else if (mode === 'image') {
+                 if (!image) return alert("请选择图片文件");
+            }
+            
+            const formData = new FormData();
+            formData.append("name", name);
+            if (file) formData.append("file", file);
+            if (image) formData.append("image", image);
+            
+            // 提交
+            fetch("/api/upload_template", {
+                method: "POST",
+                body: formData
+            }).then(r => r.json()).then(res => {
+                if (res.status === "ok") {
+                    closeUploadModal();
+                    loadTemplates();
+                } else {
+                    alert("操作失败: " + res.message);
+                }
+            }).catch(e => {
+                alert("请求错误: " + e.message);
+            });
+        }
+        
+        function deleteTemplate(name) {
+            if (!confirm(`确定删除模板 "${name}" 吗？`)) return;
+            
+            fetch("/api/admin/delete_template", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: name })
+            }).then(r => r.json()).then(res => {
+                if (res.status === "ok") {
+                    loadTemplates();
+                } else {
+                    alert("删除失败: " + res.message);
                 }
             });
         }

@@ -90,11 +90,13 @@ def check_cleanup_output():
         logger.error(f'清理错误: {str(e)}')
 
 def list_templates():
-    template_dir = os.path.join(base_dir, config['template.dir'])
+    # 重新加载配置以确保获取最新默认值
+    current_config = ConfigLoader.load_config()
+    template_dir = os.path.join(base_dir, current_config['template.dir'])
     if not os.path.isdir(template_dir):
         return []
     items = []
-    default_template = config.get('template.default', 'template.docx')
+    default_template = current_config.get('template.default', 'template.docx')
     for name in os.listdir(template_dir):
         # 过滤掉临时文件，不显示在列表中
         if name.startswith('temp_'):
@@ -360,35 +362,31 @@ def api_upload_template():
     image_file = request.files.get('image')
     name = request.form.get('name')
     
-    # 验证模式
-    if mode not in ['long_term', 'one_time']:
-         return jsonify({'status': 'error', 'message': '无效的存储模式'})
-    
-    # 验证密码
-    if mode == 'long_term':
-        correct_password = config.get('template.password.long_term')
-    elif mode == 'one_time':
-        correct_password = config.get('template.password.one_time')
+    # 如果是管理员登录，跳过密码验证，强制为 long_term 模式
+    if session.get('is_admin'):
+        mode = 'long_term'
     else:
-        correct_password = None
-    
-    if not correct_password or password != correct_password:
-        return jsonify({'status': 'error', 'message': '密码错误'})
+        # 验证模式
+        if mode not in ['long_term', 'one_time']:
+             return jsonify({'status': 'error', 'message': '无效的存储模式'})
+        
+        # 验证密码
+        if mode == 'long_term':
+            correct_password = config.get('template.password.long_term')
+        elif mode == 'one_time':
+            correct_password = config.get('template.password.one_time')
+        else:
+            correct_password = None
+        
+        if not correct_password or password != correct_password:
+            return jsonify({'status': 'error', 'message': '密码错误'})
 
     # 验证文件和名称
-    if not file or not file.filename.endswith('.docx'):
-        return jsonify({'status': 'error', 'message': '无效的 Word 文件'})
     if not name:
          return jsonify({'status': 'error', 'message': '模板名称不能为空'})
 
     template_dir = os.path.join(base_dir, config['template.dir'])
-    
-    # 生成文件名
-    # 使用用户提供的 name 作为文件名的一部分
-    # 过滤特殊字符，只保留字母、数字、中文、空格、下划线、中划线
-    # 注意：这里假设系统支持中文文件名
     safe_name = name.strip()
-    # 如果文件名包含路径分隔符，只取文件名部分
     safe_name = os.path.basename(safe_name)
     
     # 移除 .docx 后缀（如果用户输入了），避免重复
@@ -407,20 +405,146 @@ def api_upload_template():
 
     path = os.path.join(template_dir, final_filename)
     
-    try:
-        file.save(path)
+    # 检查是否是更新操作
+    is_update = os.path.exists(path)
+    
+    # 如果是新文件，必须上传 docx
+    if not is_update and (not file or not file.filename.endswith('.docx')):
+        return jsonify({'status': 'error', 'message': '新模板必须上传 Word 文件'})
         
-        # 处理预览图
-        if image_file:
+    # 如果提供了文件，则保存（覆盖）
+    if file:
+        if not file.filename.endswith('.docx'):
+             return jsonify({'status': 'error', 'message': '无效的 Word 文件'})
+        try:
+            file.save(path)
+        except Exception as e:
+            logger.error(f'保存模板文件失败: {e}')
+            return jsonify({'status': 'error', 'message': str(e)})
+            
+    # 处理预览图
+    if image_file:
+        try:
             # 图片文件名与模板同名，后缀改为 .png
             img_filename = os.path.splitext(final_filename)[0] + '.png'
             img_path = os.path.join(template_dir, img_filename)
             image_file.save(img_path)
+        except Exception as e:
+            logger.error(f'保存预览图失败: {e}')
+            return jsonify({'status': 'error', 'message': str(e)})
             
-        return jsonify({'status': 'ok', 'filename': final_filename})
+    return jsonify({'status': 'ok', 'filename': final_filename})
+
+@app.route('/api/admin/rename_template', methods=['POST'])
+@admin_required
+def api_admin_rename_template():
+    data = request.get_json(silent=True) or {}
+    old_name = data.get('old_name')
+    new_name = data.get('new_name')
+    
+    if not old_name or not new_name:
+        return jsonify({'status': 'error', 'message': '参数不完整'})
         
+    if old_name == new_name:
+        return jsonify({'status': 'ok'})
+        
+    template_dir = os.path.join(base_dir, config['template.dir'])
+    
+    # 处理 old_name
+    safe_old = os.path.basename(old_name)
+    if not safe_old.lower().endswith('.docx'):
+        safe_old += '.docx'
+    old_path = os.path.join(template_dir, safe_old)
+    
+    if not os.path.exists(old_path):
+        return jsonify({'status': 'error', 'message': '原模板不存在'})
+        
+    # 处理 new_name
+    safe_new = os.path.basename(new_name)
+    # 如果用户没输后缀，后端逻辑通常是加上，但这里 old_name 已经是带后缀的文件名吗？
+    # 前端传过来的 name 通常是不带后缀的显示名，还是带后缀的？
+    # list_templates 返回的 name 是带 .docx 的 (e.g. "template.docx")
+    # 所以 old_name 是 "abc.docx", new_name 可能是 "xyz"
+    
+    if safe_new.lower().endswith('.docx'):
+        safe_new_filename = safe_new
+    else:
+        safe_new_filename = safe_new + '.docx'
+        
+    new_path = os.path.join(template_dir, safe_new_filename)
+    
+    if os.path.exists(new_path):
+        return jsonify({'status': 'error', 'message': '新名称已存在'})
+        
+    try:
+        # 重命名 docx
+        os.rename(old_path, new_path)
+        
+        # 重命名 png (如果有)
+        old_png = os.path.splitext(old_path)[0] + '.png'
+        new_png = os.path.splitext(new_path)[0] + '.png'
+        if os.path.exists(old_png):
+            os.rename(old_png, new_png)
+            
+        # 如果是默认模板，更新配置
+        default_template = config.get('template.default', 'template.docx')
+        # default_template 是带后缀的
+        if safe_old == default_template:
+            ConfigLoader.save_config_from_admin({'template.default': safe_new_filename})
+            
+        return jsonify({'status': 'ok'})
     except Exception as e:
-        logger.error(f'上传模板失败: {e}')
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/api/admin/delete_template', methods=['POST'])
+@admin_required
+def api_admin_delete_template():
+    data = request.get_json(silent=True) or {}
+    name = data.get('name')
+    if not name:
+        return jsonify({'status': 'error', 'message': '模板名称不能为空'})
+        
+    template_dir = os.path.join(base_dir, config['template.dir'])
+    safe_name = os.path.basename(name)
+    
+    # 禁止删除默认模板
+    default_template = config.get('template.default', 'template.docx')
+    if safe_name == default_template:
+        return jsonify({'status': 'error', 'message': '默认模板不能删除'})
+        
+    path = os.path.join(template_dir, safe_name)
+    
+    if not os.path.exists(path):
+        return jsonify({'status': 'error', 'message': '模板不存在'})
+        
+    try:
+        os.remove(path)
+        # 尝试删除对应的图片
+        png_path = os.path.splitext(path)[0] + '.png'
+        if os.path.exists(png_path):
+            os.remove(png_path)
+        return jsonify({'status': 'ok'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/api/admin/set_default_template', methods=['POST'])
+@admin_required
+def api_admin_set_default_template():
+    data = request.get_json(silent=True) or {}
+    name = data.get('name')
+    if not name:
+        return jsonify({'status': 'error', 'message': '模板名称不能为空'})
+        
+    template_dir = os.path.join(base_dir, config['template.dir'])
+    if not os.path.exists(os.path.join(template_dir, name)):
+            return jsonify({'status': 'error', 'message': '模板文件不存在'})
+
+    try:
+        ConfigLoader.save_config_from_admin({'template.default': name})
+        # 更新内存中的 config 对象，确保立即生效。
+        # 但为了保险，我们可以不操作，直接依赖 ConfigLoader 的单例特性。
+        return jsonify({'status': 'ok'})
+    except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
 
 @app.route('/api/start', methods=['POST'])
