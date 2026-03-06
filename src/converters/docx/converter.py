@@ -706,8 +706,10 @@ class FeishuDocxConverter:
                         highlight_color = FEISHU_BG_TO_WORD_HIGHLIGHT[bg_color_idx]
                         run.font.highlight_color = getattr(WD_COLOR_INDEX, highlight_color, WD_COLOR_INDEX.YELLOW)
                         
-                        # 特殊处理：如果背景是黑色(14)或深蓝(1)，文字颜色自动改为白色，确保可读性
-                        if bg_color_idx == 14 or bg_color_idx == 1:
+                        # 特殊处理：深色背景下文字自动改为白色，确保可读性
+                        # 1=深蓝, 2=青色(Teal), 7=50%灰, 8=红, 9=深红, 10=深黄, 11=绿, 12=蓝, 13=紫罗兰, 14=黑
+                        dark_bg_ids = {1, 2, 7, 8, 9, 10, 11, 12, 13, 14}
+                        if bg_color_idx in dark_bg_ids:
                             run.font.color.rgb = RGBColor(255, 255, 255)
             elif 'mention_user' in el:
                 user = el['mention_user']
