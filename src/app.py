@@ -171,7 +171,7 @@ def update_job(job_id, **fields):
                 job['logs'] = logs[-200:]
         job.update(fields)
 
-def run_job(job_id, doc_url, template_name, table_style, delete_template=False, add_cover=False, client_ip='', check_stop_func=None, unordered_list_style='default', body_style=None, was_queued=False):
+def run_job(job_id, doc_url, template_name, table_style, delete_template=False, add_cover=False, client_ip='', check_stop_func=None, unordered_list_style='default', body_style=None, was_queued=False, image_style=None):
     try:
         logger.info(f"开始执行任务 {job_id}: {doc_url}")
         if check_stop_func and check_stop_func():
@@ -184,7 +184,7 @@ def run_job(job_id, doc_url, template_name, table_style, delete_template=False, 
         if template_name:
             template_path = os.path.join(base_dir, config['template.dir'], template_name)
         output_root = os.path.join(base_dir, config['output.dir'])
-        result = process_document(doc_url=doc_url, template_path=template_path, table_style=table_style, base_dir=base_dir, output_root=output_root, progress_cb=lambda p, m, t='info': update_job(job_id, progress=p, message=m, log_type=t), add_cover=add_cover, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, body_style=body_style)
+        result = process_document(doc_url=doc_url, template_path=template_path, table_style=table_style, base_dir=base_dir, output_root=output_root, progress_cb=lambda p, m, t='info': update_job(job_id, progress=p, message=m, log_type=t), add_cover=add_cover, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, body_style=body_style, image_style=image_style)
         if delete_template and template_path:
             if os.path.exists(template_path):
                 try:
@@ -240,6 +240,8 @@ def index():
     html = html.replace('[/* usage_link_text */]', config.get('page.usage_link_text', '使用说明'))
     html = html.replace('[/* usage_doc_url */]', config.get('url.usage_doc', 'https://github.com/HawkonS/feishu-docget'))
     html = html.replace('[/* default_template */]', config.get('template.default', 'template.docx'))
+    html = html.replace('[/* image_max_width */]', str(config.get('image.max_width', '16')))
+    html = html.replace('[/* image_max_height */]', str(config.get('image.max_height', '23')))
     return html
 admin_path = config.get('admin.path', '/admin')
 
@@ -556,13 +558,14 @@ def api_start():
     add_cover = bool(data.get('addCover'))
     unordered_list_style = str(data.get('unorderedListStyle') or 'default').strip()
     body_style = data.get('bodyStyle') # dict or None
+    image_style = data.get('imageStyle') # dict or None
     if not doc_url:
         return jsonify({'status': 'error', 'message': '缺少文档链接'})
     job_id = datetime.now().strftime('%Y%m%d%H%M%S') + '_' + uuid.uuid4().hex[:8]
     client_ip = request.remote_addr
     is_temp_template = template.startswith('temp_')
     with jobs_lock:
-        jobs[job_id] = {'status': 'pending', 'progress': 0, 'message': '等待中', 'job_id': job_id, 'created_at': datetime.now().isoformat(timespec='seconds'), 'doc_url': doc_url, 'template': template, 'table_style': table_style, 'unordered_list_style': unordered_list_style, 'body_style': body_style, 'client_ip': client_ip, 'logs': [{'ts': datetime.now().isoformat(timespec='seconds'), 'message': '任务已创建'}]}
+        jobs[job_id] = {'status': 'pending', 'progress': 0, 'message': '等待中', 'job_id': job_id, 'created_at': datetime.now().isoformat(timespec='seconds'), 'doc_url': doc_url, 'template': template, 'table_style': table_style, 'unordered_list_style': unordered_list_style, 'body_style': body_style, 'image_style': image_style, 'client_ip': client_ip, 'logs': [{'ts': datetime.now().isoformat(timespec='seconds'), 'message': '任务已创建'}]}
 
     def check_stop():
         with jobs_lock:
@@ -592,7 +595,7 @@ def api_start():
         update_download_stat(base_dir, config, job_id, '排队中', doc_url=doc_url, ip_address=client_ip)
     else:
         pass
-    download_queue.put((job_id, doc_url, template, table_style, is_temp_template, add_cover, client_ip, check_stop, unordered_list_style, body_style, is_queued))
+    download_queue.put((job_id, doc_url, template, table_style, is_temp_template, add_cover, client_ip, check_stop, unordered_list_style, body_style, is_queued, image_style))
     return jsonify({'status': 'ok', 'job_id': job_id})
 
 @app.route('/api/status/<job_id>', methods=['GET'])

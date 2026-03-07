@@ -16,7 +16,7 @@ except ImportError:
         IMAGE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image'
 logger = ConfigLoader.get_logger('format_cleaner')
 
-def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=False, body_style=None):
+def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=False, body_style=None, image_style=None):
     logger.debug('开始清理文档...')
     doc = Document(docx_path)
     ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
@@ -36,22 +36,44 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
         inserted_count = 0
         if progress_cb:
             progress_cb(92, '已跳过添加封面', 'success')
+    
+    # Determine Image Config
+    default_max_h = 23.0
     try:
         val = config.get('image.max_height', 23)
         if isinstance(val, str) and (not val.strip()):
             val = 23
-        max_h_cm = float(val)
+        default_max_h = float(val)
     except (ValueError, TypeError):
-        max_h_cm = 23.0
-    MAX_HEIGHT = Mm(max_h_cm * 10)
+        pass
+        
+    default_max_w = 16.0
     try:
         val_w = config.get('image.max_width', 16)
         if isinstance(val_w, str) and (not val_w.strip()):
             val_w = 16
-        max_w_cm = float(val_w)
+        default_max_w = float(val_w)
     except (ValueError, TypeError):
-        max_w_cm = 16.0
-    MAX_WIDTH = Mm(max_w_cm * 10)
+        pass
+
+    target_max_h = default_max_h
+    target_max_w = default_max_w
+    target_align = 1 # Center by default
+
+    if image_style:
+        target_max_w = float(image_style.get('maxWidth', default_max_w))
+        target_max_h = float(image_style.get('maxHeight', default_max_h))
+        align_str = image_style.get('align', 'center').lower()
+        if align_str == 'left':
+            target_align = 0
+        elif align_str == 'right':
+            target_align = 2
+        else:
+            target_align = 1
+            
+    MAX_HEIGHT = Mm(target_max_h * 10)
+    MAX_WIDTH = Mm(target_max_w * 10)
+
     if progress_cb:
         progress_cb(93, '正在处理表格样式...', 'dynamic')
     cover_table_count = inserted_count[1] if isinstance(inserted_count, tuple) else 0
@@ -99,7 +121,7 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
         xml = p._element.xml
         if 'w:drawing' in xml or 'w:pict' in xml:
             _force_clear_indent(p, ns)
-            p.alignment = 1
+            p.alignment = target_align
             count_centered += 1
         for run in p.runs:
             drawings = run._element.findall(f'.//{{{ns}}}drawing')
@@ -113,7 +135,9 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
                     if _resize_inline_image(anchor, MAX_HEIGHT, MAX_WIDTH):
                         count_resized += 1
     if progress_cb and (count_resized > 0 or count_centered > 0):
-        progress_cb(97, f'已调整图片样式：处理大小 {count_resized} 张，居中对齐 {count_centered} 张', 'success')
+        align_desc = {0: '左对齐', 1: '居中对齐', 2: '右对齐'}.get(target_align, '居中对齐')
+        progress_cb(97, f'已调整图片样式：处理大小 {count_resized} 张，{align_desc} {count_centered} 张', 'success')
+
     if progress_cb:
         progress_cb(98, '正在清理文本缩进并应用样式...', 'dynamic')
     
