@@ -155,7 +155,6 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
             # 排除列表 (可选，这里暂时不排除列表，让列表也应用字体大小，但缩进可能受影响，需谨慎)
             # 这里的 _clean_text_indent 已经处理了缩进。
             # 飞书列表通常是 List Paragraph。
-            
             if not is_heading:
                 _apply_paragraph_style(p, body_style, ns)
                 count_style_applied += 1
