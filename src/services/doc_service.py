@@ -42,9 +42,27 @@ def process_document(doc_url, template_path=None, table_style=None, base_dir='.'
                 if not os.path.exists(master_img_dir):
                     os.makedirs(master_img_dir, exist_ok=True)
                 if not os.path.exists(img_dir):
-                    rel_path = os.path.relpath(master_img_dir, os.path.dirname(img_dir))
-                    os.symlink(rel_path, img_dir)
-                    logger.info(f'创建图片软链接: {img_dir} -> {master_img_dir}')
+                    try:
+                        rel_path = os.path.relpath(master_img_dir, os.path.dirname(img_dir))
+                        os.symlink(rel_path, img_dir)
+                        logger.info(f'创建图片软链接: {img_dir} -> {master_img_dir}')
+                    except OSError as e:
+                        # Windows: Try Junction if symlink fails (usually due to privileges)
+                        if os.name == 'nt':
+                            try:
+                                import subprocess
+                                abs_target = os.path.abspath(master_img_dir)
+                                abs_link = os.path.abspath(img_dir)
+                                # mklink /J Link Target
+                                cmd = f'mklink /J "{abs_link}" "{abs_target}"'
+                                subprocess.check_call(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                logger.info(f'创建图片目录联接(Junction): {img_dir} -> {master_img_dir}')
+                            except Exception as je:
+                                logger.warning(f'创建Junction失败: {je}')
+                                raise e
+                        else:
+                            raise e
+                    
                     if progress_cb:
                         progress_cb(25, '检测到历史下载记录，已关联至历史图片资源', 'success')
                 elif os.path.islink(img_dir):
