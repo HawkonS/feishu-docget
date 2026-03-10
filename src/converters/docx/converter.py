@@ -310,11 +310,60 @@ class FeishuDocxConverter:
             logger.error(f"处理块错误 {block.get('block_id')} ({btype}): {str(e)}")
 
     def _handle_page(self, block, container):
+        # 渲染页面标题 (Page Block 的 elements 通常包含标题)
+        page_data = block.get('page') or {}
+        elements = page_data.get('elements') or []
+        if elements:
+            try:
+                # 尝试使用 Title 样式
+                p = container.add_paragraph(style='Title')
+            except:
+                # 如果模板没有 Title 样式，回退到默认并加粗加大
+                p = container.add_paragraph()
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            
+            self._add_runs(p, elements)
+            
+            # 如果是回退样式，手动设置格式
+            if p.style.name != 'Title':
+                for run in p.runs:
+                    run.font.bold = True
+                    run.font.size = Pt(22)  # 约等于二号字
+        
+        # 渲染子块
         self._render_children(block, container, child_level=0)
 
     def _handle_text(self, block, container):
         text_data = block.get('text') or {}
-        self._add_paragraph(container, text_data)
+        p = self._add_paragraph(container, text_data)
+        
+        # 处理缩进 (indentation)
+        style = text_data.get('style') or {}
+        # indentation_level 通常是 "OneLevelIndent", "TwoLevelIndent" 等
+        indent_level = style.get('indentation_level')
+        
+        if indent_level:
+            # 简单映射：OneLevelIndent -> 1级缩进
+            level_map = {
+                'OneLevelIndent': 1,
+                'TwoLevelIndent': 2,
+                'ThreeLevelIndent': 3,
+                'FourLevelIndent': 4,
+                'FiveLevelIndent': 5,
+                'SixLevelIndent': 6,
+                'SevenLevelIndent': 7,
+                'EightLevelIndent': 8,
+                'NineLevelIndent': 9
+            }
+            level = level_map.get(indent_level, 0)
+            if level > 0:
+                # 每一级缩进 2 个字符宽度 (21磅左右，或者直接用 cm)
+                # Word 默认缩进是 0.75cm 或 21pt
+                # 这里使用 Pt(21) * level
+                try:
+                    p.paragraph_format.left_indent = Pt(21 * level)
+                except Exception as e:
+                    pass
 
     def _handle_heading(self, block, level, container):
         text_data = (block.get(f'heading{level}') or {}).get('elements') or []
@@ -324,6 +373,9 @@ class FeishuDocxConverter:
         except:
             p = container.add_paragraph()
         self._add_runs(p, text_data)
+        
+        # 渲染子块（Heading 下的折叠内容等）
+        self._render_children(block, container, child_level=block.get('_level', 0) + 1)
 
     def _handle_heading1(self, b, c):
         self._handle_heading(b, 1, c)
@@ -671,21 +723,26 @@ class FeishuDocxConverter:
                 tr = el['text_run']
                 content = tr.get('content', '')
                 style = tr.get('text_element_style', {})
-                link = tr.get('link')
-                style_link = style.get('link')
+                
+                # Check for link in text_element_style (Feishu new format)
                 final_link = None
-                if link and link.get('url'):
-                    final_link = link.get('url')
-                elif style_link and style_link.get('url'):
+                style_link = style.get('link')
+                if style_link and style_link.get('url'):
                     final_link = style_link.get('url')
+                
                 if final_link:
+                    # Handle hyperlink
                     try:
                         if '%3A' in final_link or '%3a' in final_link:
+                            from urllib.parse import unquote
                             final_link = unquote(final_link)
                     except:
                         pass
+                    # For hyperlinks, we use a helper which adds a run
+                    # Note: style application for hyperlinks is limited in python-docx helper
                     add_hyperlink(paragraph, final_link, content)
                 else:
+                    # Normal text run
                     run = paragraph.add_run(content)
                     if style.get('bold'):
                         run.font.bold = True
@@ -695,6 +752,7 @@ class FeishuDocxConverter:
                         run.font.underline = True
                     if style.get('strikethrough'):
                         run.font.strike = True
+                    
                     color_idx = style.get('text_color')
                     if color_idx and color_idx in TEXT_COLOR_MAP:
                         run.font.color.rgb = RGBColor.from_string(TEXT_COLOR_MAP[color_idx])
