@@ -364,6 +364,9 @@ class FeishuDocxConverter:
                     p.paragraph_format.left_indent = Pt(21 * level)
                 except Exception as e:
                     pass
+        
+        # 渲染子块（Text 块下也可能有子节点，如缩进内容）
+        self._render_children(block, container, child_level=block.get('_level', 0) + 1)
 
     def _handle_heading(self, block, level, container):
         text_data = (block.get(f'heading{level}') or {}).get('elements') or []
@@ -709,7 +712,10 @@ class FeishuDocxConverter:
         self._render_children(block, container, child_level=0)
 
     def _handle_unknown(self, block, container):
-        self._render_children(block, container, child_level=block.get('_level', 0))
+        # 对于未知或通用的容器块，递归渲染其子节点
+        # 注意：这里需要确保所有可能包含子节点的块类型都调用了 _render_children
+        # 飞书文档的嵌套结构可能很深，通过递归调用 _render_block -> _handle_xxx -> _render_children -> _render_block 实现无限层级支持
+        self._render_children(block, container, child_level=block.get('_level', 0) + 1)
 
     def _add_paragraph(self, container, text_data):
         elements = text_data.get('elements') or []
