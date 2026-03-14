@@ -21,21 +21,31 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
     doc = Document(docx_path)
     ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
     ns_wp = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing'
-    if add_cover and template_path:
+    
+    if template_path:
         try:
+            tpl_doc = Document(template_path)
             _copy_styles_from_template(template_path, doc)
-            inserted_count = _prepend_first_page_from_template(doc, template_path)
+            
+            inserted_count = 0
+            if add_cover:
+                inserted_count = _prepend_first_page_from_template(doc, template_path)
+            
+            # 无论是否添加封面，都尝试应用模板的页眉页脚
+            _copy_headers_from_template(tpl_doc, doc, add_cover=add_cover)
+            
             if progress_cb:
-                progress_cb(92, '已添加封面', 'success')
+                msg = '已添加封面' if add_cover else '已应用模板样式和页眉页脚'
+                progress_cb(92, msg, 'success')
         except Exception as e:
-            logger.error(f'合并封面失败: {str(e)}')
+            logger.error(f'应用模板失败: {str(e)}')
             if progress_cb:
-                progress_cb(92, f'添加封面失败: {str(e)}')
+                progress_cb(92, f'应用模板失败: {str(e)}')
             inserted_count = 0
     else:
         inserted_count = 0
         if progress_cb:
-            progress_cb(92, '已跳过添加封面', 'success')
+            progress_cb(92, '已跳过应用模板', 'success')
     
     # Determine Image Config
     default_max_h = 23.0
@@ -427,33 +437,50 @@ def _copy_header_footer_content(source_header, target_header):
             _copy_related_parts(new_child, s_part, t_part)
         target_root.append(new_child)
 
-def _copy_headers_from_template(tpl_doc, doc):
+def _copy_headers_from_template(tpl_doc, doc, add_cover=True):
     if not tpl_doc.sections or not doc.sections:
         return
-    tpl_section = tpl_doc.sections[0]
-    for target_section in doc.sections:
-        if hasattr(target_section.header, 'is_linked_to_previous'):
-            target_section.header.is_linked_to_previous = False
-        if hasattr(target_section.footer, 'is_linked_to_previous'):
-            target_section.footer.is_linked_to_previous = False
-        _copy_header_footer_content(tpl_section.header, target_section.header)
-        _copy_header_footer_content(tpl_section.footer, target_section.footer)
-        if getattr(tpl_section, 'different_first_page_header_footer', False):
-            target_section.different_first_page_header_footer = True
-            if hasattr(target_section.first_page_header, 'is_linked_to_previous'):
-                target_section.first_page_header.is_linked_to_previous = False
-            if hasattr(target_section.first_page_footer, 'is_linked_to_previous'):
-                target_section.first_page_footer.is_linked_to_previous = False
-            _copy_header_footer_content(tpl_section.first_page_header, target_section.first_page_header)
-            _copy_header_footer_content(tpl_section.first_page_footer, target_section.first_page_footer)
-        if getattr(tpl_section, 'odd_and_even_pages_header_footer', False):
-            target_section.odd_and_even_pages_header_footer = True
-            if hasattr(target_section.even_page_header, 'is_linked_to_previous'):
-                target_section.even_page_header.is_linked_to_previous = False
-            if hasattr(target_section.even_page_footer, 'is_linked_to_previous'):
-                target_section.even_page_footer.is_linked_to_previous = False
-            _copy_header_footer_content(tpl_section.even_page_header, target_section.even_page_header)
-            _copy_header_footer_content(tpl_section.even_page_footer, target_section.even_page_footer)
+
+    num_tpl_sections = len(tpl_doc.sections)
+    num_doc_sections = len(doc.sections)
+    cover_tpl_section = tpl_doc.sections[0]
+    body_tpl_section = tpl_doc.sections[1] if num_tpl_sections > 1 else tpl_doc.sections[0]
+
+    if add_cover:
+        _copy_section_headers_footers(cover_tpl_section, doc.sections[0])
+        if num_doc_sections > 1:
+            for i in range(1, num_doc_sections):
+                _copy_section_headers_footers(body_tpl_section, doc.sections[i])
+    else:
+        for i in range(num_doc_sections):
+            _copy_section_headers_footers(body_tpl_section, doc.sections[i])
+
+def _copy_section_headers_footers(source_section, target_section):
+    if hasattr(target_section.header, 'is_linked_to_previous'):
+        target_section.header.is_linked_to_previous = False
+    if hasattr(target_section.footer, 'is_linked_to_previous'):
+        target_section.footer.is_linked_to_previous = False
+
+    _copy_header_footer_content(source_section.header, target_section.header)
+    _copy_header_footer_content(source_section.footer, target_section.footer)
+
+    if getattr(source_section, 'different_first_page_header_footer', False):
+        target_section.different_first_page_header_footer = True
+        if hasattr(target_section.first_page_header, 'is_linked_to_previous'):
+            target_section.first_page_header.is_linked_to_previous = False
+        if hasattr(target_section.first_page_footer, 'is_linked_to_previous'):
+            target_section.first_page_footer.is_linked_to_previous = False
+        _copy_header_footer_content(source_section.first_page_header, target_section.first_page_header)
+        _copy_header_footer_content(source_section.first_page_footer, target_section.first_page_footer)
+
+    if getattr(source_section, 'odd_and_even_pages_header_footer', False):
+        target_section.odd_and_even_pages_header_footer = True
+        if hasattr(target_section.even_page_header, 'is_linked_to_previous'):
+            target_section.even_page_header.is_linked_to_previous = False
+        if hasattr(target_section.even_page_footer, 'is_linked_to_previous'):
+            target_section.even_page_footer.is_linked_to_previous = False
+        _copy_header_footer_content(source_section.even_page_header, target_section.even_page_header)
+        _copy_header_footer_content(source_section.even_page_footer, target_section.even_page_footer)
 
 def _prepend_first_page_from_template(doc, template_path):
     try:
@@ -512,10 +539,6 @@ def _prepend_first_page_from_template(doc, template_path):
             dst_sect.footer_distance = src_sect.footer_distance
     except Exception as e:
         logger.debug(f'复制分节属性失败: {e}')
-    try:
-        _copy_headers_from_template(tpl_doc, doc)
-    except Exception as e:
-        logger.debug(f'复制页眉页脚失败: {str(e)}')
     return (count_paragraphs, count_tables)
 
 def _resize_inline_image(drawing_element, max_height, max_width=None):
