@@ -171,7 +171,7 @@ def update_job(job_id, **fields):
                 job['logs'] = logs[-200:]
         job.update(fields)
 
-def run_job(job_id, doc_url, template_name, table_style, delete_template=False, add_cover=False, client_ip='', check_stop_func=None, unordered_list_style='default', body_style=None, was_queued=False, image_style=None):
+def run_job(job_id, doc_url, template_name, table_style, delete_template=False, add_cover=False, client_ip='', check_stop_func=None, unordered_list_style='default', body_style=None, was_queued=False, image_style=None, ignore_mention=False):
     try:
         logger.info(f"开始执行任务 {job_id}: {doc_url}")
         if check_stop_func and check_stop_func():
@@ -184,7 +184,7 @@ def run_job(job_id, doc_url, template_name, table_style, delete_template=False, 
         if template_name:
             template_path = os.path.join(base_dir, config['template.dir'], template_name)
         output_root = os.path.join(base_dir, config['output.dir'])
-        result = process_document(doc_url=doc_url, template_path=template_path, table_style=table_style, base_dir=base_dir, output_root=output_root, progress_cb=lambda p, m, t='info': update_job(job_id, progress=p, message=m, log_type=t), add_cover=add_cover, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, body_style=body_style, image_style=image_style)
+        result = process_document(doc_url=doc_url, template_path=template_path, table_style=table_style, base_dir=base_dir, output_root=output_root, progress_cb=lambda p, m, t='info': update_job(job_id, progress=p, message=m, log_type=t), add_cover=add_cover, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, body_style=body_style, image_style=image_style, ignore_mention=ignore_mention)
         if delete_template and template_path:
             if os.path.exists(template_path):
                 try:
@@ -556,6 +556,7 @@ def api_start():
     template = str(data.get('template') or '').strip()
     table_style = str(data.get('tableStyle') or '').strip()
     add_cover = bool(data.get('addCover'))
+    ignore_mention = bool(data.get('ignoreMention'))
     unordered_list_style = str(data.get('unorderedListStyle') or 'default').strip()
     body_style = data.get('bodyStyle') # dict or None
     image_style = data.get('imageStyle') # dict or None
@@ -595,7 +596,7 @@ def api_start():
         update_download_stat(base_dir, config, job_id, '排队中', doc_url=doc_url, ip_address=client_ip)
     else:
         pass
-    download_queue.put((job_id, doc_url, template, table_style, is_temp_template, add_cover, client_ip, check_stop, unordered_list_style, body_style, is_queued, image_style))
+    download_queue.put((job_id, doc_url, template, table_style, is_temp_template, add_cover, client_ip, check_stop, unordered_list_style, body_style, is_queued, image_style, ignore_mention))
     return jsonify({'status': 'ok', 'job_id': job_id})
 
 @app.route('/api/status/<job_id>', methods=['GET'])

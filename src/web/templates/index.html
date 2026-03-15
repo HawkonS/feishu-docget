@@ -511,6 +511,10 @@
                     <input type="checkbox" id="addCover" style="width:auto; margin-right:8px;" checked> 
                     添加模板封面/首页
                 </label>
+                <label style="display:flex; align-items:center; cursor:pointer; margin-top:8px;">
+                    <input type="checkbox" id="ignoreMention" style="width:auto; margin-right:8px;"> 
+                    忽略文本中@人员转换
+                </label>
             </div>
             <div class="form-group">
                 <label style="display:flex; align-items:center; cursor:pointer;">
@@ -841,6 +845,7 @@
         function startDownload() {
             const url = document.getElementById("docUrl").value.trim();
             const addCover = document.getElementById("addCover").checked;
+            const ignoreMention = document.getElementById("ignoreMention").checked;
             
             let unorderedListStyle = "none";
             if (document.getElementById("enableListStyle").checked) {
@@ -883,6 +888,7 @@
                     template: selectedTemplate, 
                     tableStyle: selectedStyle, 
                     addCover,
+                    ignoreMention,
                     unorderedListStyle,
                     bodyStyle,
                     imageStyle
@@ -1114,6 +1120,7 @@
             if (!confirm("确定要恢复所有高级选项到默认值吗？")) return;
             
             document.getElementById("addCover").checked = true;
+            document.getElementById("ignoreMention").checked = false;
             
             document.getElementById("enableListStyle").checked = true;
             document.getElementById("unorderedListStyle").value = "default";

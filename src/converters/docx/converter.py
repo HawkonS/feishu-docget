@@ -114,7 +114,7 @@ class NumberingInjector:
 
 class FeishuDocxConverter:
 
-    def __init__(self, blocks, client, img_dir, template_path=None, progress_cb=None, check_stop_func=None, unordered_list_style='default'):
+    def __init__(self, blocks, client, img_dir, template_path=None, progress_cb=None, check_stop_func=None, unordered_list_style='default', ignore_mention=False):
         self.blocks = blocks
         self.client = client
         self.img_dir = img_dir
@@ -122,6 +122,7 @@ class FeishuDocxConverter:
         self.progress_cb = progress_cb
         self.check_stop_func = check_stop_func
         self.unordered_list_style = unordered_list_style
+        self.ignore_mention = ignore_mention
         self.block_map = {b['block_id']: b for b in blocks}
         self.tree = self._build_tree()
         self.doc = None
@@ -776,6 +777,8 @@ class FeishuDocxConverter:
                         if bg_color_idx in dark_bg_ids:
                             run.font.color.rgb = RGBColor(255, 255, 255)
             elif 'mention_user' in el:
+                if self.ignore_mention:
+                    continue
                 user = el['mention_user']
                 user_id = user.get('user_id')
                 name = user.get('user_name') or 'User'
