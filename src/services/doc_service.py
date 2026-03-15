@@ -6,7 +6,7 @@ from src.core.config_loader import config, ConfigLoader
 from src.core.utils import sanitize_name
 from docx import Document
 
-def process_document(doc_url, template_path=None, table_style=None, base_dir='.', output_root='output', progress_cb=None, add_cover=False, check_stop_func=None, unordered_list_style='default', body_style=None, image_style=None):
+def process_document(doc_url, template_path=None, table_style=None, base_dir='.', output_root='output', progress_cb=None, add_cover=False, check_stop_func=None, unordered_list_style='default', body_style=None, image_style=None, ignore_mention=False):
     logger = ConfigLoader.get_logger('service')
     if check_stop_func and check_stop_func():
         raise InterruptedError('任务已停止')
@@ -87,7 +87,7 @@ def process_document(doc_url, template_path=None, table_style=None, base_dir='.'
         docx_path = os.path.join(doc_folder, f'{base_title}.docx')
         if check_stop_func and check_stop_func():
             raise InterruptedError('任务已停止')
-        converter = FeishuDocxConverter(blocks, client, img_dir, template_path, progress_cb, check_stop_func, unordered_list_style)
+        converter = FeishuDocxConverter(blocks, client, img_dir, template_path, progress_cb, check_stop_func, unordered_list_style, ignore_mention)
         converter.process(docx_path)
         if progress_cb:
             progress_cb(80, '正在应用样式', 'dynamic')
