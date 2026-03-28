@@ -16,7 +16,7 @@ except ImportError:
         IMAGE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image'
 logger = ConfigLoader.get_logger('format_cleaner')
 
-def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=False, body_style=None, image_style=None):
+def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=False, body_style=None, image_style=None, table_config=None):
     logger.debug('开始清理文档...')
     doc = Document(docx_path)
     ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
@@ -31,7 +31,6 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
             if add_cover:
                 inserted_count = _prepend_first_page_from_template(doc, template_path)
             
-            # 无论是否添加封面，都尝试应用模板的页眉页脚
             _copy_headers_from_template(tpl_doc, doc, add_cover=add_cover)
             
             if progress_cb:
@@ -84,6 +83,22 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
     MAX_HEIGHT = Mm(target_max_h * 10)
     MAX_WIDTH = Mm(target_max_w * 10)
 
+    # Determine Table Config
+    force_clear_tbl_indent = True
+    header_align = None
+    content_align = None
+    
+    if table_config:
+        force_clear_tbl_indent = table_config.get('forceClearIndent', True)
+        
+        # Mapping frontend align strings to docx alignment values
+        align_map = {'left': 0, 'center': 1, 'right': 2}
+        header_align_str = table_config.get('headerAlign', 'center').lower()
+        content_align_str = table_config.get('contentAlign', 'left').lower()
+        
+        header_align = align_map.get(header_align_str, 1)
+        content_align = align_map.get(content_align_str, 0)
+
     if progress_cb:
         progress_cb(93, '正在处理表格样式...', 'dynamic')
     cover_table_count = inserted_count[1] if isinstance(inserted_count, tuple) else 0
@@ -111,14 +126,34 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
             continue
         count_content += 1
         is_code_block = len(table.rows) == 1 and len(table.rows[0].cells) == 1
-        for row in table.rows:
+        
+        for r_idx, row in enumerate(table.rows):
+            is_header = (r_idx == 0)
             for cell in row.cells:
                 if not is_code_block:
                     cell.vertical_alignment = 1
                 for p in cell.paragraphs:
-                    _force_clear_indent(p, ns)
+                    if force_clear_tbl_indent:
+                        # 强制清空所有缩进（包括首行缩进）
+                        _force_clear_indent(p, ns)
+                    else:
+                        # 按照正文样式处理（仅清空悬挂缩进和左缩进，保留首行缩进）
+                        _clean_text_indent(p, ns)
+                    
                     if is_code_block:
                         p.alignment = 0
+                    else:
+                        if table_config:
+                            # Apply alignment if table_config is provided
+                            if is_header:
+                                p.alignment = header_align
+                            else:
+                                p.alignment = content_align
+                        
+                        # 如果提供了正文样式配置，也应用到表格段落中（使其与正文一致）
+                        if body_style:
+                            _apply_paragraph_style(p, body_style, ns)
+
     if progress_cb and (count_indent > 0 or count_content > 0):
         progress_cb(95, f'已调整表格样式：处理缩进 {count_indent} 个，处理内容 {count_content} 个', 'success')
     if progress_cb:

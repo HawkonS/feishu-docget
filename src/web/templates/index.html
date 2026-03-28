@@ -628,6 +628,37 @@
                 </div>
             </div>
 
+            <div class="form-group" style="margin-top: 15px; border-top: 1px dashed #e2e8f0; padding-top: 15px;">
+                <label style="display:flex; align-items:center; cursor:pointer;">
+                    <input type="checkbox" id="enableTableCleaning" onchange="toggleTableCleaning()" style="width:auto; margin-right:8px;" checked> 
+                    表格清洗设置
+                </label>
+                <div id="tableCleaningConfig" style="display: block; grid-template-columns: 1fr; gap: 10px; margin-top: 10px;">
+                    <label style="display:flex; align-items:center; cursor:pointer; font-size: 13px; margin-bottom: 8px;">
+                        <input type="checkbox" id="tableForceClearIndent" style="width:auto; margin-right:8px;" checked> 
+                        强制清除表格缩进
+                    </label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div>
+                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">表头文字对齐</label>
+                            <select id="tableHeaderAlign" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                <option value="center" selected>居中</option>
+                                <option value="left">居左</option>
+                                <option value="right">居右</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">内容文字对齐</label>
+                            <select id="tableContentAlign" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                <option value="center">居中</option>
+                                <option value="left" selected>居左</option>
+                                <option value="right">居右</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px;">
                 <button onclick="resetAdvancedOptions()" class="btn-small" style="background:#fff; color:#64748b; border:1px solid #cbd5e1;">恢复默认</button>
                 <div style="display:flex; gap:10px;">
@@ -876,6 +907,16 @@
                 };
             }
 
+            // Collect Table Cleaning Options
+            let tableConfig = null;
+            if (document.getElementById("enableTableCleaning").checked) {
+                tableConfig = {
+                    forceClearIndent: document.getElementById("tableForceClearIndent").checked,
+                    headerAlign: document.getElementById("tableHeaderAlign").value,
+                    contentAlign: document.getElementById("tableContentAlign").value
+                };
+            }
+
             if (!url) return alert("请输入文档链接");
             
             if (timer) clearTimeout(timer);
@@ -891,7 +932,8 @@
                     ignoreMention,
                     unorderedListStyle,
                     bodyStyle,
-                    imageStyle
+                    imageStyle,
+                    tableConfig
                 })
             }).then(r => r.json()).then(res => {
                 if (res.status !== "ok") {
@@ -1142,6 +1184,12 @@
             document.getElementById("imageMaxHeight").value = "[/* image_max_height */]";
             document.getElementById("imageAlign").value = "center";
             toggleImageStyle();
+
+            document.getElementById("enableTableCleaning").checked = true;
+            document.getElementById("tableForceClearIndent").checked = true;
+            document.getElementById("tableHeaderAlign").value = "center";
+            document.getElementById("tableContentAlign").value = "left";
+            toggleTableCleaning();
         }
 
         function toggleListStyle() {
@@ -1157,6 +1205,11 @@
         function toggleImageStyle() {
             const checked = document.getElementById("enableImageStyle").checked;
             document.getElementById("imageStyleConfig").style.display = checked ? "grid" : "none";
+        }
+
+        function toggleTableCleaning() {
+            const checked = document.getElementById("enableTableCleaning").checked;
+            document.getElementById("tableCleaningConfig").style.display = checked ? "block" : "none";
         }
 
         function syncFontSizeSelect(val) {

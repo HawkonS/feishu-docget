@@ -85,20 +85,26 @@ class ConfigLoader:
 
     @classmethod
     def _write_config(cls, path, config):
-        with open(path, 'w', encoding='utf-8') as f:
-            for group in CONFIG_META:
-                f.write('# ==========================================\n')
-                f.write(f"# {group['name']}\n")
-                f.write('# ==========================================\n')
-                for item in group['items']:
-                    key = item['key']
-                    desc = item['desc']
-                    if desc:
-                        f.write(f'{desc}\n')
-                    val = config.get(key, item['default'])
-                    if val is None: val = ''
-                    f.write(f"{key}={val}\n")
-                f.write('\n')
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                for group in CONFIG_META:
+                    f.write('# ==========================================\n')
+                    f.write(f"# {group['name']}\n")
+                    f.write('# ==========================================\n')
+                    for item in group['items']:
+                        key = item['key']
+                        desc = item['desc']
+                        if desc:
+                            f.write(f'{desc}\n')
+                        val = config.get(key, item['default'])
+                        if val is None: val = ''
+                        f.write(f"{key}={val}\n")
+                    f.write('\n')
+        except PermissionError as e:
+            print(f"警告: 无法写入配置文件 {path}: {e}")
+            print("请检查文件是否被设置为只读、隐藏，或正在被其他程序使用。")
+        except Exception as e:
+            print(f"写入配置文件 {path} 失败: {e}")
 
     @classmethod
     def get_comment(cls, key):
