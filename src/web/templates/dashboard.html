@@ -778,6 +778,40 @@
                             </div>
                         </div>
                     </div>
+
+                    <label class="checkbox-label" style="margin-top: 15px; margin-bottom: 10px;">
+                        <input type="checkbox" id="enablePageMargins" onchange="togglePageMargins()"> 页边距管理 (不含封面)
+                    </label>
+                    <div id="pageMarginsConfig" style="display: none; padding-left: 20px;">
+                        <div style="margin-bottom: 10px;">
+                            <label style="font-size: 11px; color: #64748b;">快速选择预设</label>
+                            <select id="marginPreset" onchange="applyMarginPreset(this.value)" class="form-select" style="padding: 4px; font-size: 12px;">
+                                <option value="custom" selected>自定义</option>
+                                <option value="normal">普通 (上下2.54, 左右3.18)</option>
+                                <option value="narrow">窄 (上下左右1.27)</option>
+                                <option value="wide">宽 (上下2.54, 左右5.08)</option>
+                                <option value="moderate">适中 (上下2.54, 左右1.91)</option>
+                            </select>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <div>
+                                <label style="font-size: 11px; color: #64748b;">上边距 (cm)</label>
+                                <input type="number" id="marginTop" class="form-select" value="2.54" step="0.01" style="padding: 4px; font-size: 12px;" oninput="document.getElementById('marginPreset').value='custom'">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; color: #64748b;">下边距 (cm)</label>
+                                <input type="number" id="marginBottom" class="form-select" value="2.54" step="0.01" style="padding: 4px; font-size: 12px;" oninput="document.getElementById('marginPreset').value='custom'">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; color: #64748b;">左边距 (cm)</label>
+                                <input type="number" id="marginLeft" class="form-select" value="3.18" step="0.01" style="padding: 4px; font-size: 12px;" oninput="document.getElementById('marginPreset').value='custom'">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; color: #64748b;">右边距 (cm)</label>
+                                <input type="number" id="marginRight" class="form-select" value="3.18" step="0.01" style="padding: 4px; font-size: 12px;" oninput="document.getElementById('marginPreset').value='custom'">
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             
@@ -1509,6 +1543,15 @@
                 sSelect.appendChild(opt);
             });
             if(selectedStyle) sSelect.value = selectedStyle;
+
+            // 初始化页边距设置
+            document.getElementById("enablePageMargins").checked = false;
+            document.getElementById("marginPreset").value = "custom";
+            document.getElementById("marginTop").value = "2.54";
+            document.getElementById("marginBottom").value = "2.54";
+            document.getElementById("marginLeft").value = "3.18";
+            document.getElementById("marginRight").value = "3.18";
+            togglePageMargins();
         }
         
         function closeNewTaskModal() {
@@ -1535,6 +1578,30 @@
         function toggleTableCleaning() {
             const checked = document.getElementById("enableTableCleaning").checked;
             document.getElementById("tableCleaningConfig").style.display = checked ? "block" : "none";
+        }
+
+        function togglePageMargins() {
+            const checked = document.getElementById("enablePageMargins").checked;
+            document.getElementById("pageMarginsConfig").style.display = checked ? "block" : "none";
+        }
+
+        function applyMarginPreset(preset) {
+            if (preset === 'custom') return;
+            
+            const margins = {
+                'normal': [2.54, 2.54, 3.18, 3.18],
+                'narrow': [1.27, 1.27, 1.27, 1.27],
+                'wide': [2.54, 2.54, 5.08, 5.08],
+                'moderate': [2.54, 2.54, 1.91, 1.91]
+            };
+            
+            if (margins[preset]) {
+                const [top, bottom, left, right] = margins[preset];
+                document.getElementById("marginTop").value = top;
+                document.getElementById("marginBottom").value = bottom;
+                document.getElementById("marginLeft").value = left;
+                document.getElementById("marginRight").value = right;
+            }
         }
         
         function syncFontSizeSelect(val) {
@@ -1583,6 +1650,17 @@
                     contentAlign: document.getElementById("tableContentAlign").value
                 };
             }
+
+            // Collect Margin Config Options
+            let marginConfig = null;
+            if (document.getElementById("enablePageMargins").checked) {
+                marginConfig = {
+                    top: parseFloat(document.getElementById("marginTop").value),
+                    bottom: parseFloat(document.getElementById("marginBottom").value),
+                    left: parseFloat(document.getElementById("marginLeft").value),
+                    right: parseFloat(document.getElementById("marginRight").value)
+                };
+            }
             
             closeNewTaskModal();
             document.getElementById("progressModal").style.display = "flex";
@@ -1600,7 +1678,8 @@
                     tableStyle: style, 
                     addCover: addCover,
                     bodyStyle: bodyStyle,
-                    tableConfig: tableConfig
+                    tableConfig: tableConfig,
+                    marginConfig: marginConfig
                 })
             }).then(r => r.json()).then(res => {
                 if (res.status === "ok") {

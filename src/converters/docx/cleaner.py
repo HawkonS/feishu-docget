@@ -4,7 +4,7 @@ import io
 from docx import Document
 from docx.oxml.ns import nsdecls
 from docx.oxml import parse_xml
-from docx.shared import Pt, Mm, RGBColor
+from docx.shared import Pt, Mm, RGBColor, Cm
 from docx.enum.text import WD_LINE_SPACING
 from copy import deepcopy
 from src.core.config_loader import ConfigLoader, config
@@ -16,7 +16,7 @@ except ImportError:
         IMAGE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image'
 logger = ConfigLoader.get_logger('format_cleaner')
 
-def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=False, body_style=None, image_style=None, table_config=None):
+def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=False, body_style=None, image_style=None, table_config=None, margin_config=None):
     logger.debug('开始清理文档...')
     doc = Document(docx_path)
     ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
@@ -209,6 +209,30 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
             progress_cb(98, f'已调整文本样式 (应用正文样式到 {count_style_applied} 段)', 'success')
         else:
             progress_cb(98, '已调整文本样式', 'success')
+
+    # Apply Page Margins
+    if margin_config:
+        if progress_cb:
+            progress_cb(99, '正在调整页边距...', 'dynamic')
+        
+        # 跳过第一节（通常是封面或首页）
+        num_sections = len(doc.sections)
+        if num_sections > 1:
+            for i in range(1, num_sections):
+                section = doc.sections[i]
+                if 'top' in margin_config: section.top_margin = Cm(margin_config['top'])
+                if 'bottom' in margin_config: section.bottom_margin = Cm(margin_config['bottom'])
+                if 'left' in margin_config: section.left_margin = Cm(margin_config['left'])
+                if 'right' in margin_config: section.right_margin = Cm(margin_config['right'])
+            if progress_cb:
+                progress_cb(99, f'已调整页边距 (应用至 {num_sections - 1} 个分节)', 'success')
+        else:
+            # 如果只有一节且用户没有勾选“添加封面”，可能用户还是希望调整。
+            # 但 instruction 明确说“不含封面/首页”，通常意味着从第二页开始。
+            # 如果只有一页，则不调整以符合“不含首页”的逻辑。
+            if progress_cb:
+                progress_cb(99, '已跳过页边距调整 (文档只有一页)', 'info')
+
     doc.save(docx_path)
 
 def _apply_paragraph_style(paragraph, style_config, ns):
