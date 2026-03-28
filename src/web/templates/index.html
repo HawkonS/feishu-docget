@@ -659,6 +659,43 @@
                 </div>
             </div>
 
+            <div class="form-group" style="margin-top: 15px; border-top: 1px dashed #e2e8f0; padding-top: 15px;">
+                <label style="display:flex; align-items:center; cursor:pointer;">
+                    <input type="checkbox" id="enablePageMargins" onchange="togglePageMargins()" style="width:auto; margin-right:8px;"> 
+                    页边距管理 (不含封面)
+                </label>
+                <div id="pageMarginsConfig" style="display: none; grid-template-columns: 1fr; gap: 10px; margin-top: 10px;">
+                    <div>
+                        <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">快速选择预设</label>
+                        <select id="marginPreset" onchange="applyMarginPreset(this.value)" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                            <option value="custom" selected>自定义</option>
+                            <option value="normal">普通 (上下2.54, 左右3.18)</option>
+                            <option value="narrow">窄 (上下左右1.27)</option>
+                            <option value="wide">宽 (上下2.54, 左右5.08)</option>
+                            <option value="moderate">适中 (上下2.54, 左右1.91)</option>
+                        </select>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div>
+                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">上边距 (cm)</label>
+                            <input type="number" id="marginTop" value="2.54" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="document.getElementById('marginPreset').value='custom'">
+                        </div>
+                        <div>
+                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">下边距 (cm)</label>
+                            <input type="number" id="marginBottom" value="2.54" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="document.getElementById('marginPreset').value='custom'">
+                        </div>
+                        <div>
+                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">左边距 (cm)</label>
+                            <input type="number" id="marginLeft" value="3.18" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="document.getElementById('marginPreset').value='custom'">
+                        </div>
+                        <div>
+                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">右边距 (cm)</label>
+                            <input type="number" id="marginRight" value="3.18" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="document.getElementById('marginPreset').value='custom'">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px;">
                 <button onclick="resetAdvancedOptions()" class="btn-small" style="background:#fff; color:#64748b; border:1px solid #cbd5e1;">恢复默认</button>
                 <div style="display:flex; gap:10px;">
@@ -917,6 +954,17 @@
                 };
             }
 
+            // Collect Margin Config Options
+            let marginConfig = null;
+            if (document.getElementById("enablePageMargins").checked) {
+                marginConfig = {
+                    top: parseFloat(document.getElementById("marginTop").value),
+                    bottom: parseFloat(document.getElementById("marginBottom").value),
+                    left: parseFloat(document.getElementById("marginLeft").value),
+                    right: parseFloat(document.getElementById("marginRight").value)
+                };
+            }
+
             if (!url) return alert("请输入文档链接");
             
             if (timer) clearTimeout(timer);
@@ -933,7 +981,8 @@
                     unorderedListStyle,
                     bodyStyle,
                     imageStyle,
-                    tableConfig
+                    tableConfig,
+                    marginConfig
                 })
             }).then(r => r.json()).then(res => {
                 if (res.status !== "ok") {
@@ -1190,6 +1239,14 @@
             document.getElementById("tableHeaderAlign").value = "center";
             document.getElementById("tableContentAlign").value = "left";
             toggleTableCleaning();
+
+            document.getElementById("enablePageMargins").checked = false;
+            document.getElementById("marginPreset").value = "custom";
+            document.getElementById("marginTop").value = "2.54";
+            document.getElementById("marginBottom").value = "2.54";
+            document.getElementById("marginLeft").value = "3.18";
+            document.getElementById("marginRight").value = "3.18";
+            togglePageMargins();
         }
 
         function toggleListStyle() {
@@ -1210,6 +1267,30 @@
         function toggleTableCleaning() {
             const checked = document.getElementById("enableTableCleaning").checked;
             document.getElementById("tableCleaningConfig").style.display = checked ? "block" : "none";
+        }
+
+        function togglePageMargins() {
+            const checked = document.getElementById("enablePageMargins").checked;
+            document.getElementById("pageMarginsConfig").style.display = checked ? "block" : "none";
+        }
+
+        function applyMarginPreset(preset) {
+            if (preset === 'custom') return;
+            
+            const margins = {
+                'normal': [2.54, 2.54, 3.18, 3.18],
+                'narrow': [1.27, 1.27, 1.27, 1.27],
+                'wide': [2.54, 2.54, 5.08, 5.08],
+                'moderate': [2.54, 2.54, 1.91, 1.91]
+            };
+            
+            if (margins[preset]) {
+                const [top, bottom, left, right] = margins[preset];
+                document.getElementById("marginTop").value = top;
+                document.getElementById("marginBottom").value = bottom;
+                document.getElementById("marginLeft").value = left;
+                document.getElementById("marginRight").value = right;
+            }
         }
 
         function syncFontSizeSelect(val) {
