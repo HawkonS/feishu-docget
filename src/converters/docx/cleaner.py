@@ -2,7 +2,7 @@ from datetime import datetime
 import os
 import io
 from docx import Document
-from docx.oxml.ns import nsdecls
+from docx.oxml.ns import nsdecls, qn
 from docx.oxml import parse_xml
 from docx.shared import Pt, Mm, RGBColor, Cm
 from docx.enum.text import WD_LINE_SPACING
@@ -16,7 +16,7 @@ except ImportError:
         IMAGE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image'
 logger = ConfigLoader.get_logger('format_cleaner')
 
-def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=False, body_style=None, image_style=None, table_config=None, margin_config=None):
+def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=False, body_style=None, image_style=None, table_config=None, margin_config=None, code_block_config=None):
     logger.debug('开始清理文档...')
     doc = Document(docx_path)
     ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
@@ -137,6 +137,11 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
         except:
             pass
         
+        # Apply custom code block styles if configured
+        if is_code_block and code_block_config:
+            _apply_custom_code_block_style(table, code_block_config, ns)
+            continue
+
         for r_idx, row in enumerate(table.rows):
             is_header = (r_idx == 0)
             for cell in row.cells:
@@ -699,6 +704,73 @@ def _set_cell_text_color(cell, color_hex, bold=False):
             run.font.color.rgb = RGBColor.from_string(color_hex)
             if bold:
                 run.font.bold = True
+
+def _apply_custom_code_block_style(table, config, ns):
+    """
+    config: {
+        bgColor: str (#RRGGBB),
+        fontColor: str (#RRGGBB),
+        fontFamily: str,
+        fontSize: float,
+        align: str (left|center|right),
+        cleanTextIndent: bool,
+        forceClearIndent: bool,
+        borderColor: str (#RRGGBB),
+        borders: {
+            top: { type: str, width: int },
+            ...
+        }
+    }
+    """
+    def hex_to_docx(h):
+        return h.lstrip('#').upper()
+
+    cell = table.cell(0, 0)
+    
+    # 1. Background Color
+    bg_color = hex_to_docx(config.get('bgColor', '#F5F5F5'))
+    _apply_shading(cell, bg_color)
+    
+    # 2. Borders
+    border_color = hex_to_docx(config.get('borderColor', '#D9D9D9'))
+    borders = config.get('borders', {})
+    
+    _apply_border(cell, 
+        top={'val': borders.get('top', {}).get('type', 'single'), 'sz': borders.get('top', {}).get('width', 4), 'color': border_color},
+        bottom={'val': borders.get('bottom', {}).get('type', 'single'), 'sz': borders.get('bottom', {}).get('width', 4), 'color': border_color},
+        left={'val': borders.get('left', {}).get('type', 'single'), 'sz': borders.get('left', {}).get('width', 4), 'color': border_color},
+        right={'val': borders.get('right', {}).get('type', 'single'), 'sz': borders.get('right', {}).get('width', 4), 'color': border_color}
+    )
+    
+    # 3. Text Styles & Alignment
+    font_color = hex_to_docx(config.get('fontColor', '#000000'))
+    font_family = config.get('fontFamily', 'Courier New')
+    font_size = config.get('fontSize', 9)
+    align_map = {'left': 0, 'center': 1, 'right': 2}
+    alignment = align_map.get(config.get('align', 'left'), 0)
+    
+    clean_text_indent = config.get('cleanTextIndent', True)
+    force_clear_indent = config.get('forceClearIndent', False)
+    
+    for p in cell.paragraphs:
+        # Indentation
+        if force_clear_indent:
+            _force_clear_indent(p, ns)
+        elif clean_text_indent:
+            _clean_text_indent(p, ns)
+            
+        # Alignment
+        p.alignment = alignment
+        
+        # Font settings
+        for run in p.runs:
+            run.font.name = font_family
+            run.font.size = Pt(font_size)
+            run.font.color.rgb = RGBColor.from_string(font_color)
+            # Ensure font name applies correctly in Word
+            r = run._element
+            r.rPr.rFonts.set(qn('w:eastAsia'), font_family)
+
 from src.converters.docx.style_manager import TableStyleManager
 from docx.oxml.ns import qn
 import logging

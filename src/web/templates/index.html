@@ -696,6 +696,127 @@
                 </div>
             </div>
 
+            <div class="form-group" style="margin-top: 15px; border-top: 1px dashed #e2e8f0; padding-top: 15px;">
+                <label style="display:flex; align-items:center; cursor:pointer;">
+                    <input type="checkbox" id="enableCodeBlockStyle" onchange="toggleCodeBlockStyle()" style="width:auto; margin-right:8px;" checked> 
+                    代码块样式处理
+                </label>
+                <div id="codeBlockStyleConfig" style="display: block; margin-top: 10px;">
+                    <!-- Basic Styles -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                        <div>
+                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">背景颜色</label>
+                            <input type="color" id="codeBgColor" value="#F5F5F5" style="width: 100%; height: 32px; padding: 2px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                        </div>
+                        <div>
+                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">字体颜色</label>
+                            <input type="color" id="codeFontColor" value="#000000" style="width: 100%; height: 32px; padding: 2px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                        </div>
+                        <div>
+                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">字体</label>
+                            <select id="codeFontFamily" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                <option value="Courier New" selected>Courier New (等宽)</option>
+                                <option value="Consolas">Consolas</option>
+                                <option value="Arial">Arial</option>
+                                <option value="微软雅黑">微软雅黑</option>
+                                <option value="宋体">宋体</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">字号 (磅)</label>
+                            <input type="number" id="codeFontSize" value="9" step="0.5" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                        </div>
+                        <div>
+                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">对齐方式</label>
+                            <select id="codeAlign" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                <option value="left" selected>居左</option>
+                                <option value="center">居中</option>
+                                <option value="right">居右</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Indentation Options -->
+                    <div style="margin-bottom: 10px;">
+                        <label style="display:flex; align-items:center; cursor:pointer; font-size: 12px; margin-bottom: 4px;">
+                            <input type="checkbox" id="codeCleanTextIndent" style="width:auto; margin-right:8px;" checked> 
+                            删除悬挂及首行缩进
+                        </label>
+                        <label style="display:flex; align-items:center; cursor:pointer; font-size: 12px;">
+                            <input type="checkbox" id="codeForceClearIndent" style="width:auto; margin-right:8px;"> 
+                            强制删除所有缩进 (左/右/悬挂/首行)
+                        </label>
+                    </div>
+
+                    <!-- Border Config -->
+                    <div style="border-top: 1px dashed #eee; padding-top: 10px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <label style="font-size: 12px; font-weight: 600;">边框设置</label>
+                            <input type="color" id="codeBorderColor" value="#D9D9D9" title="边框颜色" style="width: 40px; height: 20px; padding: 0; border: 1px solid #d9e4f5; cursor: pointer;">
+                        </div>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <!-- Top -->
+                            <div style="display: flex; flex-direction: column; gap: 2px;">
+                                <label style="font-size: 11px; color: #64748b;">上边框</label>
+                                <div style="display: flex; gap: 4px;">
+                                    <select id="codeBorderTopType" style="flex: 1; padding: 4px; font-size: 11px; border: 1px solid #d9e4f5; border-radius: 4px;">
+                                        <option value="single" selected>单实线</option>
+                                        <option value="none">无</option>
+                                        <option value="double">双实线</option>
+                                        <option value="dotted">点线</option>
+                                        <option value="dashed">虚线</option>
+                                    </select>
+                                    <input type="number" id="codeBorderTopWidth" value="4" step="1" title="宽度 (1/8 磅)" style="width: 40px; padding: 4px; font-size: 11px; border: 1px solid #d9e4f5; border-radius: 4px;">
+                                </div>
+                            </div>
+                            <!-- Bottom -->
+                            <div style="display: flex; flex-direction: column; gap: 2px;">
+                                <label style="font-size: 11px; color: #64748b;">下边框</label>
+                                <div style="display: flex; gap: 4px;">
+                                    <select id="codeBorderBottomType" style="flex: 1; padding: 4px; font-size: 11px; border: 1px solid #d9e4f5; border-radius: 4px;">
+                                        <option value="single" selected>单实线</option>
+                                        <option value="none">无</option>
+                                        <option value="double">双实线</option>
+                                        <option value="dotted">点线</option>
+                                        <option value="dashed">虚线</option>
+                                    </select>
+                                    <input type="number" id="codeBorderBottomWidth" value="4" step="1" style="width: 40px; padding: 4px; font-size: 11px; border: 1px solid #d9e4f5; border-radius: 4px;">
+                                </div>
+                            </div>
+                            <!-- Left -->
+                            <div style="display: flex; flex-direction: column; gap: 2px;">
+                                <label style="font-size: 11px; color: #64748b;">左边框</label>
+                                <div style="display: flex; gap: 4px;">
+                                    <select id="codeBorderLeftType" style="flex: 1; padding: 4px; font-size: 11px; border: 1px solid #d9e4f5; border-radius: 4px;">
+                                        <option value="single" selected>单实线</option>
+                                        <option value="none">无</option>
+                                        <option value="double">双实线</option>
+                                        <option value="dotted">点线</option>
+                                        <option value="dashed">虚线</option>
+                                    </select>
+                                    <input type="number" id="codeBorderLeftWidth" value="4" step="1" style="width: 40px; padding: 4px; font-size: 11px; border: 1px solid #d9e4f5; border-radius: 4px;">
+                                </div>
+                            </div>
+                            <!-- Right -->
+                            <div style="display: flex; flex-direction: column; gap: 2px;">
+                                <label style="font-size: 11px; color: #64748b;">右边框</label>
+                                <div style="display: flex; gap: 4px;">
+                                    <select id="codeBorderRightType" style="flex: 1; padding: 4px; font-size: 11px; border: 1px solid #d9e4f5; border-radius: 4px;">
+                                        <option value="single" selected>单实线</option>
+                                        <option value="none">无</option>
+                                        <option value="double">双实线</option>
+                                        <option value="dotted">点线</option>
+                                        <option value="dashed">虚线</option>
+                                    </select>
+                                    <input type="number" id="codeBorderRightWidth" value="4" step="1" style="width: 40px; padding: 4px; font-size: 11px; border: 1px solid #d9e4f5; border-radius: 4px;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px;">
                 <button onclick="resetAdvancedOptions()" class="btn-small" style="background:#fff; color:#64748b; border:1px solid #cbd5e1;">恢复默认</button>
                 <div style="display:flex; gap:10px;">
@@ -965,6 +1086,27 @@
                 };
             }
 
+            // Collect Code Block Config Options
+            let codeBlockConfig = null;
+            if (document.getElementById("enableCodeBlockStyle").checked) {
+                codeBlockConfig = {
+                    bgColor: document.getElementById("codeBgColor").value,
+                    fontColor: document.getElementById("codeFontColor").value,
+                    fontFamily: document.getElementById("codeFontFamily").value,
+                    fontSize: parseFloat(document.getElementById("codeFontSize").value),
+                    align: document.getElementById("codeAlign").value,
+                    cleanTextIndent: document.getElementById("codeCleanTextIndent").checked,
+                    forceClearIndent: document.getElementById("codeForceClearIndent").checked,
+                    borderColor: document.getElementById("codeBorderColor").value,
+                    borders: {
+                        top: { type: document.getElementById("codeBorderTopType").value, width: parseInt(document.getElementById("codeBorderTopWidth").value) },
+                        bottom: { type: document.getElementById("codeBorderBottomType").value, width: parseInt(document.getElementById("codeBorderBottomWidth").value) },
+                        left: { type: document.getElementById("codeBorderLeftType").value, width: parseInt(document.getElementById("codeBorderLeftWidth").value) },
+                        right: { type: document.getElementById("codeBorderRightType").value, width: parseInt(document.getElementById("codeBorderRightWidth").value) }
+                    }
+                };
+            }
+
             if (!url) return alert("请输入文档链接");
             
             if (timer) clearTimeout(timer);
@@ -982,7 +1124,8 @@
                     bodyStyle,
                     imageStyle,
                     tableConfig,
-                    marginConfig
+                    marginConfig,
+                    codeBlockConfig
                 })
             }).then(r => r.json()).then(res => {
                 if (res.status !== "ok") {
@@ -1247,6 +1390,25 @@
             document.getElementById("marginLeft").value = "3.18";
             document.getElementById("marginRight").value = "3.18";
             togglePageMargins();
+
+            document.getElementById("enableCodeBlockStyle").checked = true;
+            document.getElementById("codeBgColor").value = "#F5F5F5";
+            document.getElementById("codeFontColor").value = "#000000";
+            document.getElementById("codeFontFamily").value = "Courier New";
+            document.getElementById("codeFontSize").value = "9";
+            document.getElementById("codeAlign").value = "left";
+            document.getElementById("codeCleanTextIndent").checked = true;
+            document.getElementById("codeForceClearIndent").checked = false;
+            document.getElementById("codeBorderColor").value = "#D9D9D9";
+            document.getElementById("codeBorderTopType").value = "single";
+            document.getElementById("codeBorderTopWidth").value = "4";
+            document.getElementById("codeBorderBottomType").value = "single";
+            document.getElementById("codeBorderBottomWidth").value = "4";
+            document.getElementById("codeBorderLeftType").value = "single";
+            document.getElementById("codeBorderLeftWidth").value = "4";
+            document.getElementById("codeBorderRightType").value = "single";
+            document.getElementById("codeBorderRightWidth").value = "4";
+            toggleCodeBlockStyle();
         }
 
         function toggleListStyle() {
@@ -1272,6 +1434,11 @@
         function togglePageMargins() {
             const checked = document.getElementById("enablePageMargins").checked;
             document.getElementById("pageMarginsConfig").style.display = checked ? "block" : "none";
+        }
+
+        function toggleCodeBlockStyle() {
+            const checked = document.getElementById("enableCodeBlockStyle").checked;
+            document.getElementById("codeBlockStyleConfig").style.display = checked ? "block" : "none";
         }
 
         function applyMarginPreset(preset) {
