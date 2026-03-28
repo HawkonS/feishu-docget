@@ -125,7 +125,17 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
         if i < cover_table_count:
             continue
         count_content += 1
-        is_code_block = len(table.rows) == 1 and len(table.rows[0].cells) == 1
+        
+        # 通过标签识别代码块
+        is_code_block = False
+        try:
+            tblPr = table._element.tblPr
+            if tblPr is not None:
+                caption = tblPr.find(f'{{{ns}}}tblCaption')
+                if caption is not None and caption.get(f'{{{ns}}}val') == 'code_block':
+                    is_code_block = True
+        except:
+            pass
         
         for r_idx, row in enumerate(table.rows):
             is_header = (r_idx == 0)
@@ -710,7 +720,17 @@ def apply_custom_styles(doc, style_idx):
         except Exception as e:
             logger.warning(f'检查表格标记错误: {e}')
         try:
-            is_code_block = len(table.rows) == 1 and len(table.rows[0].cells) == 1
+            # 通过标签识别代码块，避免误伤 1x1 普通表格
+            is_code_block = False
+            try:
+                tblPr = table._element.tblPr
+                if tblPr is not None:
+                    caption = tblPr.find(qn('w:tblCaption'))
+                    if caption is not None and caption.get(qn('w:val')) == 'code_block':
+                        is_code_block = True
+            except:
+                pass
+                
             if is_code_block:
                 continue
         except Exception as e:

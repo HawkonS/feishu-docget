@@ -479,6 +479,19 @@ class FeishuDocxConverter:
         try:
             table = container.add_table(rows=1, cols=1)
             table.style = 'Table Grid'
+            
+            # 注入标识，标记此表格为代码块
+            try:
+                tblPr = table._element.tblPr
+                if tblPr is None:
+                    tblPr = OxmlElement('w:tblPr')
+                    table._element.insert(0, tblPr)
+                caption = OxmlElement('w:tblCaption')
+                caption.set(qn('w:val'), 'code_block')
+                tblPr.append(caption)
+            except Exception as e:
+                logger.warning(f'标记表格为 code_block 失败: {e}')
+
             cell = table.cell(0, 0)
             self._set_cell_shading(cell, 'F5F5F5')
             if cell.paragraphs:
