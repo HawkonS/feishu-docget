@@ -310,19 +310,182 @@
         }
         .modal-content {
             background: white;
-            padding: 24px;
+            padding: 0;
+            border-radius: 14px;
+            width: 560px;
+            max-width: 95%;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .modal-header {
+            padding: 16px 24px;
+            border-bottom: 1px solid #f1f5f9;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .modal-body {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            min-height: 0;
+        }
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid #f1f5f9;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8fafc;
+            flex-shrink: 0;
+        }
+        .modal-tabs {
+            display: flex;
+            gap: 8px;
+            padding: 14px 24px 10px;
+            border-bottom: 1px solid #e2e8f0;
+            overflow-x: auto;
+            flex-shrink: 0;
+            background: #fff;
+        }
+        .modal-tab-item {
+            padding: 10px 16px;
+            font-size: 14px;
+            line-height: 1.2;
+            color: #475569;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+            border-radius: 999px;
+            white-space: nowrap;
+            background: transparent;
+        }
+        .modal-tab-item:hover {
+            background: #f1f5f9;
+            color: #3b82f6;
+        }
+        .modal-tab-item.active {
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-weight: 600;
+            border-color: #bfdbfe;
+        }
+        .modal-tab-content {
+            flex: 1;
+            padding: 0;
+            display: none;
+        }
+        .modal-tab-content.active {
+            display: block;
+        }
+        .advanced-modal-content {
+            width: min(980px, 96vw);
+            max-height: 92vh;
+            border-radius: 16px;
+            box-shadow: 0 24px 48px rgba(15, 23, 42, 0.2);
+        }
+        .advanced-title {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .advanced-title h3 {
+            margin: 0;
+            font-size: 18px;
+            color: #0f172a;
+        }
+        .advanced-title p {
+            margin: 0;
+            color: #64748b;
+            font-size: 12px;
+        }
+        .advanced-content-wrap {
+            flex: 1;
+            overflow-y: auto;
+            background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+            padding: 18px 24px;
+        }
+        .advanced-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+        .option-card {
+            background: #fff;
+            border: 1px solid #e2e8f0;
             border-radius: 12px;
-            width: 400px;
-            max-width: 90%;
+            padding: 14px;
+        }
+        .option-card.full {
+            grid-column: 1 / -1;
+        }
+        .option-card-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 10px;
+        }
+        .option-divider {
+            border-top: 1px dashed #e2e8f0;
+            margin: 10px 0 0;
+            padding-top: 10px;
+        }
+        #advancedModal .form-group {
+            margin-bottom: 10px;
+        }
+        #advancedModal .form-group label {
+            margin-bottom: 4px;
+        }
+        .inline-check {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            margin-bottom: 8px;
+        }
+        .inline-check input[type="checkbox"] {
+            width: auto;
+            margin-right: 8px;
+        }
+        .compact-grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .advanced-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+        .advanced-footer-right {
+            display: flex;
+            gap: 10px;
+        }
+        @media (max-width: 900px) {
+            .advanced-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .config-group-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #f1f5f9;
         }
         .form-group {
-            margin-bottom: 12px;
+            margin-bottom: 16px;
         }
         .form-group label {
             display: block;
-            margin-bottom: 4px;
+            margin-bottom: 6px;
             font-size: 13px;
             font-weight: 600;
+            color: #475569;
         }
         .form-group input, .form-group select {
             width: 100%;
@@ -503,323 +666,348 @@
     </div>
 
     <div id="advancedModal" class="modal">
-        <div class="modal-content" style="width:360px;">
-            <h3 style="margin-top:0">高级选项</h3>
-            <div class="form-group">
-                <label>常规设置</label>
-                <label style="display:flex; align-items:center; cursor:pointer;">
-                    <input type="checkbox" id="addCover" style="width:auto; margin-right:8px;" checked> 
-                    添加模板封面/首页
-                </label>
-                <label style="display:flex; align-items:center; cursor:pointer; margin-top:8px;">
-                    <input type="checkbox" id="ignoreMention" style="width:auto; margin-right:8px;"> 
-                    忽略文本中@人员转换
-                </label>
+        <div class="modal-content advanced-modal-content">
+            <div class="modal-header">
+                <div class="advanced-title">
+                    <h3>高级选项</h3>
+                    <p>跳过模板限制，按下述规则进行强制清洗</p>
+                </div>
+                <button onclick="closeAdvancedModal()" style="background:none; border:none; cursor:pointer; color:#94a3b8;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
             </div>
-            <div class="form-group">
-                <label style="display:flex; align-items:center; cursor:pointer;">
-                    <input type="checkbox" id="enableListStyle" onchange="toggleListStyle()" style="width:auto; margin-right:8px;" checked> 
-                    添加无序列表样式
-                </label>
-                <div id="listStyleConfig" style="margin-top: 10px;">
-                    <select id="unorderedListStyle" style="width: 100%; padding: 8px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                        <option value="default" selected>一级 ● | 二级 ○</option>
-                        <option value="square">一级 ■ | 二级 □</option>
-                        <option value="diamond">一级 ◆ | 二级 ◇</option>
-                        <option value="arrow">一级 ➢ | 二级 ➤</option>
-                        <option value="none">无符号</option>
-                    </select>
-                    <div style="font-size:12px; color:#666; margin-top:4px;">
-                        当选择“作为正文处理”时，列表项将不再有前面的符号，且缩进与正文一致。
+            <div class="modal-tabs">
+                <div class="modal-tab-item active" onclick="switchAdvancedTab('basic', this)">基础设置</div>
+                <div class="modal-tab-item" onclick="switchAdvancedTab('text', this)">文本设置</div>
+                <div class="modal-tab-item" onclick="switchAdvancedTab('image', this)">图片设置</div>
+                <div class="modal-tab-item" onclick="switchAdvancedTab('table', this)">表格设置</div>
+                <div class="modal-tab-item" onclick="switchAdvancedTab('code', this)">代码块</div>
+            </div>
+            <div class="advanced-content-wrap">
+                <div class="modal-tab-content active" id="tab-basic">
+                    <div class="advanced-grid">
+                        <div class="option-card">
+                            <div class="option-card-title">常规配置</div>
+                            <label class="inline-check">
+                                <input type="checkbox" id="addCover" checked>
+                                添加模板封面/首页
+                            </label>
+                        </div>
+                        <div class="option-card full">
+                            <div class="option-card-title">页边距管理 (不含封面)</div>
+                            <label class="inline-check">
+                                <input type="checkbox" id="enablePageMargins" onchange="togglePageMargins()">
+                                启用页边距管理
+                            </label>
+                            <div id="pageMarginsConfig" style="display: none;">
+                                <div class="form-group">
+                                    <label style="font-size: 12px; color: #64748b;">快速选择预设</label>
+                                    <select id="marginPreset" onchange="applyMarginPreset(this.value)" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                        <option value="custom" selected>自定义</option>
+                                        <option value="normal">普通 (上下2.54, 左右3.18)</option>
+                                        <option value="narrow">窄 (上下左右1.27)</option>
+                                        <option value="wide">宽 (上下2.54, 左右5.08)</option>
+                                        <option value="moderate">适中 (上下2.54, 左右1.91)</option>
+                                    </select>
+                                </div>
+                                <div class="compact-grid-2">
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">上边距 (cm)</label>
+                                        <input type="number" id="marginTop" value="2.54" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="document.getElementById('marginPreset').value='custom'">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">下边距 (cm)</label>
+                                        <input type="number" id="marginBottom" value="2.54" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="document.getElementById('marginPreset').value='custom'">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">左边距 (cm)</label>
+                                        <input type="number" id="marginLeft" value="3.18" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="document.getElementById('marginPreset').value='custom'">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">右边距 (cm)</label>
+                                        <input type="number" id="marginRight" value="3.18" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="document.getElementById('marginPreset').value='custom'">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
-            
-            <div class="form-group" style="margin-top: 15px; border-top: 1px dashed #e2e8f0; padding-top: 15px;">
-                <label style="display:flex; align-items:center; cursor:pointer;">
-                    <input type="checkbox" id="enableBodyStyle" onchange="toggleBodyStyle()" style="width:auto; margin-right:8px;"> 
-                    调整正文样式
-                </label>
-                <div id="bodyStyleConfig" style="display: none; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
-                        <!-- Font Size -->
-                        <div>
-                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">字号 (磅)</label>
-                            <div style="display: flex; gap: 5px;">
-                                <input type="number" id="styleFontSize" value="12" step="0.5" style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="syncFontSizeSelect(this.value)">
-                                <select id="styleFontSizeSelect" onchange="document.getElementById('styleFontSize').value=this.value" style="width: 80px; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                                    <option value="">-</option>
-                                    <option value="42">初号</option>
-                                    <option value="36">小初</option>
-                                    <option value="26">一号</option>
-                                    <option value="24">小一</option>
-                                    <option value="22">二号</option>
-                                    <option value="18">小二</option>
-                                    <option value="16">三号</option>
-                                    <option value="15">小三</option>
-                                    <option value="14">四号</option>
-                                    <option value="12" selected>小四</option>
-                                    <option value="10.5">五号</option>
-                                    <option value="9">小五</option>
-                                    <option value="7.5">六号</option>
-                                    <option value="6.5">小六</option>
-                                    <option value="5.5">七号</option>
-                                    <option value="5">八号</option>
+                <div class="modal-tab-content" id="tab-text">
+                    <div class="advanced-grid">
+                        <div class="option-card">
+                            <div class="option-card-title">文本规则</div>
+                            <label class="inline-check">
+                                <input type="checkbox" id="ignoreMention">
+                                忽略文本中@人员转换
+                            </label>
+                            <label class="inline-check">
+                                <input type="checkbox" id="enableListStyle" onchange="toggleListStyle()" checked>
+                                添加无序列表样式
+                            </label>
+                            <div id="listStyleConfig">
+                                <select id="unorderedListStyle" style="width: 100%; padding: 8px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    <option value="default" selected>一级 ● | 二级 ○</option>
+                                    <option value="square">一级 ■ | 二级 □</option>
+                                    <option value="diamond">一级 ◆ | 二级 ◇</option>
+                                    <option value="arrow">一级 ➢ | 二级 ➤</option>
+                                    <option value="none">无符号</option>
                                 </select>
-                            </div>
-                        </div>
-                    <!-- Line Spacing -->
-                    <div>
-                        <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">行间距</label>
-                        <div style="display: flex; gap: 5px;">
-                            <input type="number" id="styleLineSpacing" value="1.5" step="0.1" style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                            <select id="styleLineSpacingUnit" style="width: 80px; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                                <option value="lines">倍</option>
-                                <option value="pt">磅</option>
-                            </select>
-                        </div>
-                    </div>
-                    <!-- Space Before -->
-                    <div>
-                        <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">段前</label>
-                        <div style="display: flex; gap: 5px;">
-                            <input type="number" id="styleSpaceBefore" value="0" step="0.5" style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                            <select id="styleSpaceBeforeUnit" style="width: 80px; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                                <option value="lines">行</option>
-                                <option value="pt">磅</option>
-                            </select>
-                        </div>
-                    </div>
-                    <!-- Space After -->
-                    <div>
-                        <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">段后</label>
-                        <div style="display: flex; gap: 5px;">
-                            <input type="number" id="styleSpaceAfter" value="0" step="0.5" style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                            <select id="styleSpaceAfterUnit" style="width: 80px; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                                <option value="lines">行</option>
-                                <option value="pt">磅</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-group" style="margin-top: 15px; border-top: 1px dashed #e2e8f0; padding-top: 15px;">
-                <label style="display:flex; align-items:center; cursor:pointer;">
-                    <input type="checkbox" id="enableImageStyle" onchange="toggleImageStyle()" style="width:auto; margin-right:8px;" checked> 
-                    调整图片样式
-                </label>
-                <div id="imageStyleConfig" style="display: block; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
-                    <div>
-                        <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">最大宽度 (cm)</label>
-                        <input type="number" id="imageMaxWidth" value="16" step="0.5" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                    </div>
-                    <div>
-                        <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">最大高度 (cm)</label>
-                        <input type="number" id="imageMaxHeight" value="23" step="0.5" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                    </div>
-                    <div>
-                        <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">对齐方式</label>
-                        <select id="imageAlign" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                            <option value="center" selected>居中</option>
-                            <option value="left">居左</option>
-                            <option value="right">居右</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-group" style="margin-top: 15px; border-top: 1px dashed #e2e8f0; padding-top: 15px;">
-                <label style="display:flex; align-items:center; cursor:pointer;">
-                    <input type="checkbox" id="enableTableCleaning" onchange="toggleTableCleaning()" style="width:auto; margin-right:8px;" checked> 
-                    表格清洗设置
-                </label>
-                <div id="tableCleaningConfig" style="display: block; grid-template-columns: 1fr; gap: 10px; margin-top: 10px;">
-                    <label style="display:flex; align-items:center; cursor:pointer; font-size: 13px; margin-bottom: 8px;">
-                        <input type="checkbox" id="tableForceClearIndent" style="width:auto; margin-right:8px;" checked> 
-                        强制清除表格缩进
-                    </label>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                        <div>
-                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">表头文字对齐</label>
-                            <select id="tableHeaderAlign" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                                <option value="center" selected>居中</option>
-                                <option value="left">居左</option>
-                                <option value="right">居右</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">内容文字对齐</label>
-                            <select id="tableContentAlign" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                                <option value="center">居中</option>
-                                <option value="left" selected>居左</option>
-                                <option value="right">居右</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-group" style="margin-top: 15px; border-top: 1px dashed #e2e8f0; padding-top: 15px;">
-                <label style="display:flex; align-items:center; cursor:pointer;">
-                    <input type="checkbox" id="enablePageMargins" onchange="togglePageMargins()" style="width:auto; margin-right:8px;"> 
-                    页边距管理 (不含封面)
-                </label>
-                <div id="pageMarginsConfig" style="display: none; grid-template-columns: 1fr; gap: 10px; margin-top: 10px;">
-                    <div>
-                        <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">快速选择预设</label>
-                        <select id="marginPreset" onchange="applyMarginPreset(this.value)" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                            <option value="custom" selected>自定义</option>
-                            <option value="normal">普通 (上下2.54, 左右3.18)</option>
-                            <option value="narrow">窄 (上下左右1.27)</option>
-                            <option value="wide">宽 (上下2.54, 左右5.08)</option>
-                            <option value="moderate">适中 (上下2.54, 左右1.91)</option>
-                        </select>
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                        <div>
-                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">上边距 (cm)</label>
-                            <input type="number" id="marginTop" value="2.54" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="document.getElementById('marginPreset').value='custom'">
-                        </div>
-                        <div>
-                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">下边距 (cm)</label>
-                            <input type="number" id="marginBottom" value="2.54" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="document.getElementById('marginPreset').value='custom'">
-                        </div>
-                        <div>
-                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">左边距 (cm)</label>
-                            <input type="number" id="marginLeft" value="3.18" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="document.getElementById('marginPreset').value='custom'">
-                        </div>
-                        <div>
-                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">右边距 (cm)</label>
-                            <input type="number" id="marginRight" value="3.18" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="document.getElementById('marginPreset').value='custom'">
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-group" style="margin-top: 15px; border-top: 1px dashed #e2e8f0; padding-top: 15px;">
-                <label style="display:flex; align-items:center; cursor:pointer;">
-                    <input type="checkbox" id="enableCodeBlockStyle" onchange="toggleCodeBlockStyle()" style="width:auto; margin-right:8px;" checked> 
-                    代码块样式处理
-                </label>
-                <div id="codeBlockStyleConfig" style="display: block; margin-top: 10px;">
-                    <!-- Basic Styles -->
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
-                        <div>
-                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">背景颜色</label>
-                            <input type="color" id="codeBgColor" value="#F5F5F5" style="width: 100%; height: 32px; padding: 2px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                        </div>
-                        <div>
-                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">字体颜色</label>
-                            <input type="color" id="codeFontColor" value="#000000" style="width: 100%; height: 32px; padding: 2px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                        </div>
-                        <div>
-                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">字体</label>
-                            <select id="codeFontFamily" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                                <option value="Courier New" selected>Courier New (等宽)</option>
-                                <option value="Consolas">Consolas</option>
-                                <option value="Arial">Arial</option>
-                                <option value="微软雅黑">微软雅黑</option>
-                                <option value="宋体">宋体</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">字号 (磅)</label>
-                            <input type="number" id="codeFontSize" value="9" step="0.5" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                        </div>
-                        <div>
-                            <label style="font-size: 12px; color: #64748b; margin-bottom: 2px;">对齐方式</label>
-                            <select id="codeAlign" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                                <option value="left" selected>居左</option>
-                                <option value="center">居中</option>
-                                <option value="right">居右</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <!-- Indentation Options -->
-                    <div style="margin-bottom: 10px;">
-                        <label style="display:flex; align-items:center; cursor:pointer; font-size: 12px; margin-bottom: 4px;">
-                            <input type="checkbox" id="codeCleanTextIndent" style="width:auto; margin-right:8px;" checked> 
-                            删除悬挂及首行缩进
-                        </label>
-                        <label style="display:flex; align-items:center; cursor:pointer; font-size: 12px;">
-                            <input type="checkbox" id="codeForceClearIndent" style="width:auto; margin-right:8px;"> 
-                            强制删除所有缩进 (左/右/悬挂/首行)
-                        </label>
-                    </div>
-
-                    <!-- Border Config -->
-                    <div style="border-top: 1px dashed #eee; padding-top: 10px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                            <label style="font-size: 12px; font-weight: 600;">边框设置</label>
-                            <input type="color" id="codeBorderColor" value="#D9D9D9" title="边框颜色" style="width: 40px; height: 20px; padding: 0; border: 1px solid #d9e4f5; cursor: pointer;">
-                        </div>
-                        
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                            <!-- Top -->
-                            <div style="display: flex; flex-direction: column; gap: 2px;">
-                                <label style="font-size: 11px; color: #64748b;">上边框</label>
-                                <div style="display: flex; gap: 4px;">
-                                    <select id="codeBorderTopType" style="flex: 1; padding: 4px; font-size: 11px; border: 1px solid #d9e4f5; border-radius: 4px;">
-                                        <option value="single" selected>单实线</option>
-                                        <option value="none">无</option>
-                                        <option value="double">双实线</option>
-                                        <option value="dotted">点线</option>
-                                        <option value="dashed">虚线</option>
-                                    </select>
-                                    <input type="number" id="codeBorderTopWidth" value="4" step="1" title="宽度 (1/8 磅)" style="width: 40px; padding: 4px; font-size: 11px; border: 1px solid #d9e4f5; border-radius: 4px;">
+                                <div style="font-size:12px; color:#666; margin-top:6px;">
+                                    选择“作为正文处理”时，列表符号会移除并按正文缩进处理
                                 </div>
                             </div>
-                            <!-- Bottom -->
-                            <div style="display: flex; flex-direction: column; gap: 2px;">
-                                <label style="font-size: 11px; color: #64748b;">下边框</label>
-                                <div style="display: flex; gap: 4px;">
-                                    <select id="codeBorderBottomType" style="flex: 1; padding: 4px; font-size: 11px; border: 1px solid #d9e4f5; border-radius: 4px;">
-                                        <option value="single" selected>单实线</option>
-                                        <option value="none">无</option>
-                                        <option value="double">双实线</option>
-                                        <option value="dotted">点线</option>
-                                        <option value="dashed">虚线</option>
-                                    </select>
-                                    <input type="number" id="codeBorderBottomWidth" value="4" step="1" style="width: 40px; padding: 4px; font-size: 11px; border: 1px solid #d9e4f5; border-radius: 4px;">
+                        </div>
+                        <div class="option-card full">
+                            <div class="option-card-title">正文样式</div>
+                            <label class="inline-check">
+                                <input type="checkbox" id="enableBodyStyle" onchange="toggleBodyStyle()">
+                                调整正文样式
+                            </label>
+                            <div id="bodyStyleConfig" class="compact-grid-2" style="display: none;">
+                                <div>
+                                    <label style="font-size: 12px; color: #64748b;">字号 (磅)</label>
+                                    <div style="display: flex; gap: 5px;">
+                                        <input type="number" id="styleFontSize" value="12" step="0.5" style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="syncFontSizeSelect(this.value)">
+                                        <select id="styleFontSizeSelect" onchange="document.getElementById('styleFontSize').value=this.value" style="width: 80px; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                            <option value="">-</option>
+                                            <option value="42">初号</option>
+                                            <option value="36">小初</option>
+                                            <option value="26">一号</option>
+                                            <option value="24">小一</option>
+                                            <option value="22">二号</option>
+                                            <option value="18">小二</option>
+                                            <option value="16">三号</option>
+                                            <option value="15">小三</option>
+                                            <option value="14">四号</option>
+                                            <option value="12" selected>小四</option>
+                                            <option value="10.5">五号</option>
+                                            <option value="9">小五</option>
+                                            <option value="7.5">六号</option>
+                                            <option value="6.5">小六</option>
+                                            <option value="5.5">七号</option>
+                                            <option value="5">八号</option>
+                                        </select>
+                                    </div>
                                 </div>
-                            </div>
-                            <!-- Left -->
-                            <div style="display: flex; flex-direction: column; gap: 2px;">
-                                <label style="font-size: 11px; color: #64748b;">左边框</label>
-                                <div style="display: flex; gap: 4px;">
-                                    <select id="codeBorderLeftType" style="flex: 1; padding: 4px; font-size: 11px; border: 1px solid #d9e4f5; border-radius: 4px;">
-                                        <option value="single" selected>单实线</option>
-                                        <option value="none">无</option>
-                                        <option value="double">双实线</option>
-                                        <option value="dotted">点线</option>
-                                        <option value="dashed">虚线</option>
-                                    </select>
-                                    <input type="number" id="codeBorderLeftWidth" value="4" step="1" style="width: 40px; padding: 4px; font-size: 11px; border: 1px solid #d9e4f5; border-radius: 4px;">
+                                <div>
+                                    <label style="font-size: 12px; color: #64748b;">行间距</label>
+                                    <div style="display: flex; gap: 5px;">
+                                        <input type="number" id="styleLineSpacing" value="1.5" step="0.1" style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                        <select id="styleLineSpacingUnit" style="width: 80px; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                            <option value="lines">倍</option>
+                                            <option value="pt">磅</option>
+                                        </select>
+                                    </div>
                                 </div>
-                            </div>
-                            <!-- Right -->
-                            <div style="display: flex; flex-direction: column; gap: 2px;">
-                                <label style="font-size: 11px; color: #64748b;">右边框</label>
-                                <div style="display: flex; gap: 4px;">
-                                    <select id="codeBorderRightType" style="flex: 1; padding: 4px; font-size: 11px; border: 1px solid #d9e4f5; border-radius: 4px;">
-                                        <option value="single" selected>单实线</option>
-                                        <option value="none">无</option>
-                                        <option value="double">双实线</option>
-                                        <option value="dotted">点线</option>
-                                        <option value="dashed">虚线</option>
-                                    </select>
-                                    <input type="number" id="codeBorderRightWidth" value="4" step="1" style="width: 40px; padding: 4px; font-size: 11px; border: 1px solid #d9e4f5; border-radius: 4px;">
+                                <div>
+                                    <label style="font-size: 12px; color: #64748b;">段前</label>
+                                    <div style="display: flex; gap: 5px;">
+                                        <input type="number" id="styleSpaceBefore" value="0" step="0.5" style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                        <select id="styleSpaceBeforeUnit" style="width: 80px; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                            <option value="lines">行</option>
+                                            <option value="pt">磅</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label style="font-size: 12px; color: #64748b;">段后</label>
+                                    <div style="display: flex; gap: 5px;">
+                                        <input type="number" id="styleSpaceAfter" value="0" step="0.5" style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                        <select id="styleSpaceAfterUnit" style="width: 80px; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                            <option value="lines">行</option>
+                                            <option value="pt">磅</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
+                <div class="modal-tab-content" id="tab-image">
+                    <div class="advanced-grid">
+                        <div class="option-card full">
+                            <div class="option-card-title">图片样式</div>
+                            <label class="inline-check">
+                                <input type="checkbox" id="enableImageStyle" onchange="toggleImageStyle()" checked>
+                                调整图片样式
+                            </label>
+                            <div id="imageStyleConfig" class="compact-grid-2" style="display: grid;">
+                                <div>
+                                    <label style="font-size: 12px; color: #64748b;">最大宽度 (cm)</label>
+                                    <input type="number" id="imageMaxWidth" value="16" step="0.5" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 12px; color: #64748b;">最大高度 (cm)</label>
+                                    <input type="number" id="imageMaxHeight" value="23" step="0.5" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 12px; color: #64748b;">对齐方式</label>
+                                    <select id="imageAlign" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                        <option value="center" selected>居中</option>
+                                        <option value="left">居左</option>
+                                        <option value="right">居右</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-tab-content" id="tab-table">
+                    <div class="advanced-grid">
+                        <div class="option-card full">
+                            <div class="option-card-title">表格清洗设置</div>
+                            <label class="inline-check">
+                                <input type="checkbox" id="enableTableCleaning" onchange="toggleTableCleaning()" checked>
+                                启用表格清洗
+                            </label>
+                            <div id="tableCleaningConfig" style="display: block;">
+                                <label class="inline-check">
+                                    <input type="checkbox" id="tableForceClearIndent" checked>
+                                    强制清除表格缩进
+                                </label>
+                                <div class="compact-grid-2">
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">表头文字对齐</label>
+                                        <select id="tableHeaderAlign" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                            <option value="center" selected>居中</option>
+                                            <option value="left">居左</option>
+                                            <option value="right">居右</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">内容文字对齐</label>
+                                        <select id="tableContentAlign" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                            <option value="center">居中</option>
+                                            <option value="left" selected>居左</option>
+                                            <option value="right">居右</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-tab-content" id="tab-code">
+                    <div class="advanced-grid">
+                        <div class="option-card full">
+                            <div class="option-card-title">代码块样式处理</div>
+                            <label class="inline-check">
+                                <input type="checkbox" id="enableCodeBlockStyle" onchange="toggleCodeBlockStyle()" checked>
+                                启用代码块样式
+                            </label>
+                            <div id="codeBlockStyleConfig" style="display: block;">
+                                <div class="compact-grid-2">
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">背景颜色</label>
+                                        <input type="color" id="codeBgColor" value="#F5F5F5" style="width: 100%; height: 32px; padding: 2px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">字体颜色</label>
+                                        <input type="color" id="codeFontColor" value="#000000" style="width: 100%; height: 32px; padding: 2px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">字体</label>
+                                        <select id="codeFontFamily" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                            <option value="Courier New" selected>Courier New (等宽)</option>
+                                            <option value="Consolas">Consolas</option>
+                                            <option value="Arial">Arial</option>
+                                            <option value="微软雅黑">微软雅黑</option>
+                                            <option value="宋体">宋体</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">字号 (磅)</label>
+                                        <input type="number" id="codeFontSize" value="9" step="0.5" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">对齐方式</label>
+                                        <select id="codeAlign" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                            <option value="left" selected>居左</option>
+                                            <option value="center">居中</option>
+                                            <option value="right">居右</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="option-divider">
+                                    <label class="inline-check" style="font-size:12px;">
+                                        <input type="checkbox" id="codeCleanTextIndent" checked>
+                                        删除悬挂及首行缩进
+                                    </label>
+                                    <label class="inline-check" style="font-size:12px; margin-bottom:0;">
+                                        <input type="checkbox" id="codeForceClearIndent">
+                                        强制删除所有缩进 (左/右/悬挂/首行)
+                                    </label>
+                                </div>
+                                <div class="option-divider">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                        <label style="font-size: 13px; font-weight: 600;">边框设置</label>
+                                        <input type="color" id="codeBorderColor" value="#D9D9D9" title="边框颜色" style="width: 44px; height: 24px; padding: 0; border: 1px solid #d9e4f5; cursor: pointer;">
+                                    </div>
+                                    <div class="compact-grid-2" style="gap:8px;">
+                                        <div>
+                                            <label style="font-size: 13px; color: #475569;">上边框</label>
+                                            <div style="display: flex; gap: 4px;">
+                                                <select id="codeBorderTopType" style="flex: 1; padding: 6px; font-size: 13px; border: 1px solid #d9e4f5; border-radius: 4px;">
+                                                    <option value="single" selected>单实线</option>
+                                                    <option value="none">无</option>
+                                                    <option value="double">双实线</option>
+                                                    <option value="dotted">点线</option>
+                                                    <option value="dashed">虚线</option>
+                                                </select>
+                                                <input type="number" id="codeBorderTopWidth" value="4" step="1" style="width: 48px; padding: 6px; font-size: 13px; border: 1px solid #d9e4f5; border-radius: 4px;">
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label style="font-size: 13px; color: #475569;">下边框</label>
+                                            <div style="display: flex; gap: 4px;">
+                                                <select id="codeBorderBottomType" style="flex: 1; padding: 6px; font-size: 13px; border: 1px solid #d9e4f5; border-radius: 4px;">
+                                                    <option value="single" selected>单实线</option>
+                                                    <option value="none">无</option>
+                                                    <option value="double">双实线</option>
+                                                    <option value="dotted">点线</option>
+                                                    <option value="dashed">虚线</option>
+                                                </select>
+                                                <input type="number" id="codeBorderBottomWidth" value="4" step="1" style="width: 48px; padding: 6px; font-size: 13px; border: 1px solid #d9e4f5; border-radius: 4px;">
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label style="font-size: 13px; color: #475569;">左边框</label>
+                                            <div style="display: flex; gap: 4px;">
+                                                <select id="codeBorderLeftType" style="flex: 1; padding: 6px; font-size: 13px; border: 1px solid #d9e4f5; border-radius: 4px;">
+                                                    <option value="single" selected>单实线</option>
+                                                    <option value="none">无</option>
+                                                    <option value="double">双实线</option>
+                                                    <option value="dotted">点线</option>
+                                                    <option value="dashed">虚线</option>
+                                                </select>
+                                                <input type="number" id="codeBorderLeftWidth" value="4" step="1" style="width: 48px; padding: 6px; font-size: 13px; border: 1px solid #d9e4f5; border-radius: 4px;">
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label style="font-size: 13px; color: #475569;">右边框</label>
+                                            <div style="display: flex; gap: 4px;">
+                                                <select id="codeBorderRightType" style="flex: 1; padding: 6px; font-size: 13px; border: 1px solid #d9e4f5; border-radius: 4px;">
+                                                    <option value="single" selected>单实线</option>
+                                                    <option value="none">无</option>
+                                                    <option value="double">双实线</option>
+                                                    <option value="dotted">点线</option>
+                                                    <option value="dashed">虚线</option>
+                                                </select>
+                                                <input type="number" id="codeBorderRightWidth" value="4" step="1" style="width: 48px; padding: 6px; font-size: 13px; border: 1px solid #d9e4f5; border-radius: 4px;">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px;">
-                <button onclick="resetAdvancedOptions()" class="btn-small" style="background:#fff; color:#64748b; border:1px solid #cbd5e1;">恢复默认</button>
-                <div style="display:flex; gap:10px;">
+            <div class="modal-footer">
+                <div class="advanced-footer">
+                    <button onclick="resetAdvancedOptions()" class="btn-small" style="background:#fff; color:#64748b; border:1px solid #cbd5e1;">恢复默认</button>
+                </div>
+                <div class="advanced-footer-right">
                     <button onclick="closeAdvancedModal()" class="btn-small" style="background:#fff; border:1px solid #cbd5e1; color:#333;">取消</button>
                     <button onclick="closeAdvancedModal()" class="btn-small">确定</button>
                 </div>
@@ -1441,6 +1629,43 @@
             document.getElementById("codeBlockStyleConfig").style.display = checked ? "block" : "none";
         }
 
+        function bindCodeBorderWidthBehavior() {
+            const bindings = [
+                ["codeBorderTopType", "codeBorderTopWidth"],
+                ["codeBorderBottomType", "codeBorderBottomWidth"],
+                ["codeBorderLeftType", "codeBorderLeftWidth"],
+                ["codeBorderRightType", "codeBorderRightWidth"]
+            ];
+            bindings.forEach(([typeId, widthId]) => {
+                const typeEl = document.getElementById(typeId);
+                const widthEl = document.getElementById(widthId);
+                if (!typeEl || !widthEl) return;
+                if (typeEl.dataset.boundNoneWidth === "1") return;
+                const syncWidth = () => {
+                    if (typeEl.value === "none") {
+                        widthEl.value = "0";
+                    }
+                };
+                typeEl.addEventListener("change", syncWidth);
+                typeEl.dataset.boundNoneWidth = "1";
+                syncWidth();
+            });
+        }
+
+        function switchAdvancedTab(tabId, triggerEl) {
+            // Update Tab Items
+            document.querySelectorAll('.modal-tab-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            if (triggerEl) triggerEl.classList.add('active');
+
+            // Update Tab Contents
+            document.querySelectorAll('.modal-tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById('tab-' + tabId).classList.add('active');
+        }
+
         function applyMarginPreset(preset) {
             if (preset === 'custom') return;
             
@@ -1560,6 +1785,7 @@
         }
 
         initUI();
+        bindCodeBorderWidthBehavior();
         renderTaskList();
         renderLogs();
     </script>
