@@ -478,7 +478,10 @@ class FeishuDocxConverter:
         code_data = (block.get('code') or {}).get('elements') or []
         try:
             table = container.add_table(rows=1, cols=1)
-            table.style = 'Table Grid'
+            try:
+                table.style = 'Table Grid'
+            except:
+                pass
             
             # 注入标识，标记此表格为代码块
             try:
@@ -501,14 +504,25 @@ class FeishuDocxConverter:
             p.paragraph_format.space_before = Pt(2)
             p.paragraph_format.space_after = Pt(2)
             p.paragraph_format.line_spacing = 1.0
-            for el in code_data:
-                text_run = el.get('text_run') or {}
-                content = text_run.get('content') or ''
-                run = p.add_run(content)
+            
+            # 使用统一的 _add_runs 处理内容，支持加粗、颜色、@、链接等
+            self._add_runs(p, code_data)
+            
+            # 强制设置代码块字体（在 _add_runs 之后设置）
+            for run in p.runs:
                 run.font.name = 'Courier New'
                 run.font.size = Pt(9)
+                try:
+                    rPr = run._element.get_or_add_rPr()
+                    rFonts = rPr.get_or_add_rFonts()
+                    rFonts.set(qn('w:eastAsia'), 'Courier New')
+                    rFonts.set(qn('w:ascii'), 'Courier New')
+                    rFonts.set(qn('w:hAnsi'), 'Courier New')
+                except:
+                    pass
         except Exception as e:
             logger.error(f"渲染代码块失败 {block.get('block_id')}: {e}")
+            logger.error(traceback.format_exc())
 
     def _handle_image(self, block, container):
         image_data = block.get('image') or {}

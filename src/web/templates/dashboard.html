@@ -1032,8 +1032,7 @@
                                     </div>
                                 </div>
                                 <div class="option-divider">
-                                    <label class="inline-check" style="font-size: 12px;"><input type="checkbox" id="codeCleanTextIndent" checked> 删除悬挂及首行缩进</label>
-                                    <label class="inline-check" style="font-size: 12px; margin-bottom:0;"><input type="checkbox" id="codeForceClearIndent"> 强制删除所有缩进</label>
+                                    <label class="inline-check" style="font-size: 12px; margin-bottom:0;"><input type="checkbox" id="codeForceClearIndent" checked> 强制删除所有缩进 (左/右/悬挂/首行)</label>
                                 </div>
                                 <div class="option-divider">
                                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
@@ -1803,8 +1802,7 @@
             document.getElementById("codeFontFamily").value = "Courier New";
             document.getElementById("codeFontSize").value = "9";
             document.getElementById("codeAlign").value = "left";
-            document.getElementById("codeCleanTextIndent").checked = true;
-            document.getElementById("codeForceClearIndent").checked = false;
+            document.getElementById("codeForceClearIndent").checked = true;
             document.getElementById("codeBorderColor").value = "#D9D9D9";
             document.getElementById("codeBorderTopType").value = "single";
             document.getElementById("codeBorderTopWidth").value = "4";
@@ -2021,7 +2019,6 @@
                     fontFamily: document.getElementById("codeFontFamily").value,
                     fontSize: parseFloat(document.getElementById("codeFontSize").value),
                     align: document.getElementById("codeAlign").value,
-                    cleanTextIndent: document.getElementById("codeCleanTextIndent").checked,
                     forceClearIndent: document.getElementById("codeForceClearIndent").checked,
                     borderColor: document.getElementById("codeBorderColor").value,
                     borders: {
