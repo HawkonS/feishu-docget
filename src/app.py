@@ -171,7 +171,7 @@ def update_job(job_id, **fields):
                 job['logs'] = logs[-200:]
         job.update(fields)
 
-def run_job(job_id, doc_url, template_name, table_style, delete_template=False, add_cover=False, client_ip='', check_stop_func=None, unordered_list_style='default', body_style=None, was_queued=False, image_style=None, ignore_mention=False, table_config=None, margin_config=None, code_block_config=None):
+def run_job(job_id, doc_url, template_name, table_style, delete_template=False, add_cover=False, client_ip='', check_stop_func=None, unordered_list_style='default', body_style=None, was_queued=False, image_style=None, ignore_mention=False, table_config=None, margin_config=None, code_block_config=None, document_info=None):
     try:
         logger.info(f"开始执行任务 {job_id}: {doc_url}")
         if check_stop_func and check_stop_func():
@@ -184,7 +184,7 @@ def run_job(job_id, doc_url, template_name, table_style, delete_template=False, 
         if template_name:
             template_path = os.path.join(base_dir, config['template.dir'], template_name)
         output_root = os.path.join(base_dir, config['output.dir'])
-        result = process_document(doc_url=doc_url, template_path=template_path, table_style=table_style, base_dir=base_dir, output_root=output_root, progress_cb=lambda p, m, t='info': update_job(job_id, progress=p, message=m, log_type=t), add_cover=add_cover, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, body_style=body_style, image_style=image_style, ignore_mention=ignore_mention, table_config=table_config, margin_config=margin_config, code_block_config=code_block_config)
+        result = process_document(doc_url=doc_url, template_path=template_path, table_style=table_style, base_dir=base_dir, output_root=output_root, progress_cb=lambda p, m, t='info': update_job(job_id, progress=p, message=m, log_type=t), add_cover=add_cover, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, body_style=body_style, image_style=image_style, ignore_mention=ignore_mention, table_config=table_config, margin_config=margin_config, code_block_config=code_block_config, document_info=document_info)
         if delete_template and template_path:
             if os.path.exists(template_path):
                 try:
@@ -218,6 +218,28 @@ def page_not_found(e):
     if not target.startswith('http'):
         target = 'http://' + target
     return redirect(target)
+
+def _validate_document_info(document_info):
+    if not isinstance(document_info, dict):
+        return None
+    field_labels = {'created': '创建时间', 'modified': '上次修改时间', 'lastPrinted': '上次打印时间'}
+    formats = ['%Y-%m-%dT%H:%M', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d %H:%M:%S', '%Y/%m/%d %H:%M', '%Y/%m/%d %H:%M:%S']
+    for key, label in field_labels.items():
+        raw_value = str(document_info.get(key) or '').strip()
+        if not raw_value:
+            continue
+        is_valid = False
+        for fmt in formats:
+            try:
+                datetime.strptime(raw_value, fmt)
+                is_valid = True
+                break
+            except ValueError:
+                continue
+        if not is_valid:
+            return f'{label}格式无效，请重新选择有效时间'
+    return None
+
 
 @app.route('/', methods=['GET'])
 def index():
@@ -563,13 +585,17 @@ def api_start():
     table_config = data.get('tableConfig') # dict or None
     margin_config = data.get('marginConfig') # dict or None
     code_block_config = data.get('codeBlockConfig') # dict or None
+    document_info = data.get('documentInfo') # dict or None
     if not doc_url:
         return jsonify({'status': 'error', 'message': '缺少文档链接'})
+    document_info_error = _validate_document_info(document_info)
+    if document_info_error:
+        return jsonify({'status': 'error', 'message': document_info_error})
     job_id = datetime.now().strftime('%Y%m%d%H%M%S') + '_' + uuid.uuid4().hex[:8]
     client_ip = request.remote_addr
     is_temp_template = template.startswith('temp_')
     with jobs_lock:
-        jobs[job_id] = {'status': 'pending', 'progress': 0, 'message': '等待中', 'job_id': job_id, 'created_at': datetime.now().isoformat(timespec='seconds'), 'doc_url': doc_url, 'template': template, 'table_style': table_style, 'unordered_list_style': unordered_list_style, 'body_style': body_style, 'image_style': image_style, 'table_config': table_config, 'margin_config': margin_config, 'code_block_config': code_block_config, 'client_ip': client_ip, 'logs': [{'ts': datetime.now().isoformat(timespec='seconds'), 'message': '任务已创建'}]}
+        jobs[job_id] = {'status': 'pending', 'progress': 0, 'message': '等待中', 'job_id': job_id, 'created_at': datetime.now().isoformat(timespec='seconds'), 'doc_url': doc_url, 'template': template, 'table_style': table_style, 'unordered_list_style': unordered_list_style, 'body_style': body_style, 'image_style': image_style, 'table_config': table_config, 'margin_config': margin_config, 'code_block_config': code_block_config, 'document_info': document_info, 'client_ip': client_ip, 'logs': [{'ts': datetime.now().isoformat(timespec='seconds'), 'message': '任务已创建'}]}
 
     def check_stop():
         with jobs_lock:
@@ -599,7 +625,7 @@ def api_start():
         update_download_stat(base_dir, config, job_id, '排队中', doc_url=doc_url, ip_address=client_ip)
     else:
         pass
-    download_queue.put((job_id, doc_url, template, table_style, is_temp_template, add_cover, client_ip, check_stop, unordered_list_style, body_style, is_queued, image_style, ignore_mention, table_config, margin_config, code_block_config))
+    download_queue.put((job_id, doc_url, template, table_style, is_temp_template, add_cover, client_ip, check_stop, unordered_list_style, body_style, is_queued, image_style, ignore_mention, table_config, margin_config, code_block_config, document_info))
     return jsonify({'status': 'ok', 'job_id': job_id})
 
 @app.route('/api/status/<job_id>', methods=['GET'])

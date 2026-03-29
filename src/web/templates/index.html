@@ -730,6 +730,77 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="option-card full">
+                            <div class="option-card-title">文档信息管理</div>
+                            <label class="inline-check">
+                                <input type="checkbox" id="enableDocumentInfo" onchange="toggleDocumentInfo()">
+                                启用文档信息管理
+                            </label>
+                            <div id="documentInfoConfig" style="display: none;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:10px; flex-wrap:wrap;">
+                                    <div style="font-size:12px; color:#64748b;">留空将清空对应文档信息，时间字段支持直接选择或一键填入当前时间</div>
+                                    <button type="button" onclick="resetDocumentInfoFields()" style="padding:6px 10px; border:1px solid #d9e4f5; border-radius:6px; background:#fff; color:#475569; cursor:pointer;">清空全部字段</button>
+                                </div>
+                                <div class="compact-grid-2">
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">作者</label>
+                                        <input type="text" id="docInfoAuthor" placeholder="如：张三" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">上次修改者</label>
+                                        <input type="text" id="docInfoLastModifiedBy" placeholder="如：李四" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">创建时间</label>
+                                        <div style="display:flex; gap:6px;">
+                                            <input type="datetime-local" id="docInfoCreated" step="60" style="flex:1; min-width:0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                            <button type="button" onclick="setDocumentInfoDateTimeNow('docInfoCreated')" style="padding: 6px 8px; border: 1px solid #d9e4f5; border-radius: 6px; background:#fff; cursor:pointer;">当前</button>
+                                            <button type="button" onclick="clearDocumentInfoField('docInfoCreated')" style="padding: 6px 8px; border: 1px solid #d9e4f5; border-radius: 6px; background:#fff; cursor:pointer;">清空</button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">上次修改时间</label>
+                                        <div style="display:flex; gap:6px;">
+                                            <input type="datetime-local" id="docInfoModified" step="60" style="flex:1; min-width:0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                            <button type="button" onclick="setDocumentInfoDateTimeNow('docInfoModified')" style="padding: 6px 8px; border: 1px solid #d9e4f5; border-radius: 6px; background:#fff; cursor:pointer;">当前</button>
+                                            <button type="button" onclick="clearDocumentInfoField('docInfoModified')" style="padding: 6px 8px; border: 1px solid #d9e4f5; border-radius: 6px; background:#fff; cursor:pointer;">清空</button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">上次打印时间</label>
+                                        <div style="display:flex; gap:6px;">
+                                            <input type="datetime-local" id="docInfoLastPrinted" step="60" style="flex:1; min-width:0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                            <button type="button" onclick="setDocumentInfoDateTimeNow('docInfoLastPrinted')" style="padding: 6px 8px; border: 1px solid #d9e4f5; border-radius: 6px; background:#fff; cursor:pointer;">当前</button>
+                                            <button type="button" onclick="clearDocumentInfoField('docInfoLastPrinted')" style="padding: 6px 8px; border: 1px solid #d9e4f5; border-radius: 6px; background:#fff; cursor:pointer;">清空</button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">编辑时间统计 (分钟)</label>
+                                        <input type="number" id="docInfoTotalTime" min="0" step="1" placeholder="如：45" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">标题</label>
+                                        <input type="text" id="docInfoTitle" placeholder="默认留空" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">类别</label>
+                                        <input type="text" id="docInfoCategory" placeholder="默认留空" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">主题</label>
+                                        <input type="text" id="docInfoSubject" placeholder="默认留空" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">单位</label>
+                                        <input type="text" id="docInfoCompany" placeholder="如：某某公司/部门" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">模板</label>
+                                        <input type="text" id="docInfoTemplate" placeholder="默认留空，手动填写时覆盖" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-tab-content" id="tab-text">
@@ -1223,6 +1294,7 @@
             const url = document.getElementById("docUrl").value.trim();
             const addCover = document.getElementById("addCover").checked;
             const ignoreMention = document.getElementById("ignoreMention").checked;
+            if (!validateDocumentInfoInputs()) return;
             
             let unorderedListStyle = "none";
             if (document.getElementById("enableListStyle").checked) {
@@ -1295,6 +1367,24 @@
                 };
             }
 
+            let documentInfo = null;
+            if (document.getElementById("enableDocumentInfo").checked) {
+                const totalTimeValue = document.getElementById("docInfoTotalTime").value.trim();
+                documentInfo = {
+                    author: document.getElementById("docInfoAuthor").value.trim(),
+                    lastModifiedBy: document.getElementById("docInfoLastModifiedBy").value.trim(),
+                    created: document.getElementById("docInfoCreated").value || "",
+                    modified: document.getElementById("docInfoModified").value || "",
+                    lastPrinted: document.getElementById("docInfoLastPrinted").value || "",
+                    totalTime: totalTimeValue === "" ? null : parseInt(totalTimeValue, 10),
+                    title: document.getElementById("docInfoTitle").value.trim(),
+                    category: document.getElementById("docInfoCategory").value.trim(),
+                    subject: document.getElementById("docInfoSubject").value.trim(),
+                    company: document.getElementById("docInfoCompany").value.trim(),
+                    template: document.getElementById("docInfoTemplate").value.trim()
+                };
+            }
+
             if (!url) return alert("请输入文档链接");
             
             if (timer) clearTimeout(timer);
@@ -1313,7 +1403,8 @@
                     imageStyle,
                     tableConfig,
                     marginConfig,
-                    codeBlockConfig
+                    codeBlockConfig,
+                    documentInfo
                 })
             }).then(r => r.json()).then(res => {
                 if (res.status !== "ok") {
@@ -1579,6 +1670,10 @@
             document.getElementById("marginRight").value = "3.18";
             togglePageMargins();
 
+            document.getElementById("enableDocumentInfo").checked = false;
+            resetDocumentInfoFields();
+            toggleDocumentInfo();
+
             document.getElementById("enableCodeBlockStyle").checked = true;
             document.getElementById("codeBgColor").value = "#F5F5F5";
             document.getElementById("codeFontColor").value = "#000000";
@@ -1624,9 +1719,53 @@
             document.getElementById("pageMarginsConfig").style.display = checked ? "block" : "none";
         }
 
+        function toggleDocumentInfo() {
+            const checked = document.getElementById("enableDocumentInfo").checked;
+            document.getElementById("documentInfoConfig").style.display = checked ? "block" : "none";
+        }
+
         function toggleCodeBlockStyle() {
             const checked = document.getElementById("enableCodeBlockStyle").checked;
             document.getElementById("codeBlockStyleConfig").style.display = checked ? "block" : "none";
+        }
+
+        function setDocumentInfoDateTimeNow(fieldId) {
+            const input = document.getElementById(fieldId);
+            if (!input) return;
+            const now = new Date();
+            input.value = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+        }
+
+        function clearDocumentInfoField(fieldId) {
+            const input = document.getElementById(fieldId);
+            if (input) input.value = "";
+        }
+
+        function resetDocumentInfoFields() {
+            ["docInfoAuthor", "docInfoLastModifiedBy", "docInfoCreated", "docInfoModified", "docInfoLastPrinted", "docInfoTotalTime", "docInfoTitle", "docInfoCategory", "docInfoSubject", "docInfoCompany", "docInfoTemplate"].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = "";
+            });
+        }
+
+        function validateDocumentInfoInputs() {
+            if (!document.getElementById("enableDocumentInfo").checked) return true;
+            const fields = [
+                ["docInfoCreated", "创建时间"],
+                ["docInfoModified", "上次修改时间"],
+                ["docInfoLastPrinted", "上次打印时间"]
+            ];
+            for (const [id, label] of fields) {
+                const input = document.getElementById(id);
+                if (!input || !input.value) continue;
+                if (typeof input.reportValidity === "function" && !input.checkValidity()) {
+                    alert(label + "格式无效，请重新选择有效时间");
+                    input.reportValidity();
+                    input.focus();
+                    return false;
+                }
+            }
+            return true;
         }
 
         function bindCodeBorderWidthBehavior() {

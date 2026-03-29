@@ -1,6 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import io
+import re
+import zipfile
+import xml.etree.ElementTree as ET
+from xml.sax.saxutils import escape
 from docx import Document
 from docx.oxml.ns import nsdecls, qn
 from docx.oxml import parse_xml
@@ -16,7 +20,7 @@ except ImportError:
         IMAGE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image'
 logger = ConfigLoader.get_logger('format_cleaner')
 
-def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=False, body_style=None, image_style=None, table_config=None, margin_config=None, code_block_config=None):
+def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=False, body_style=None, image_style=None, table_config=None, margin_config=None, code_block_config=None, document_info=None):
     logger.debug('开始清理文档...')
     doc = Document(docx_path)
     ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
@@ -249,6 +253,158 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
                 progress_cb(99, '已跳过页边距调整 (文档只有一页)', 'info')
 
     doc.save(docx_path)
+    del doc
+
+def apply_document_info(docx_path, document_info):
+    core_xml = _update_core_properties_xml(docx_path, document_info)
+    app_xml = _update_app_properties_xml(docx_path, document_info)
+    settings_xml, settings_rels_xml = _update_settings_template_parts(docx_path, document_info)
+    if core_xml is None and app_xml is None and settings_xml is None and settings_rels_xml is None:
+        return
+    with zipfile.ZipFile(docx_path, 'r') as src:
+        entries = [(info, src.read(info.filename)) for info in src.infolist()]
+    tmp_path = docx_path + '.metadata.tmp'
+    with zipfile.ZipFile(tmp_path, 'w') as dst:
+        written_names = set()
+        for info, content in entries:
+            if info.filename == 'docProps/core.xml' and core_xml is not None:
+                dst.writestr(info, core_xml)
+                written_names.add(info.filename)
+            elif info.filename == 'docProps/app.xml' and app_xml is not None:
+                dst.writestr(info, app_xml)
+                written_names.add(info.filename)
+            elif info.filename == 'word/settings.xml' and settings_xml is not None:
+                dst.writestr(info, settings_xml)
+                written_names.add(info.filename)
+            elif info.filename == 'word/_rels/settings.xml.rels' and settings_rels_xml is not None:
+                dst.writestr(info, settings_rels_xml)
+                written_names.add(info.filename)
+            else:
+                dst.writestr(info, content)
+                written_names.add(info.filename)
+        if settings_xml is not None and 'word/settings.xml' not in written_names:
+            dst.writestr('word/settings.xml', settings_xml)
+        if settings_rels_xml is not None and 'word/_rels/settings.xml.rels' not in written_names:
+            dst.writestr('word/_rels/settings.xml.rels', settings_rels_xml)
+    os.replace(tmp_path, docx_path)
+
+def _update_core_properties_xml(docx_path, document_info):
+    namespaces = {
+        'cp': 'http://schemas.openxmlformats.org/package/2006/metadata/core-properties',
+        'dc': 'http://purl.org/dc/elements/1.1/',
+        'dcterms': 'http://purl.org/dc/terms/',
+        'xsi': 'http://www.w3.org/2001/XMLSchema-instance'
+    }
+    for prefix, uri in namespaces.items():
+        ET.register_namespace(prefix, uri)
+    with zipfile.ZipFile(docx_path, 'r') as zf:
+        try:
+            root = ET.fromstring(zf.read('docProps/core.xml'))
+        except KeyError:
+            return None
+    text_fields = {
+        'author': f"{{{namespaces['dc']}}}creator",
+        'lastModifiedBy': f"{{{namespaces['cp']}}}lastModifiedBy",
+        'title': f"{{{namespaces['dc']}}}title",
+        'category': f"{{{namespaces['cp']}}}category",
+        'subject': f"{{{namespaces['dc']}}}subject"
+    }
+    for key, tag in text_fields.items():
+        _set_xml_text(root, tag, document_info.get(key, ''))
+    datetime_fields = {
+        'created': f"{{{namespaces['dcterms']}}}created",
+        'modified': f"{{{namespaces['dcterms']}}}modified",
+        'lastPrinted': f"{{{namespaces['cp']}}}lastPrinted"
+    }
+    for key, tag in datetime_fields.items():
+        normalized = _normalize_document_datetime(document_info.get(key))
+        if normalized:
+            extra_attrib = None
+            if key in ['created', 'modified']:
+                extra_attrib = {f"{{{namespaces['xsi']}}}type": 'dcterms:W3CDTF'}
+            _set_xml_text(root, tag, normalized, extra_attrib)
+        else:
+            _remove_xml_tag(root, tag)
+    return ET.tostring(root, encoding='utf-8', xml_declaration=True)
+
+def _update_app_properties_xml(docx_path, document_info):
+    app_ns = 'http://schemas.openxmlformats.org/officeDocument/2006/extended-properties'
+    vt_ns = 'http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes'
+    ET.register_namespace('', app_ns)
+    ET.register_namespace('vt', vt_ns)
+    with zipfile.ZipFile(docx_path, 'r') as zf:
+        try:
+            root = ET.fromstring(zf.read('docProps/app.xml'))
+        except KeyError:
+            return None
+    _set_xml_text(root, f'{{{app_ns}}}Template', document_info.get('template', ''))
+    _set_xml_text(root, f'{{{app_ns}}}Company', document_info.get('company', ''))
+    total_time = document_info.get('totalTime')
+    if total_time in [None, '']:
+        _remove_xml_tag(root, f'{{{app_ns}}}TotalTime')
+    else:
+        try:
+            safe_total_time = str(max(0, int(total_time)))
+        except (TypeError, ValueError):
+            _remove_xml_tag(root, f'{{{app_ns}}}TotalTime')
+        else:
+            _set_xml_text(root, f'{{{app_ns}}}TotalTime', safe_total_time)
+    return ET.tostring(root, encoding='utf-8', xml_declaration=True)
+
+def _update_settings_template_parts(docx_path, document_info):
+    template_value = str(document_info.get('template') or '').strip()
+    with zipfile.ZipFile(docx_path, 'r') as zf:
+        try:
+            settings_xml = zf.read('word/settings.xml').decode('utf-8')
+        except KeyError:
+            return None, None
+        try:
+            settings_rels_xml = zf.read('word/_rels/settings.xml.rels').decode('utf-8')
+        except KeyError:
+            settings_rels_xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>'
+    attached_template_pattern = r'<w:attachedTemplate\b[^>]*/>'
+    if template_value:
+        replacement = '<w:attachedTemplate r:id="rIdAttachedTemplate"/>'
+        if re.search(attached_template_pattern, settings_xml):
+            settings_xml = re.sub(attached_template_pattern, replacement, settings_xml, count=1)
+        else:
+            settings_xml = settings_xml.replace('>', f'>{replacement}', 1)
+    else:
+        settings_xml = re.sub(attached_template_pattern, '', settings_xml)
+    rel_pattern = r'<Relationship\b[^>]*Type="http://schemas\.openxmlformats\.org/officeDocument/2006/relationships/attachedTemplate"[^>]*/>'
+    settings_rels_xml = re.sub(rel_pattern, '', settings_rels_xml)
+    if template_value:
+        escaped_template_value = escape(template_value, {'"': '&quot;'})
+        relation_xml = f'<Relationship Id="rIdAttachedTemplate" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate" Target="{escaped_template_value}" TargetMode="External"/>'
+        settings_rels_xml = settings_rels_xml.replace('</Relationships>', relation_xml + '</Relationships>')
+    return settings_xml.encode('utf-8'), settings_rels_xml.encode('utf-8')
+
+def _set_xml_text(root, tag, value, extra_attrib=None):
+    element = root.find(tag)
+    if element is None:
+        element = ET.SubElement(root, tag)
+    element.text = '' if value is None else str(value)
+    if extra_attrib:
+        for key, attr_value in extra_attrib.items():
+            element.set(key, attr_value)
+
+def _remove_xml_tag(root, tag):
+    element = root.find(tag)
+    if element is not None:
+        root.remove(element)
+
+def _normalize_document_datetime(value):
+    value = str(value or '').strip()
+    if not value:
+        return ''
+    try:
+        dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError:
+        return ''
+    if dt.tzinfo is None:
+        local_tz = datetime.now().astimezone().tzinfo or timezone.utc
+        dt = dt.replace(tzinfo=local_tz)
+    return dt.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 def _apply_paragraph_style(paragraph, style_config, ns):
     """
