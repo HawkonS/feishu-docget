@@ -114,7 +114,7 @@ class NumberingInjector:
 
 class FeishuDocxConverter:
 
-    def __init__(self, blocks, client, img_dir, template_path=None, progress_cb=None, check_stop_func=None, unordered_list_style='default', ignore_mention=False):
+    def __init__(self, blocks, client, img_dir, template_path=None, progress_cb=None, check_stop_func=None, unordered_list_style='default', ignore_mention=False, add_title=False):
         self.blocks = blocks
         self.client = client
         self.img_dir = img_dir
@@ -123,6 +123,7 @@ class FeishuDocxConverter:
         self.check_stop_func = check_stop_func
         self.unordered_list_style = unordered_list_style
         self.ignore_mention = ignore_mention
+        self.add_title = add_title
         self.block_map = {b['block_id']: b for b in blocks}
         self.tree = self._build_tree()
         self.doc = None
@@ -314,7 +315,7 @@ class FeishuDocxConverter:
         # 渲染页面标题 (Page Block 的 elements 通常包含标题)
         page_data = block.get('page') or {}
         elements = page_data.get('elements') or []
-        if elements:
+        if elements and self.add_title:
             try:
                 # 尝试使用 Title 样式
                 p = container.add_paragraph(style='Title')

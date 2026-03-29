@@ -171,7 +171,7 @@ def update_job(job_id, **fields):
                 job['logs'] = logs[-200:]
         job.update(fields)
 
-def run_job(job_id, doc_url, template_name, table_style, delete_template=False, add_cover=False, client_ip='', check_stop_func=None, unordered_list_style='default', body_style=None, was_queued=False, image_style=None, ignore_mention=False, table_config=None, margin_config=None, code_block_config=None, document_info=None):
+def run_job(job_id, doc_url, template_name, table_style, delete_template=False, add_cover=False, client_ip='', check_stop_func=None, unordered_list_style='default', body_style=None, was_queued=False, image_style=None, ignore_mention=False, table_config=None, margin_config=None, code_block_config=None, document_info=None, add_title=False):
     try:
         logger.info(f"开始执行任务 {job_id}: {doc_url}")
         if check_stop_func and check_stop_func():
@@ -184,7 +184,7 @@ def run_job(job_id, doc_url, template_name, table_style, delete_template=False, 
         if template_name:
             template_path = os.path.join(base_dir, config['template.dir'], template_name)
         output_root = os.path.join(base_dir, config['output.dir'])
-        result = process_document(doc_url=doc_url, template_path=template_path, table_style=table_style, base_dir=base_dir, output_root=output_root, progress_cb=lambda p, m, t='info': update_job(job_id, progress=p, message=m, log_type=t), add_cover=add_cover, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, body_style=body_style, image_style=image_style, ignore_mention=ignore_mention, table_config=table_config, margin_config=margin_config, code_block_config=code_block_config, document_info=document_info)
+        result = process_document(doc_url=doc_url, template_path=template_path, table_style=table_style, base_dir=base_dir, output_root=output_root, progress_cb=lambda p, m, t='info': update_job(job_id, progress=p, message=m, log_type=t), add_cover=add_cover, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, body_style=body_style, image_style=image_style, ignore_mention=ignore_mention, table_config=table_config, margin_config=margin_config, code_block_config=code_block_config, document_info=document_info, add_title=add_title)
         if delete_template and template_path:
             if os.path.exists(template_path):
                 try:
@@ -586,6 +586,7 @@ def api_start():
     margin_config = data.get('marginConfig') # dict or None
     code_block_config = data.get('codeBlockConfig') # dict or None
     document_info = data.get('documentInfo') # dict or None
+    add_title = bool(data.get('addTitle'))
     if not doc_url:
         return jsonify({'status': 'error', 'message': '缺少文档链接'})
     document_info_error = _validate_document_info(document_info)
@@ -625,7 +626,7 @@ def api_start():
         update_download_stat(base_dir, config, job_id, '排队中', doc_url=doc_url, ip_address=client_ip)
     else:
         pass
-    download_queue.put((job_id, doc_url, template, table_style, is_temp_template, add_cover, client_ip, check_stop, unordered_list_style, body_style, is_queued, image_style, ignore_mention, table_config, margin_config, code_block_config, document_info))
+    download_queue.put((job_id, doc_url, template, table_style, is_temp_template, add_cover, client_ip, check_stop, unordered_list_style, body_style, is_queued, image_style, ignore_mention, table_config, margin_config, code_block_config, document_info, add_title))
     return jsonify({'status': 'ok', 'job_id': job_id})
 
 @app.route('/api/status/<job_id>', methods=['GET'])

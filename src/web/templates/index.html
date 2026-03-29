@@ -692,6 +692,10 @@
                                 <input type="checkbox" id="addCover" checked>
                                 添加模板封面/首页
                             </label>
+                            <label class="inline-check">
+                                <input type="checkbox" id="addTitle">
+                                在正文内容中添加标题
+                            </label>
                         </div>
                         <div class="option-card full">
                             <div class="option-card-title">页边距管理 (不含封面)</div>
@@ -1289,6 +1293,7 @@
         function startDownload() {
             const url = document.getElementById("docUrl").value.trim();
             const addCover = document.getElementById("addCover").checked;
+            const addTitle = document.getElementById("addTitle").checked;
             const ignoreMention = document.getElementById("ignoreMention").checked;
             if (!validateDocumentInfoInputs()) return;
             
@@ -1392,6 +1397,7 @@
                     template: selectedTemplate, 
                     tableStyle: selectedStyle, 
                     addCover,
+                    addTitle,
                     ignoreMention,
                     unorderedListStyle,
                     bodyStyle,
@@ -1628,6 +1634,7 @@
             if (!confirm("确定要恢复所有高级选项到默认值吗？")) return;
             
             document.getElementById("addCover").checked = true;
+            document.getElementById("addTitle").checked = false;
             document.getElementById("ignoreMention").checked = false;
             
             document.getElementById("enableListStyle").checked = true;
