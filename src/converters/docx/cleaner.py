@@ -141,9 +141,10 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
         except:
             pass
         
-        # Apply custom code block styles if configured
-        if is_code_block and code_block_config:
-            _apply_custom_code_block_style(table, code_block_config, ns)
+        # 代码块特殊处理：应用样式并跳过常规表格清洗
+        if is_code_block:
+            if code_block_config:
+                _apply_custom_code_block_style(table, code_block_config, ns)
             continue
 
         for r_idx, row in enumerate(table.rows):
@@ -905,14 +906,14 @@ def _apply_custom_code_block_style(table, config, ns):
     align_map = {'left': 0, 'center': 1, 'right': 2}
     alignment = align_map.get(config.get('align', 'left'), 0)
     
-    clean_text_indent = config.get('cleanTextIndent', True)
-    force_clear_indent = config.get('forceClearIndent', False)
+    # Indentation handling
+    force_clear_indent = config.get('forceClearIndent', True)
     
     for p in cell.paragraphs:
-        # Indentation
         if force_clear_indent:
             _force_clear_indent(p, ns)
-        elif clean_text_indent:
+        # cleanTextIndent is now deprecated as it's merged into forceClearIndent
+        elif config.get('cleanTextIndent', False):
             _clean_text_indent(p, ns)
             
         # Alignment
