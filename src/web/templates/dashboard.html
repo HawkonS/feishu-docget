@@ -843,6 +843,9 @@
                             <label class="inline-check" style="margin-top:10px; margin-bottom:0;">
                                 <input type="checkbox" id="newAddTitle"> 在正文内容中添加标题
                             </label>
+                            <label class="inline-check" style="margin-top:10px; margin-bottom:0;">
+                                <input type="checkbox" id="newIgnoreTemplateHeadingNum"> 强制移除模板标题自动编号
+                            </label>
                         </div>
                         <div class="option-card full">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
@@ -1896,6 +1899,7 @@
             // 初始化常规配置
             document.getElementById("newAddCover").checked = true;
             document.getElementById("newAddTitle").checked = false;
+            document.getElementById("newIgnoreTemplateHeadingNum").checked = false;
 
             document.getElementById("styleFontSize").value = "";
             document.getElementById("styleFontSizeSelect").value = "";
@@ -2141,6 +2145,7 @@
             const style = document.getElementById("newStyleSelect").value;
             const addCover = document.getElementById("newAddCover").checked;
             const addTitle = document.getElementById("newAddTitle").checked;
+            const ignoreTemplateHeadingNum = document.getElementById("newIgnoreTemplateHeadingNum").checked;
 
             // Collect Body Style Options
             let bodyStyle = null;
@@ -2286,8 +2291,9 @@
                     url: docUrl, 
                     template: tpl, 
                     tableStyle: style, 
-                    addCover: addCover,
+                    addCover: addCover, 
                     addTitle: addTitle,
+                    ignoreTemplateHeadingNum: ignoreTemplateHeadingNum,
                     bodyStyle: bodyStyle,
                     imageStyle: imageStyle,
                     tableConfig: tableConfig,

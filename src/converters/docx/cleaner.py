@@ -335,7 +335,7 @@ def _apply_table_layout(table, width_str, auto_fit, ns, min_col_width=120):
     return True
 
 
-def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=False, body_style=None, image_style=None, table_config=None, margin_config=None, code_block_config=None, document_info=None):
+def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=False, body_style=None, image_style=None, table_config=None, margin_config=None, code_block_config=None, document_info=None, ignore_template_heading_num=False):
     logger.debug('开始清理文档...')
     doc = Document(docx_path)
     ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
@@ -344,7 +344,25 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
     if template_path:
         try:
             tpl_doc = Document(template_path)
-            _copy_styles_from_template(template_path, doc)
+            _copy_styles_from_template(template_path, doc, ignore_template_heading_num=ignore_template_heading_num)
+            
+            # 清理 numbering_part 中关联到标题样式的 pStyle
+            if ignore_template_heading_num:
+                try:
+                    if doc.part.numbering_part:
+                        heading_style_ids = set()
+                        for s in doc.styles:
+                            if _is_heading_style(s._element, ns):
+                                heading_style_ids.add(s.style_id)
+                                
+                        numbering_element = doc.part.numbering_part.element
+                        p_styles = numbering_element.findall(f'.//{{{ns}}}pStyle')
+                        for ps in p_styles:
+                            val = ps.get(f'{{{ns}}}val')
+                            if val and val in heading_style_ids:
+                                ps.getparent().remove(ps)
+                except Exception as e:
+                    logger.warning(f"Failed to clear pStyle from numbering: {e}")
             
             inserted_count = 0
             if add_cover:
@@ -799,6 +817,15 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
             if not is_heading:
                 _apply_paragraph_style(p, body_style, ns)
                 count_style_applied += 1
+                
+        # 强制移除标题的直接编号属性（防止转换时直接附加了编号）
+        if ignore_template_heading_num:
+            style_lower = style_name.lower()
+            if style_lower.startswith('heading') or '标题' in style_name or 'title' in style_lower or 'subtitle' in style_lower:
+                pPr = p._element.get_or_add_pPr()
+                numPr = pPr.find(f"{{{ns}}}numPr")
+                if numPr is not None:
+                    pPr.remove(numPr)
 
     if progress_cb:
         if body_style:
@@ -1050,7 +1077,18 @@ def _apply_paragraph_style(paragraph, style_config, ns):
                 if f'{{{ns}}}afterLines' in spacing.attrib:
                     del spacing.attrib[f'{{{ns}}}afterLines']
 
-def _copy_styles_from_template(template_path, target_doc):
+def _is_heading_style(style_element, ns_w):
+    style_id = style_element.get(f"{{{ns_w}}}styleId") or ""
+    if style_id.lower().startswith('heading') or 'title' in style_id.lower():
+        return True
+    name_elem = style_element.find(f"{{{ns_w}}}name")
+    if name_elem is not None:
+        val = (name_elem.get(f"{{{ns_w}}}val") or "").lower()
+        if val.startswith('heading') or '标题' in val or 'title' in val or 'subtitle' in val:
+            return True
+    return False
+
+def _copy_styles_from_template(template_path, target_doc, ignore_template_heading_num=False):
     try:
         tpl_doc = Document(template_path)
         _ = tpl_doc.styles
@@ -1063,12 +1101,34 @@ def _copy_styles_from_template(template_path, target_doc):
         dst_root = dst_styles._element
         ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
         count = 0
+        
+        # If ignore_template_heading_num is True, strip out <w:numPr> from existing Heading styles in target_doc
+        if ignore_template_heading_num:
+            for dst_style in dst_root:
+                if not dst_style.tag.endswith('style'):
+                    continue
+                if _is_heading_style(dst_style, ns['w']):
+                    dst_pPr = dst_style.find(f"{{{ns['w']}}}pPr")
+                    if dst_pPr is not None:
+                        dst_numPr = dst_pPr.find(f"{{{ns['w']}}}numPr")
+                        if dst_numPr is not None:
+                            dst_pPr.remove(dst_numPr)
+
         for style in src_root:
             if not style.tag.endswith('style'):
                 continue
             style_id = style.get(f"{{{ns['w']}}}styleId")
             if not style_id:
                 continue
+                
+            # If ignore_template_heading_num is True, strip out <w:numPr> from Heading styles in src before copying
+            if ignore_template_heading_num and _is_heading_style(style, ns['w']):
+                pPr = style.find(f"{{{ns['w']}}}pPr")
+                if pPr is not None:
+                    numPr = pPr.find(f"{{{ns['w']}}}numPr")
+                    if numPr is not None:
+                        pPr.remove(numPr)
+                        
             found = False
             for dst_style in dst_root:
                 if dst_style.tag.endswith('style') and dst_style.get(f"{{{ns['w']}}}styleId") == style_id:
