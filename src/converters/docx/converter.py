@@ -83,21 +83,47 @@ class NumberingInjector:
             return
         abstract_ids = [int(an.get(qn('w:abstractNumId'))) for an in numbering_part.element.findall(qn('w:abstractNum'))]
         if self.bullet_num_id not in abstract_ids:
-            abstract_xml = '\n            <w:abstractNum xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:abstractNumId="9001">\n                <w:nsid w:val="FFFFFF01"/>\n                <w:multiLevelType w:val="hybridMultilevel"/>\n                <w:lvl w:ilvl="0">\n                    <w:start w:val="1"/>\n                    <w:numFmt w:val="bullet"/>\n                    <w:lvlText w:val="●"/>\n                    <w:lvlJc w:val="left"/>\n                    <w:pPr>\n                        <w:ind w:left="720" w:hanging="360"/>\n                    </w:pPr>\n                    <w:rPr>\n                        <w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:hint="default"/>\n                    </w:rPr>\n                </w:lvl>\n                <w:lvl w:ilvl="1">\n                    <w:start w:val="1"/>\n                    <w:numFmt w:val="bullet"/>\n                    <w:lvlText w:val="○"/>\n                    <w:lvlJc w:val="left"/>\n                    <w:pPr>\n                        <w:ind w:left="1440" w:hanging="360"/>\n                    </w:pPr>\n                    <w:rPr>\n                        <w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:hint="default"/>\n                    </w:rPr>\n                </w:lvl>\n            </w:abstractNum>\n            '
+            abstract_xml = '\n            <w:abstractNum xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:abstractNumId="9001">\n                <w:nsid w:val="FFFFFF01"/>\n                <w:multiLevelType w:val="hybridMultilevel"/>\n                <w:lvl w:ilvl="0">\n                    <w:start w:val="1"/>\n                    <w:numFmt w:val="bullet"/>\n                    <w:lvlText w:val="●"/>\n                    <w:lvlJc w:val="left"/>\n                    <w:pPr>\n                        <w:ind w:left="420" w:hanging="420"/>\n                    </w:pPr>\n                    <w:rPr>\n                        <w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:hint="default"/>\n                    </w:rPr>\n                </w:lvl>\n                <w:lvl w:ilvl="1">\n                    <w:start w:val="1"/>\n                    <w:numFmt w:val="bullet"/>\n                    <w:lvlText w:val="○"/>\n                    <w:lvlJc w:val="left"/>\n                    <w:pPr>\n                        <w:ind w:left="840" w:hanging="420"/>\n                    </w:pPr>\n                    <w:rPr>\n                        <w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:hint="default"/>\n                    </w:rPr>\n                </w:lvl>\n            </w:abstractNum>\n            '
             numbering_part.element.append(parse_xml(abstract_xml))
         if 9003 not in abstract_ids:
-            abstract_xml = '\n            <w:abstractNum xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:abstractNumId="9003">\n                <w:nsid w:val="FFFFFF03"/>\n                <w:multiLevelType w:val="hybridMultilevel"/>\n                <w:lvl w:ilvl="0">\n                    <w:start w:val="1"/>\n                    <w:numFmt w:val="bullet"/>\n                    <w:lvlText w:val="■"/>\n                    <w:lvlJc w:val="left"/>\n                    <w:pPr>\n                        <w:ind w:left="720" w:hanging="360"/>\n                    </w:pPr>\n                    <w:rPr>\n                        <w:rFonts w:ascii="Wingdings" w:hAnsi="Wingdings" w:hint="default"/>\n                    </w:rPr>\n                </w:lvl>\n                <w:lvl w:ilvl="1">\n                    <w:start w:val="1"/>\n                    <w:numFmt w:val="bullet"/>\n                    <w:lvlText w:val="□"/>\n                    <w:lvlJc w:val="left"/>\n                    <w:pPr>\n                        <w:ind w:left="1440" w:hanging="360"/>\n                    </w:pPr>\n                    <w:rPr>\n                        <w:rFonts w:ascii="Wingdings" w:hAnsi="Wingdings" w:hint="default"/>\n                    </w:rPr>\n                </w:lvl>\n            </w:abstractNum>\n            '
+            abstract_xml = '\n            <w:abstractNum xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:abstractNumId="9003">\n                <w:nsid w:val="FFFFFF03"/>\n                <w:multiLevelType w:val="hybridMultilevel"/>\n                <w:lvl w:ilvl="0">\n                    <w:start w:val="1"/>\n                    <w:numFmt w:val="bullet"/>\n                    <w:lvlText w:val="■"/>\n                    <w:lvlJc w:val="left"/>\n                    <w:pPr>\n                        <w:ind w:left="420" w:hanging="420"/>\n                    </w:pPr>\n                    <w:rPr>\n                        <w:rFonts w:ascii="Wingdings" w:hAnsi="Wingdings" w:hint="default"/>\n                    </w:rPr>\n                </w:lvl>\n                <w:lvl w:ilvl="1">\n                    <w:start w:val="1"/>\n                    <w:numFmt w:val="bullet"/>\n                    <w:lvlText w:val="□"/>\n                    <w:lvlJc w:val="left"/>\n                    <w:pPr>\n                        <w:ind w:left="840" w:hanging="420"/>\n                    </w:pPr>\n                    <w:rPr>\n                        <w:rFonts w:ascii="Wingdings" w:hAnsi="Wingdings" w:hint="default"/>\n                    </w:rPr>\n                </w:lvl>\n            </w:abstractNum>\n            '
             numbering_part.element.append(parse_xml(abstract_xml))
         if 9004 not in abstract_ids:
-            abstract_xml = '\n            <w:abstractNum xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:abstractNumId="9004">\n                <w:nsid w:val="FFFFFF04"/>\n                <w:multiLevelType w:val="hybridMultilevel"/>\n                <w:lvl w:ilvl="0">\n                    <w:start w:val="1"/>\n                    <w:numFmt w:val="bullet"/>\n                    <w:lvlText w:val="◆"/>\n                    <w:lvlJc w:val="left"/>\n                    <w:pPr>\n                        <w:ind w:left="720" w:hanging="360"/>\n                    </w:pPr>\n                    <w:rPr>\n                        <w:rFonts w:ascii="Wingdings" w:hAnsi="Wingdings" w:hint="default"/>\n                    </w:rPr>\n                </w:lvl>\n                <w:lvl w:ilvl="1">\n                    <w:start w:val="1"/>\n                    <w:numFmt w:val="bullet"/>\n                    <w:lvlText w:val="◇"/>\n                    <w:lvlJc w:val="left"/>\n                    <w:pPr>\n                        <w:ind w:left="1440" w:hanging="360"/>\n                    </w:pPr>\n                    <w:rPr>\n                        <w:rFonts w:ascii="Wingdings" w:hAnsi="Wingdings" w:hint="default"/>\n                    </w:rPr>\n                </w:lvl>\n            </w:abstractNum>\n            '
+            abstract_xml = '\n            <w:abstractNum xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:abstractNumId="9004">\n                <w:nsid w:val="FFFFFF04"/>\n                <w:multiLevelType w:val="hybridMultilevel"/>\n                <w:lvl w:ilvl="0">\n                    <w:start w:val="1"/>\n                    <w:numFmt w:val="bullet"/>\n                    <w:lvlText w:val="◆"/>\n                    <w:lvlJc w:val="left"/>\n                    <w:pPr>\n                        <w:ind w:left="420" w:hanging="420"/>\n                    </w:pPr>\n                    <w:rPr>\n                        <w:rFonts w:ascii="Wingdings" w:hAnsi="Wingdings" w:hint="default"/>\n                    </w:rPr>\n                </w:lvl>\n                <w:lvl w:ilvl="1">\n                    <w:start w:val="1"/>\n                    <w:numFmt w:val="bullet"/>\n                    <w:lvlText w:val="◇"/>\n                    <w:lvlJc w:val="left"/>\n                    <w:pPr>\n                        <w:ind w:left="840" w:hanging="420"/>\n                    </w:pPr>\n                    <w:rPr>\n                        <w:rFonts w:ascii="Wingdings" w:hAnsi="Wingdings" w:hint="default"/>\n                    </w:rPr>\n                </w:lvl>\n            </w:abstractNum>\n            '
             numbering_part.element.append(parse_xml(abstract_xml))
         if 9005 not in abstract_ids:
-            abstract_xml = '\n            <w:abstractNum xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:abstractNumId="9005">\n                <w:nsid w:val="FFFFFF05"/>\n                <w:multiLevelType w:val="hybridMultilevel"/>\n                <w:lvl w:ilvl="0">\n                    <w:start w:val="1"/>\n                    <w:numFmt w:val="bullet"/>\n                    <w:lvlText w:val="➢"/>\n                    <w:lvlJc w:val="left"/>\n                    <w:pPr>\n                        <w:ind w:left="720" w:hanging="360"/>\n                    </w:pPr>\n                    <w:rPr>\n                        <w:rFonts w:ascii="Wingdings" w:hAnsi="Wingdings" w:hint="default"/>\n                    </w:rPr>\n                </w:lvl>\n                <w:lvl w:ilvl="1">\n                    <w:start w:val="1"/>\n                    <w:numFmt w:val="bullet"/>\n                    <w:lvlText w:val="➤"/>\n                    <w:lvlJc w:val="left"/>\n                    <w:pPr>\n                        <w:ind w:left="1440" w:hanging="360"/>\n                    </w:pPr>\n                    <w:rPr>\n                        <w:rFonts w:ascii="Wingdings" w:hAnsi="Wingdings" w:hint="default"/>\n                    </w:rPr>\n                </w:lvl>\n            </w:abstractNum>\n            '
+            abstract_xml = '\n            <w:abstractNum xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:abstractNumId="9005">\n                <w:nsid w:val="FFFFFF05"/>\n                <w:multiLevelType w:val="hybridMultilevel"/>\n                <w:lvl w:ilvl="0">\n                    <w:start w:val="1"/>\n                    <w:numFmt w:val="bullet"/>\n                    <w:lvlText w:val="➢"/>\n                    <w:lvlJc w:val="left"/>\n                    <w:pPr>\n                        <w:ind w:left="420" w:hanging="420"/>\n                    </w:pPr>\n                    <w:rPr>\n                        <w:rFonts w:ascii="Wingdings" w:hAnsi="Wingdings" w:hint="default"/>\n                    </w:rPr>\n                </w:lvl>\n                <w:lvl w:ilvl="1">\n                    <w:start w:val="1"/>\n                    <w:numFmt w:val="bullet"/>\n                    <w:lvlText w:val="➤"/>\n                    <w:lvlJc w:val="left"/>\n                    <w:pPr>\n                        <w:ind w:left="840" w:hanging="420"/>\n                    </w:pPr>\n                    <w:rPr>\n                        <w:rFonts w:ascii="Wingdings" w:hAnsi="Wingdings" w:hint="default"/>\n                    </w:rPr>\n                </w:lvl>\n            </w:abstractNum>\n            '
             numbering_part.element.append(parse_xml(abstract_xml))
         if self.ordered_num_id not in abstract_ids:
             import random
             nsid = f'{random.randint(0, 16777215):06X}'
-            abstract_xml = f'\n            <w:abstractNum xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:abstractNumId="9002">\n                <w:nsid w:val="{nsid}"/>\n                <w:multiLevelType w:val="hybridMultilevel"/>\n                <w:lvl w:ilvl="0">\n                    <w:start w:val="1"/>\n                    <w:numFmt w:val="decimal"/>\n                    <w:lvlText w:val="%1."/>\n                    <w:lvlJc w:val="left"/>\n                    <w:pPr>\n                        <w:ind w:left="720" w:hanging="360"/>\n                    </w:pPr>\n                </w:lvl>\n                <w:lvl w:ilvl="1">\n                    <w:start w:val="1"/>\n                    <w:numFmt w:val="decimal"/>\n                    <w:lvlText w:val="%1.%2."/>\n                    <w:lvlJc w:val="left"/>\n                    <w:pPr>\n                        <w:ind w:left="1440" w:hanging="360"/>\n                    </w:pPr>\n                </w:lvl>\n            </w:abstractNum>\n            '
+            
+            levels = []
+            for i in range(9):
+                if i % 3 == 0:
+                    numFmt = 'decimal'
+                elif i % 3 == 1:
+                    numFmt = 'lowerLetter'
+                else:
+                    numFmt = 'lowerRoman'
+                lvl_xml = f'''                <w:lvl w:ilvl="{i}">
+                    <w:start w:val="1"/>
+                    <w:numFmt w:val="{numFmt}"/>
+                    <w:lvlText w:val="%{i+1}."/>
+                    <w:lvlJc w:val="left"/>
+                    <w:pPr>
+                        <w:ind w:left="{420 * (i+1)}" w:hanging="420"/>
+                    </w:pPr>
+                </w:lvl>'''
+                levels.append(lvl_xml)
+
+            abstract_xml = f'''
+            <w:abstractNum xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:abstractNumId="9002">
+                <w:nsid w:val="{nsid}"/>
+                <w:multiLevelType w:val="hybridMultilevel"/>
+''' + '\n'.join(levels) + '''
+            </w:abstractNum>
+            '''
             numbering_part.element.append(parse_xml(abstract_xml))
 
     def create_num(self, abstract_num_id, restart=True):
@@ -105,7 +131,20 @@ class NumberingInjector:
             numbering_part = self.doc.part.numbering_part
             new_num_id = self.next_num_id
             self.next_num_id += 1
-            num_xml = f'\n            <w:num xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:numId="{new_num_id}">\n                <w:abstractNumId w:val="{abstract_num_id}"/>\n                <w:lvlOverride w:ilvl="0">\n                    <w:startOverride w:val="1"/>\n                </w:lvlOverride>\n            </w:num>\n            '
+            
+            overrides = ""
+            if restart:
+                for i in range(9):
+                    overrides += f'''
+                <w:lvlOverride w:ilvl="{i}">
+                    <w:startOverride w:val="1"/>
+                </w:lvlOverride>'''
+                    
+            num_xml = f'''
+            <w:num xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:numId="{new_num_id}">
+                <w:abstractNumId w:val="{abstract_num_id}"/>{overrides}
+            </w:num>
+            '''
             numbering_part.element.append(parse_xml(num_xml))
             return new_num_id
         except Exception as e:
@@ -457,9 +496,9 @@ class FeishuDocxConverter:
             numPr.get_or_add_numId().val = int(num_id)
             numPr.get_or_add_ilvl().val = int(level)
             ind = pPr.get_or_add_ind()
-            left_indent = 720 * (level + 1)
+            left_indent = 420 * (level + 1)
             ind.set(qn('w:left'), str(left_indent))
-            ind.set(qn('w:hanging'), '360')
+            ind.set(qn('w:hanging'), '420')
         except Exception as e:
             logger.warning(f'设置有序列表属性失败: {e}')
         self._add_runs(p, text_data)
@@ -484,19 +523,47 @@ class FeishuDocxConverter:
             except:
                 pass
             
-            # 注入标识，标记此表格为代码块
-            try:
-                tblPr = table._element.tblPr
-                if tblPr is None:
-                    tblPr = OxmlElement('w:tblPr')
-                    table._element.insert(0, tblPr)
+            # Initial code block table property clearing to avoid inherited auto-fit interference
+            table.autofit = False
+            tblPr = table._element.tblPr
+            if tblPr is not None:
+                # Add code block marker
                 caption = OxmlElement('w:tblCaption')
                 caption.set(qn('w:val'), 'code_block')
                 tblPr.append(caption)
-            except Exception as e:
-                logger.warning(f'标记表格为 code_block 失败: {e}')
-
+                
+                # Force fixed layout
+                tbl_layout = tblPr.find(qn('w:tblLayout'))
+                if tbl_layout is None:
+                    tbl_layout = OxmlElement('w:tblLayout')
+                    tbl_layout.set(qn('w:type'), 'fixed')
+                    tblPr.append(tbl_layout)
+                else:
+                    tbl_layout.set(qn('w:type'), 'fixed')
+                    
+                # Force default width to auto to avoid 7.33cm issue before cleaner runs
+                tbl_w = tblPr.find(qn('w:tblW'))
+                if tbl_w is None:
+                    tbl_w = OxmlElement('w:tblW')
+                    tbl_w.set(qn('w:w'), '0')
+                    tbl_w.set(qn('w:type'), 'auto')
+                    tblPr.append(tbl_w)
+                else:
+                    tbl_w.set(qn('w:w'), '0')
+                    tbl_w.set(qn('w:type'), 'auto')
+                    
             cell = table.cell(0, 0)
+            tcPr = cell._tc.get_or_add_tcPr()
+            tcW = tcPr.find(qn('w:tcW'))
+            if tcW is not None:
+                tcW.set(qn('w:w'), '0')
+                tcW.set(qn('w:type'), 'auto')
+            else:
+                tcW = OxmlElement('w:tcW')
+                tcW.set(qn('w:w'), '0')
+                tcW.set(qn('w:type'), 'auto')
+                tcPr.append(tcW)
+
             self._set_cell_shading(cell, 'F5F5F5')
             if cell.paragraphs:
                 p = cell.paragraphs[0]

@@ -17,8 +17,11 @@
         * { box-sizing: border-box; }
         .page {
             padding: 40px 48px 48px 48px;
-            min-height: 100vh;
+            height: 100vh;
+            min-height: 760px;
             position: relative;
+            display: flex;
+            flex-direction: column;
         }
         .hero {
             background: linear-gradient(135deg, #e3f2ff, #f9f1ff);
@@ -79,6 +82,8 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 24px;
+            flex: 1;
+            min-height: 0;
         }
         .panel {
             background: #ffffff;
@@ -87,6 +92,9 @@
             box-shadow: 0 10px 24px rgba(34, 47, 68, 0.08);
             min-width: 0;
             overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
         }
         .footer-copyright {
             position: fixed;
@@ -134,7 +142,8 @@
             background: #f8fafc;
         }
         .task-list {
-            height: 246px;
+            flex: 1;
+            min-height: 0;
             margin-bottom: 12px;
         }
         .btn-success {
@@ -172,7 +181,6 @@
             display: grid;
             grid-template-columns: 180px 1fr;
             gap: 15px;
-            height: 250px;
             margin-bottom: 20px;
         }
         .list-view {
@@ -468,6 +476,9 @@
             .advanced-grid {
                 grid-template-columns: 1fr;
             }
+            .compact-grid-2 {
+                grid-template-columns: 1fr;
+            }
         }
         .config-group-title {
             font-size: 14px;
@@ -581,7 +592,7 @@
                 
                 <select id="templateSelectMobile" class="mobile-select" onchange="onMobileTemplateChange()"></select>
                 
-                <div class="split-view">
+                <div class="split-view" style="flex: 1; min-height: 0;">
                     <div class="list-view" id="templateList"></div>
                     <div class="preview-pane" id="templatePreview">
                         <div class="centered-placeholder">请选择模板</div>
@@ -592,7 +603,7 @@
                 
                 <select id="styleSelectMobile" class="mobile-select" onchange="onMobileStyleChange()"></select>
                 
-                <div class="split-view" style="height:180px;">
+                <div class="split-view" style="height:180px; flex-shrink: 0;">
                     <div class="list-view" id="styleList"></div>
                     <div class="preview-pane">
                         <div class="preview-content tbl-preview" id="stylePreview">
@@ -699,15 +710,12 @@
                         </div>
                         <div class="option-card full">
                             <div class="option-card-title">页边距管理 (不含封面)</div>
-                            <label class="inline-check">
-                                <input type="checkbox" id="enablePageMargins" onchange="togglePageMargins()">
-                                启用页边距管理
-                            </label>
-                            <div id="pageMarginsConfig" style="display: none;">
+                            <div id="pageMarginsConfig" style="display: block;">
                                 <div class="form-group">
                                     <label style="font-size: 12px; color: #64748b;">快速选择预设</label>
                                     <select id="marginPreset" onchange="applyMarginPreset(this.value)" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                                        <option value="custom" selected>自定义</option>
+                                        <option value="none" selected>不修改 (保持原样)</option>
+                                        <option value="custom">自定义</option>
                                         <option value="normal">普通 (上下2.54, 左右3.18)</option>
                                         <option value="narrow">窄 (上下左右1.27)</option>
                                         <option value="wide">宽 (上下2.54, 左右5.08)</option>
@@ -717,42 +725,37 @@
                                 <div class="compact-grid-2">
                                     <div>
                                         <label style="font-size: 12px; color: #64748b;">上边距 (cm)</label>
-                                        <input type="number" id="marginTop" value="2.54" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="document.getElementById('marginPreset').value='custom'">
+                                        <input type="number" id="marginTop" placeholder="留空则跟随模板样式" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="document.getElementById('marginPreset').value='custom'">
                                     </div>
                                     <div>
                                         <label style="font-size: 12px; color: #64748b;">下边距 (cm)</label>
-                                        <input type="number" id="marginBottom" value="2.54" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="document.getElementById('marginPreset').value='custom'">
+                                        <input type="number" id="marginBottom" placeholder="留空则跟随模板样式" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="document.getElementById('marginPreset').value='custom'">
                                     </div>
                                     <div>
                                         <label style="font-size: 12px; color: #64748b;">左边距 (cm)</label>
-                                        <input type="number" id="marginLeft" value="3.18" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="document.getElementById('marginPreset').value='custom'">
+                                        <input type="number" id="marginLeft" placeholder="留空则跟随模板样式" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="document.getElementById('marginPreset').value='custom'">
                                     </div>
                                     <div>
                                         <label style="font-size: 12px; color: #64748b;">右边距 (cm)</label>
-                                        <input type="number" id="marginRight" value="3.18" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="document.getElementById('marginPreset').value='custom'">
+                                        <input type="number" id="marginRight" placeholder="留空则跟随模板样式" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="document.getElementById('marginPreset').value='custom'">
                                     </div>
                                 </div>
                             </div>
                         </div>
                         <div class="option-card full">
-                            <div class="option-card-title">文档信息管理</div>
-                            <label class="inline-check">
-                                <input type="checkbox" id="enableDocumentInfo" onchange="toggleDocumentInfo()">
-                                启用文档信息管理
-                            </label>
-                            <div id="documentInfoConfig" style="display: none;">
-                                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:10px; flex-wrap:wrap;">
-                                    <div style="font-size:12px; color:#64748b;">留空将清空对应文档信息，时间字段支持直接选择或一键填入当前时间</div>
-                                    <button type="button" onclick="resetDocumentInfoFields()" style="padding:6px 10px; border:1px solid #d9e4f5; border-radius:6px; background:#fff; color:#475569; cursor:pointer;">清空全部字段</button>
-                                </div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                                <div class="option-card-title" style="margin-bottom:0;">文档信息管理</div>
+                                <button type="button" onclick="resetDocumentInfoFields()" style="padding:6px 10px; border:1px solid #d9e4f5; border-radius:6px; background:#fff; color:#475569; cursor:pointer;">清空全部字段</button>
+                            </div>
+                            <div id="documentInfoConfig" style="display: block;">
                                 <div class="compact-grid-2">
                                     <div>
                                         <label style="font-size: 12px; color: #64748b;">作者</label>
-                                        <input type="text" id="docInfoAuthor" placeholder="如：张三" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                        <input type="text" id="docInfoAuthor" placeholder="默认留空" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
                                     </div>
                                     <div>
                                         <label style="font-size: 12px; color: #64748b;">上次修改者</label>
-                                        <input type="text" id="docInfoLastModifiedBy" placeholder="如：李四" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                        <input type="text" id="docInfoLastModifiedBy" placeholder="默认留空" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
                                     </div>
                                     <div>
                                         <label style="font-size: 12px; color: #64748b;">创建时间</label>
@@ -780,7 +783,7 @@
                                     </div>
                                     <div>
                                         <label style="font-size: 12px; color: #64748b;">编辑时间统计 (分钟)</label>
-                                        <input type="number" id="docInfoTotalTime" min="0" step="1" placeholder="如：45" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                        <input type="number" id="docInfoTotalTime" min="0" step="1" placeholder="默认留空" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
                                     </div>
                                     <div>
                                         <label style="font-size: 12px; color: #64748b;">标题</label>
@@ -796,11 +799,11 @@
                                     </div>
                                     <div>
                                         <label style="font-size: 12px; color: #64748b;">单位</label>
-                                        <input type="text" id="docInfoCompany" placeholder="如：某某公司/部门" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                        <input type="text" id="docInfoCompany" placeholder="默认留空" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
                                     </div>
                                     <div>
                                         <label style="font-size: 12px; color: #64748b;">模板</label>
-                                        <input type="text" id="docInfoTemplate" placeholder="默认留空，手动填写时覆盖" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                        <input type="text" id="docInfoTemplate" placeholder="默认留空" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
                                     </div>
                                 </div>
                             </div>
@@ -815,36 +818,29 @@
                                 <input type="checkbox" id="ignoreMention">
                                 忽略文本中@人员转换
                             </label>
-                            <label class="inline-check">
-                                <input type="checkbox" id="enableListStyle" onchange="toggleListStyle()" checked>
-                                添加无序列表样式
-                            </label>
-                            <div id="listStyleConfig">
+                            <div id="listStyleConfig" style="margin-top: 10px;">
+                                <label style="font-size: 12px; color: #64748b; display: block; margin-bottom: 6px;">无序列表样式</label>
                                 <select id="unorderedListStyle" style="width: 100%; padding: 8px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    <option value="none">不处理 (保持原样)</option>
                                     <option value="default" selected>一级 ● | 二级 ○</option>
                                     <option value="square">一级 ■ | 二级 □</option>
                                     <option value="diamond">一级 ◆ | 二级 ◇</option>
                                     <option value="arrow">一级 ➢ | 二级 ➤</option>
-                                    <option value="none">无符号</option>
                                 </select>
                                 <div style="font-size:12px; color:#666; margin-top:6px;">
-                                    选择“作为正文处理”时，列表符号会移除并按正文缩进处理
+                                    选择“不处理”时，列表符号会移除并按正文缩进处理
                                 </div>
                             </div>
                         </div>
                         <div class="option-card full">
                             <div class="option-card-title">正文样式</div>
-                            <label class="inline-check">
-                                <input type="checkbox" id="enableBodyStyle" onchange="toggleBodyStyle()">
-                                调整正文样式
-                            </label>
-                            <div id="bodyStyleConfig" class="compact-grid-2" style="display: none;">
+                            <div id="bodyStyleConfig" class="compact-grid-2" style="display: grid; margin-top: 10px;">
                                 <div>
                                     <label style="font-size: 12px; color: #64748b;">字号 (磅)</label>
                                     <div style="display: flex; gap: 5px;">
-                                        <input type="number" id="styleFontSize" value="12" step="0.5" style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="syncFontSizeSelect(this.value)">
+                                        <input type="number" id="styleFontSize" placeholder="留空则跟随模板样式" step="0.5" style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="syncFontSizeSelect(this.value)">
                                         <select id="styleFontSizeSelect" onchange="document.getElementById('styleFontSize').value=this.value" style="width: 80px; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                                            <option value="">-</option>
+                                            <option value="" selected>-</option>
                                             <option value="42">初号</option>
                                             <option value="36">小初</option>
                                             <option value="26">一号</option>
@@ -854,7 +850,7 @@
                                             <option value="16">三号</option>
                                             <option value="15">小三</option>
                                             <option value="14">四号</option>
-                                            <option value="12" selected>小四</option>
+                                            <option value="12">小四</option>
                                             <option value="10.5">五号</option>
                                             <option value="9">小五</option>
                                             <option value="7.5">六号</option>
@@ -867,7 +863,7 @@
                                 <div>
                                     <label style="font-size: 12px; color: #64748b;">行间距</label>
                                     <div style="display: flex; gap: 5px;">
-                                        <input type="number" id="styleLineSpacing" value="1.5" step="0.1" style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                        <input type="number" id="styleLineSpacing" placeholder="留空则跟随模板样式" step="0.1" style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
                                         <select id="styleLineSpacingUnit" style="width: 80px; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
                                             <option value="lines">倍</option>
                                             <option value="pt">磅</option>
@@ -877,7 +873,7 @@
                                 <div>
                                     <label style="font-size: 12px; color: #64748b;">段前</label>
                                     <div style="display: flex; gap: 5px;">
-                                        <input type="number" id="styleSpaceBefore" value="0" step="0.5" style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                        <input type="number" id="styleSpaceBefore" placeholder="留空则跟随模板样式" step="0.5" style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
                                         <select id="styleSpaceBeforeUnit" style="width: 80px; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
                                             <option value="lines">行</option>
                                             <option value="pt">磅</option>
@@ -887,7 +883,7 @@
                                 <div>
                                     <label style="font-size: 12px; color: #64748b;">段后</label>
                                     <div style="display: flex; gap: 5px;">
-                                        <input type="number" id="styleSpaceAfter" value="0" step="0.5" style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                        <input type="number" id="styleSpaceAfter" placeholder="留空则跟随模板样式" step="0.5" style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
                                         <select id="styleSpaceAfterUnit" style="width: 80px; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
                                             <option value="lines">行</option>
                                             <option value="pt">磅</option>
@@ -902,26 +898,38 @@
                     <div class="advanced-grid">
                         <div class="option-card full">
                             <div class="option-card-title">图片样式</div>
-                            <label class="inline-check">
-                                <input type="checkbox" id="enableImageStyle" onchange="toggleImageStyle()" checked>
-                                调整图片样式
-                            </label>
-                            <div id="imageStyleConfig" class="compact-grid-2" style="display: grid;">
-                                <div>
-                                    <label style="font-size: 12px; color: #64748b;">最大宽度 (cm)</label>
-                                    <input type="number" id="imageMaxWidth" value="16" step="0.5" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                            <div id="imageStyleConfig" style="display: block;">
+                                <div class="compact-grid-2">
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">最大宽度 (cm)</label>
+                                        <input type="number" id="imageMaxWidth" placeholder="留空则跟随模板样式" step="0.5" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">最大高度 (cm)</label>
+                                        <input type="number" id="imageMaxHeight" placeholder="留空则跟随模板样式" step="0.5" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">对齐方式</label>
+                                        <select id="imageAlign" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                            <option value="none">不处理</option>
+                                            <option value="center" selected>居中</option>
+                                            <option value="left">居左</option>
+                                            <option value="right">居右</option>
+                                        </select>
+                                    </div>
                                 </div>
-                                <div>
-                                    <label style="font-size: 12px; color: #64748b;">最大高度 (cm)</label>
-                                    <input type="number" id="imageMaxHeight" value="23" step="0.5" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                <div class="option-divider" style="margin-top: 10px;">
+                                    <div class="option-card-title" style="font-size: 13px; color: #475569; margin-bottom: 8px;">表格图片覆盖设置</div>
                                 </div>
-                                <div>
-                                    <label style="font-size: 12px; color: #64748b;">对齐方式</label>
-                                    <select id="imageAlign" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
-                                        <option value="center" selected>居中</option>
-                                        <option value="left">居左</option>
-                                        <option value="right">居右</option>
-                                    </select>
+                                <div id="tableImageStyleConfig" class="compact-grid-2" style="display: grid;">
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">最大宽度 (cm)</label>
+                                        <input type="number" id="tableImageMaxWidth" placeholder="留空则跟随全局图片样式" step="0.5" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">最大高度 (cm)</label>
+                                        <input type="number" id="tableImageMaxHeight" placeholder="留空则跟随全局图片样式" step="0.5" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -930,17 +938,32 @@
                 <div class="modal-tab-content" id="tab-table">
                     <div class="advanced-grid">
                         <div class="option-card full">
-                            <div class="option-card-title">表格清洗设置</div>
-                            <label class="inline-check">
-                                <input type="checkbox" id="enableTableCleaning" onchange="toggleTableCleaning()" checked>
-                                启用表格清洗
-                            </label>
+                            <div class="option-card-title">表格清理设置</div>
                             <div id="tableCleaningConfig" style="display: block;">
                                 <label class="inline-check">
                                     <input type="checkbox" id="tableForceClearIndent" checked>
                                     强制清除表格缩进
                                 </label>
+                                <label class="inline-check">
+                                    <input type="checkbox" id="tableForceClearImageSpace" checked>
+                                    强制清除表格图片段前间距
+                                </label>
+                                <label class="inline-check">
+                                    <input type="checkbox" id="tableAutoFit" checked>
+                                    启用表格自适应
+                                </label>
                                 <div class="compact-grid-2">
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">表格宽度</label>
+                                        <input type="text" id="tableWidth" value="100%" placeholder="如 100% 或 15cm" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">表格单列最小宽度 (字符)</label>
+                                        <div style="position: relative;">
+                                            <input type="number" id="tableMinColWidth" value="8" min="1" max="100" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;" oninput="validateTableMinColWidth(this)">
+                                            <div id="tableMinColWidthError" style="display: none; color: #ef4444; font-size: 11px; margin-top: 4px;">范围在1-100字符之间</div>
+                                        </div>
+                                    </div>
                                     <div>
                                         <label style="font-size: 12px; color: #64748b;">表头文字对齐</label>
                                         <select id="tableHeaderAlign" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
@@ -957,6 +980,30 @@
                                             <option value="right">居右</option>
                                         </select>
                                     </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">内容图片对齐</label>
+                                        <select id="tableContentImageAlign" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                            <option value="center">居中</option>
+                                            <option value="left" selected>居左</option>
+                                            <option value="right">居右</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="option-divider">
+                                    <div class="compact-grid-2">
+                                        <div>
+                                            <label style="font-size: 12px; color: #64748b;">行间距 (行)</label>
+                                            <input type="number" id="tableLineSpacing" placeholder="留空则跟随模板样式" step="0.1" min="0" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                        </div>
+                                        <div>
+                                            <label style="font-size: 12px; color: #64748b;">段前距 (行)</label>
+                                            <input type="number" id="tableSpaceBefore" placeholder="留空则跟随模板样式" step="0.1" min="0" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                        </div>
+                                        <div>
+                                            <label style="font-size: 12px; color: #64748b;">段后距 (行)</label>
+                                            <input type="number" id="tableSpaceAfter" placeholder="留空则跟随模板样式" step="0.1" min="0" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -966,10 +1013,6 @@
                     <div class="advanced-grid">
                         <div class="option-card full">
                             <div class="option-card-title">代码块样式处理</div>
-                            <label class="inline-check">
-                                <input type="checkbox" id="enableCodeBlockStyle" onchange="toggleCodeBlockStyle()" checked>
-                                启用代码块样式
-                            </label>
                             <div id="codeBlockStyleConfig" style="display: block;">
                                 <div class="compact-grid-2">
                                     <div>
@@ -1001,6 +1044,26 @@
                                             <option value="center">居中</option>
                                             <option value="right">居右</option>
                                         </select>
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">表格宽度 (cm)</label>
+                                        <input type="number" id="codeTableWidth" placeholder="留空则跟随模板样式" step="0.5" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    </div>
+                                </div>
+                                <div class="option-divider">
+                                    <div class="compact-grid-2">
+                                        <div>
+                                            <label style="font-size: 12px; color: #64748b;">行间距 (行)</label>
+                                            <input type="number" id="codeLineSpacing" placeholder="留空则跟随模板样式" step="0.1" min="0" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                        </div>
+                                        <div>
+                                            <label style="font-size: 12px; color: #64748b;">段前距 (行)</label>
+                                            <input type="number" id="codeSpaceBefore" placeholder="留空则跟随模板样式" step="0.1" min="0" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                        </div>
+                                        <div>
+                                            <label style="font-size: 12px; color: #64748b;">段后距 (行)</label>
+                                            <input type="number" id="codeSpaceAfter" placeholder="留空则跟随模板样式" step="0.1" min="0" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="option-divider">
@@ -1093,6 +1156,11 @@
         let selectedStyle = "1";
         let tasks = [];
         let selectedTaskId = "";
+        
+        document.addEventListener("DOMContentLoaded", () => {
+            setDocumentInfoDateTimeNow("docInfoCreated");
+            setDocumentInfoDateTimeNow("docInfoModified");
+        });
         
         // 这些变量将在后端渲染时被替换
         const templates = [/* template_json */];
@@ -1235,7 +1303,7 @@
             
             const t = templates.find(x => x.name === name);
             if (t && t.has_png) {
-                preview.innerHTML = `<img src="/api/template_preview/${encodeURIComponent(name)}" style="width:100%; height:auto; display:block;" onerror="this.onerror=null;this.parentNode.innerHTML='无法预览';"/>`;
+                preview.innerHTML = `<img src="/api/template_preview/${encodeURIComponent(name)}" style="max-width:100%; max-height:100%; object-fit:contain; display:block; margin:auto;" onerror="this.onerror=null;this.parentNode.innerHTML='无法预览';"/>`;
                 return;
             }
 
@@ -1275,17 +1343,43 @@
         
         function previewStyle(id) {
             const preview = document.getElementById("stylePreview");
+            let minColWidth = 120;
+            const minColWidthInput = document.getElementById("tableMinColWidth");
+            if (minColWidthInput) {
+                const val = parseInt(minColWidthInput.value);
+                if (!isNaN(val) && val >= 60 && val <= 500) {
+                    minColWidth = val;
+                }
+            }
             const html = `
-                <table class="style-${id}">
-                    <thead>
-                        <tr><th>项目</th><th>说明</th><th>备注</th></tr>
-                    </thead>
-                    <tbody>
-                        <tr><td>样例 A</td><td>字段示例</td><td>可替换</td></tr>
-                        <tr><td>样例 B</td><td>字段示例</td><td>可替换</td></tr>
-                        <tr><td>样例 C</td><td>字段示例</td><td>可替换</td></tr>
-                    </tbody>
-                </table>
+                <div style="width: 100%; overflow-x: auto;">
+                    <table class="style-${id}" style="min-width: max-content;">
+                        <thead>
+                            <tr>
+                                <th style="min-width: ${minColWidth}px;">项目</th>
+                                <th style="min-width: ${minColWidth}px;">说明</th>
+                                <th style="min-width: ${minColWidth}px;">备注</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td style="min-width: ${minColWidth}px;">样例 A</td>
+                                <td style="min-width: ${minColWidth}px;">字段示例</td>
+                                <td style="min-width: ${minColWidth}px;">可替换</td>
+                            </tr>
+                            <tr>
+                                <td style="min-width: ${minColWidth}px;">样例 B</td>
+                                <td style="min-width: ${minColWidth}px;">字段示例</td>
+                                <td style="min-width: ${minColWidth}px;">可替换</td>
+                            </tr>
+                            <tr>
+                                <td style="min-width: ${minColWidth}px;">样例 C</td>
+                                <td style="min-width: ${minColWidth}px;">字段示例</td>
+                                <td style="min-width: ${minColWidth}px;">可替换</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             `;
             preview.innerHTML = html;
         }
@@ -1297,48 +1391,82 @@
             const ignoreMention = document.getElementById("ignoreMention").checked;
             if (!validateDocumentInfoInputs()) return;
             
-            let unorderedListStyle = "none";
-            if (document.getElementById("enableListStyle").checked) {
-                unorderedListStyle = document.getElementById("unorderedListStyle").value;
-            }
+            let unorderedListStyle = document.getElementById("unorderedListStyle").value;
             
             // Collect Body Style Options
             let bodyStyle = null;
-            if (document.getElementById("enableBodyStyle").checked) {
+            const styleFontSize = document.getElementById("styleFontSize").value.trim();
+            const styleLineSpacing = document.getElementById("styleLineSpacing").value.trim();
+            const styleSpaceBefore = document.getElementById("styleSpaceBefore").value.trim();
+            const styleSpaceAfter = document.getElementById("styleSpaceAfter").value.trim();
+            
+            if (styleFontSize || styleLineSpacing || styleSpaceBefore || styleSpaceAfter) {
                 bodyStyle = {
-                    fontSize: parseFloat(document.getElementById("styleFontSize").value),
-                    lineSpacing: parseFloat(document.getElementById("styleLineSpacing").value),
+                    fontSize: styleFontSize ? parseFloat(styleFontSize) : null,
+                    lineSpacing: styleLineSpacing ? parseFloat(styleLineSpacing) : null,
                     lineSpacingUnit: document.getElementById("styleLineSpacingUnit").value,
-                    spaceBefore: parseFloat(document.getElementById("styleSpaceBefore").value),
+                    spaceBefore: styleSpaceBefore ? parseFloat(styleSpaceBefore) : null,
                     spaceBeforeUnit: document.getElementById("styleSpaceBeforeUnit").value,
-                    spaceAfter: parseFloat(document.getElementById("styleSpaceAfter").value),
+                    spaceAfter: styleSpaceAfter ? parseFloat(styleSpaceAfter) : null,
                     spaceAfterUnit: document.getElementById("styleSpaceAfterUnit").value
                 };
             }
 
             // Collect Image Style Options
             let imageStyle = null;
-            if (document.getElementById("enableImageStyle").checked) {
+            const imageMaxWidth = document.getElementById("imageMaxWidth").value.trim();
+            const imageMaxHeight = document.getElementById("imageMaxHeight").value.trim();
+            const imageAlign = document.getElementById("imageAlign").value;
+            
+            if (imageMaxWidth || imageMaxHeight || imageAlign !== "none") {
                 imageStyle = {
-                    maxWidth: parseFloat(document.getElementById("imageMaxWidth").value),
-                    maxHeight: parseFloat(document.getElementById("imageMaxHeight").value),
-                    align: document.getElementById("imageAlign").value
+                    maxWidth: imageMaxWidth ? parseFloat(imageMaxWidth) : null,
+                    maxHeight: imageMaxHeight ? parseFloat(imageMaxHeight) : null,
+                    align: imageAlign === "none" ? null : imageAlign
+                };
+            }
+            
+            const tableImageMaxWidth = document.getElementById("tableImageMaxWidth").value.trim();
+            const tableImageMaxHeight = document.getElementById("tableImageMaxHeight").value.trim();
+            
+            if (tableImageMaxWidth || tableImageMaxHeight) {
+                if (!imageStyle) imageStyle = {};
+                imageStyle.tableImageStyle = {
+                    maxWidth: tableImageMaxWidth ? parseFloat(tableImageMaxWidth) : null,
+                    maxHeight: tableImageMaxHeight ? parseFloat(tableImageMaxHeight) : null
                 };
             }
 
             // Collect Table Cleaning Options
             let tableConfig = null;
-            if (document.getElementById("enableTableCleaning").checked) {
-                tableConfig = {
-                    forceClearIndent: document.getElementById("tableForceClearIndent").checked,
-                    headerAlign: document.getElementById("tableHeaderAlign").value,
-                    contentAlign: document.getElementById("tableContentAlign").value
-                };
+            const minColWidthInput = document.getElementById("tableMinColWidth");
+            let minColWidth = parseInt(minColWidthInput.value);
+            if (isNaN(minColWidth) || minColWidth < 1 || minColWidth > 100) {
+                minColWidth = 8; // fallback to default
             }
+            
+            const tableLineSpacing = document.getElementById("tableLineSpacing").value.trim();
+            const tableSpaceBefore = document.getElementById("tableSpaceBefore").value.trim();
+            const tableSpaceAfter = document.getElementById("tableSpaceAfter").value.trim();
+            
+            tableConfig = {
+                forceClearIndent: document.getElementById("tableForceClearIndent").checked,
+                forceClearImageSpace: document.getElementById("tableForceClearImageSpace").checked,
+                autoFit: document.getElementById("tableAutoFit").checked,
+                width: document.getElementById("tableWidth").value.trim(),
+                minColWidth: minColWidth,
+                headerAlign: document.getElementById("tableHeaderAlign").value,
+                contentAlign: document.getElementById("tableContentAlign").value,
+                contentImageAlign: document.getElementById("tableContentImageAlign").value,
+                lineSpacing: tableLineSpacing ? parseFloat(tableLineSpacing) : null,
+                spaceBefore: tableSpaceBefore ? parseFloat(tableSpaceBefore) : null,
+                spaceAfter: tableSpaceAfter ? parseFloat(tableSpaceAfter) : null
+            };
 
             // Collect Margin Config Options
             let marginConfig = null;
-            if (document.getElementById("enablePageMargins").checked) {
+            const marginPreset = document.getElementById("marginPreset").value;
+            if (marginPreset !== "none") {
                 marginConfig = {
                     top: parseFloat(document.getElementById("marginTop").value),
                     bottom: parseFloat(document.getElementById("marginBottom").value),
@@ -1349,39 +1477,57 @@
 
             // Collect Code Block Config Options
             let codeBlockConfig = null;
-            if (document.getElementById("enableCodeBlockStyle").checked) {
-                codeBlockConfig = {
-                    bgColor: document.getElementById("codeBgColor").value,
-                    fontColor: document.getElementById("codeFontColor").value,
-                    fontFamily: document.getElementById("codeFontFamily").value,
-                    fontSize: parseFloat(document.getElementById("codeFontSize").value),
-                    align: document.getElementById("codeAlign").value,
-                    forceClearIndent: document.getElementById("codeForceClearIndent").checked,
-                    borderColor: document.getElementById("codeBorderColor").value,
-                    borders: {
-                        top: { type: document.getElementById("codeBorderTopType").value, width: parseInt(document.getElementById("codeBorderTopWidth").value) },
-                        bottom: { type: document.getElementById("codeBorderBottomType").value, width: parseInt(document.getElementById("codeBorderBottomWidth").value) },
-                        left: { type: document.getElementById("codeBorderLeftType").value, width: parseInt(document.getElementById("codeBorderLeftWidth").value) },
-                        right: { type: document.getElementById("codeBorderRightType").value, width: parseInt(document.getElementById("codeBorderRightWidth").value) }
-                    }
-                };
-            }
+            const codeTableWidth = document.getElementById("codeTableWidth").value.trim();
+            const codeLineSpacing = document.getElementById("codeLineSpacing").value.trim();
+            const codeSpaceBefore = document.getElementById("codeSpaceBefore").value.trim();
+            const codeSpaceAfter = document.getElementById("codeSpaceAfter").value.trim();
+            
+            codeBlockConfig = {
+                bgColor: document.getElementById("codeBgColor").value,
+                fontColor: document.getElementById("codeFontColor").value,
+                fontFamily: document.getElementById("codeFontFamily").value,
+                fontSize: parseFloat(document.getElementById("codeFontSize").value),
+                align: document.getElementById("codeAlign").value,
+                tableWidth: codeTableWidth ? parseFloat(codeTableWidth) : null,
+                lineSpacing: codeLineSpacing ? parseFloat(codeLineSpacing) : null,
+                spaceBefore: codeSpaceBefore ? parseFloat(codeSpaceBefore) : null,
+                spaceAfter: codeSpaceAfter ? parseFloat(codeSpaceAfter) : null,
+                forceClearIndent: document.getElementById("codeForceClearIndent").checked,
+                borderColor: document.getElementById("codeBorderColor").value,
+                borders: {
+                    top: { type: document.getElementById("codeBorderTopType").value, width: parseInt(document.getElementById("codeBorderTopWidth").value) },
+                    bottom: { type: document.getElementById("codeBorderBottomType").value, width: parseInt(document.getElementById("codeBorderBottomWidth").value) },
+                    left: { type: document.getElementById("codeBorderLeftType").value, width: parseInt(document.getElementById("codeBorderLeftWidth").value) },
+                    right: { type: document.getElementById("codeBorderRightType").value, width: parseInt(document.getElementById("codeBorderRightWidth").value) }
+                }
+            };
 
             let documentInfo = null;
-            if (document.getElementById("enableDocumentInfo").checked) {
-                const totalTimeValue = document.getElementById("docInfoTotalTime").value.trim();
+            const docInfoAuthor = document.getElementById("docInfoAuthor").value.trim();
+            const docInfoLastModifiedBy = document.getElementById("docInfoLastModifiedBy").value.trim();
+            const docInfoCreated = document.getElementById("docInfoCreated").value || "";
+            const docInfoModified = document.getElementById("docInfoModified").value || "";
+            const docInfoLastPrinted = document.getElementById("docInfoLastPrinted").value || "";
+            const docInfoTotalTime = document.getElementById("docInfoTotalTime").value.trim();
+            const docInfoTitle = document.getElementById("docInfoTitle").value.trim();
+            const docInfoCategory = document.getElementById("docInfoCategory").value.trim();
+            const docInfoSubject = document.getElementById("docInfoSubject").value.trim();
+            const docInfoCompany = document.getElementById("docInfoCompany").value.trim();
+            const docInfoTemplate = document.getElementById("docInfoTemplate").value.trim();
+            
+            if (docInfoAuthor || docInfoLastModifiedBy || docInfoCreated || docInfoModified || docInfoLastPrinted || docInfoTotalTime || docInfoTitle || docInfoCategory || docInfoSubject || docInfoCompany || docInfoTemplate) {
                 documentInfo = {
-                    author: document.getElementById("docInfoAuthor").value.trim(),
-                    lastModifiedBy: document.getElementById("docInfoLastModifiedBy").value.trim(),
-                    created: document.getElementById("docInfoCreated").value || "",
-                    modified: document.getElementById("docInfoModified").value || "",
-                    lastPrinted: document.getElementById("docInfoLastPrinted").value || "",
-                    totalTime: totalTimeValue === "" ? null : parseInt(totalTimeValue, 10),
-                    title: document.getElementById("docInfoTitle").value.trim(),
-                    category: document.getElementById("docInfoCategory").value.trim(),
-                    subject: document.getElementById("docInfoSubject").value.trim(),
-                    company: document.getElementById("docInfoCompany").value.trim(),
-                    template: document.getElementById("docInfoTemplate").value.trim()
+                    author: docInfoAuthor,
+                    lastModifiedBy: docInfoLastModifiedBy,
+                    created: docInfoCreated,
+                    modified: docInfoModified,
+                    lastPrinted: docInfoLastPrinted,
+                    totalTime: docInfoTotalTime ? parseInt(docInfoTotalTime) : null,
+                    title: docInfoTitle,
+                    category: docInfoCategory,
+                    subject: docInfoSubject,
+                    company: docInfoCompany,
+                    template: docInfoTemplate
                 };
             }
 
@@ -1637,51 +1783,54 @@
             document.getElementById("addTitle").checked = false;
             document.getElementById("ignoreMention").checked = false;
             
-            document.getElementById("enableListStyle").checked = true;
             document.getElementById("unorderedListStyle").value = "default";
-            toggleListStyle();
             
-            document.getElementById("enableBodyStyle").checked = false;
-            document.getElementById("styleFontSize").value = "12";
-            document.getElementById("styleFontSizeSelect").value = "12";
-            document.getElementById("styleLineSpacing").value = "1.5";
+            document.getElementById("styleFontSize").value = "";
+            document.getElementById("styleFontSizeSelect").value = "";
+            document.getElementById("styleLineSpacing").value = "";
             document.getElementById("styleLineSpacingUnit").value = "lines";
-            document.getElementById("styleSpaceBefore").value = "0";
+            document.getElementById("styleSpaceBefore").value = "";
             document.getElementById("styleSpaceBeforeUnit").value = "lines";
-            document.getElementById("styleSpaceAfter").value = "0";
+            document.getElementById("styleSpaceAfter").value = "";
             document.getElementById("styleSpaceAfterUnit").value = "lines";
-            toggleBodyStyle();
 
-            document.getElementById("enableImageStyle").checked = true;
-            document.getElementById("imageMaxWidth").value = "[/* image_max_width */]";
-            document.getElementById("imageMaxHeight").value = "[/* image_max_height */]";
+            document.getElementById("imageMaxWidth").value = "";
+            document.getElementById("imageMaxHeight").value = "";
             document.getElementById("imageAlign").value = "center";
-            toggleImageStyle();
-
-            document.getElementById("enableTableCleaning").checked = true;
+            
+            document.getElementById("tableImageMaxWidth").value = "";
+            document.getElementById("tableImageMaxHeight").value = "";
+            
             document.getElementById("tableForceClearIndent").checked = true;
+            document.getElementById("tableForceClearImageSpace").checked = true;
+            document.getElementById("tableAutoFit").checked = true;
+            document.getElementById("tableWidth").value = "100%";
+            document.getElementById("tableMinColWidth").value = "8";
+            validateTableMinColWidth(document.getElementById("tableMinColWidth"));
             document.getElementById("tableHeaderAlign").value = "center";
             document.getElementById("tableContentAlign").value = "left";
-            toggleTableCleaning();
+            document.getElementById("tableContentImageAlign").value = "left";
+            document.getElementById("tableLineSpacing").value = "";
+            document.getElementById("tableSpaceBefore").value = "";
+            document.getElementById("tableSpaceAfter").value = "";
 
-            document.getElementById("enablePageMargins").checked = false;
-            document.getElementById("marginPreset").value = "custom";
-            document.getElementById("marginTop").value = "2.54";
-            document.getElementById("marginBottom").value = "2.54";
-            document.getElementById("marginLeft").value = "3.18";
-            document.getElementById("marginRight").value = "3.18";
-            togglePageMargins();
+            document.getElementById("marginPreset").value = "none";
+            document.getElementById("marginTop").value = "";
+            document.getElementById("marginBottom").value = "";
+            document.getElementById("marginLeft").value = "";
+            document.getElementById("marginRight").value = "";
 
-            document.getElementById("enableDocumentInfo").checked = false;
             resetDocumentInfoFields();
-            toggleDocumentInfo();
 
-            document.getElementById("enableCodeBlockStyle").checked = true;
             document.getElementById("codeBgColor").value = "#F5F5F5";
             document.getElementById("codeFontColor").value = "#000000";
             document.getElementById("codeFontFamily").value = "Courier New";
             document.getElementById("codeFontSize").value = "9";
             document.getElementById("codeAlign").value = "left";
+            document.getElementById("codeTableWidth").value = "";
+            document.getElementById("codeLineSpacing").value = "";
+            document.getElementById("codeSpaceBefore").value = "";
+            document.getElementById("codeSpaceAfter").value = "";
             document.getElementById("codeForceClearIndent").checked = true;
             document.getElementById("codeBorderColor").value = "#D9D9D9";
             document.getElementById("codeBorderTopType").value = "single";
@@ -1692,7 +1841,6 @@
             document.getElementById("codeBorderLeftWidth").value = "4";
             document.getElementById("codeBorderRightType").value = "single";
             document.getElementById("codeBorderRightWidth").value = "4";
-            toggleCodeBlockStyle();
         }
 
         function toggleListStyle() {
@@ -1700,34 +1848,19 @@
             document.getElementById("listStyleConfig").style.display = checked ? "block" : "none";
         }
 
-        function toggleBodyStyle() {
-            const checked = document.getElementById("enableBodyStyle").checked;
-            document.getElementById("bodyStyleConfig").style.display = checked ? "grid" : "none";
-        }
-
-        function toggleImageStyle() {
-            const checked = document.getElementById("enableImageStyle").checked;
-            document.getElementById("imageStyleConfig").style.display = checked ? "grid" : "none";
-        }
-
-        function toggleTableCleaning() {
-            const checked = document.getElementById("enableTableCleaning").checked;
-            document.getElementById("tableCleaningConfig").style.display = checked ? "block" : "none";
-        }
-
-        function togglePageMargins() {
-            const checked = document.getElementById("enablePageMargins").checked;
-            document.getElementById("pageMarginsConfig").style.display = checked ? "block" : "none";
-        }
-
-        function toggleDocumentInfo() {
-            const checked = document.getElementById("enableDocumentInfo").checked;
-            document.getElementById("documentInfoConfig").style.display = checked ? "block" : "none";
-        }
-
-        function toggleCodeBlockStyle() {
-            const checked = document.getElementById("enableCodeBlockStyle").checked;
-            document.getElementById("codeBlockStyleConfig").style.display = checked ? "block" : "none";
+        function validateTableMinColWidth(input) {
+            const errorDiv = document.getElementById("tableMinColWidthError");
+            let value = parseInt(input.value);
+            if (isNaN(value) || value < 1 || value > 100) {
+                input.style.borderColor = "#ef4444";
+                errorDiv.style.display = "block";
+            } else {
+                input.style.borderColor = "#d9e4f5";
+                errorDiv.style.display = "none";
+                if (typeof selectedStyle !== "undefined") {
+                    previewStyle(selectedStyle);
+                }
+            }
         }
 
         function setDocumentInfoDateTimeNow(fieldId) {
@@ -1747,10 +1880,11 @@
                 const el = document.getElementById(id);
                 if (el) el.value = "";
             });
+            setDocumentInfoDateTimeNow("docInfoCreated");
+            setDocumentInfoDateTimeNow("docInfoModified");
         }
 
         function validateDocumentInfoInputs() {
-            if (!document.getElementById("enableDocumentInfo").checked) return true;
             const fields = [
                 ["docInfoCreated", "创建时间"],
                 ["docInfoModified", "上次修改时间"],

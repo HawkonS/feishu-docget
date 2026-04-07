@@ -20,6 +20,321 @@ except ImportError:
         IMAGE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image'
 logger = ConfigLoader.get_logger('format_cleaner')
 
+def _align_to_docx(align_value, default=1):
+    align_map = {'left': 0, 'center': 1, 'right': 2}
+    if align_value is None:
+        return default
+    return align_map.get(str(align_value).lower(), default)
+
+def _resolve_image_style(style_config, fallback_width, fallback_height, fallback_align=1):
+    width = fallback_width
+    height = fallback_height
+    align = fallback_align
+    if isinstance(style_config, dict):
+        raw_width = style_config.get('maxWidth')
+        raw_height = style_config.get('maxHeight')
+        try:
+            if raw_width not in (None, ''):
+                width = float(raw_width)
+        except (ValueError, TypeError):
+            pass
+        try:
+            if raw_height not in (None, ''):
+                height = float(raw_height)
+        except (ValueError, TypeError):
+            pass
+        align = _align_to_docx(style_config.get('align'), fallback_align)
+    return width, height, align
+
+def _apply_image_style_to_paragraph(paragraph, ns, ns_wp, max_height, max_width, align, clear_space_before=False):
+    resized = 0
+    aligned = 0
+    xml = paragraph._element.xml
+    is_image = False
+    if 'w:drawing' in xml or 'w:pict' in xml:
+        is_image = True
+        
+    for run in paragraph.runs:
+        drawings = run._element.findall(f'.//{{{ns}}}drawing')
+        for drawing in drawings:
+            inlines = drawing.findall(f'.//{{{ns_wp}}}inline')
+            for inline in inlines:
+                is_image = True
+                if _resize_inline_image(inline, max_height, max_width):
+                    resized += 1
+            anchors = drawing.findall(f'.//{{{ns_wp}}}anchor')
+            for anchor in anchors:
+                is_image = True
+                if _resize_inline_image(anchor, max_height, max_width):
+                    resized += 1
+                    
+    if is_image:
+        _force_clear_indent(paragraph, ns, clear_space_before=clear_space_before)
+        paragraph.alignment = align
+        aligned += 1
+        
+    return resized, aligned
+
+def _get_all_tables(parent):
+    tables = []
+    if hasattr(parent, 'rows'): # parent is a table
+        tables.append(parent)
+        for row in parent.rows:
+            for cell in row.cells:
+                for nested_table in getattr(cell, 'tables', []):
+                    tables.extend(_get_all_tables(nested_table))
+    else: # parent is a document or cell
+        for table in getattr(parent, 'tables', []):
+            tables.extend(_get_all_tables(table))
+    return tables
+
+def _set_table_width(table, width_cm, ns):
+    try:
+        width_cm = float(width_cm)
+    except (ValueError, TypeError):
+        return False
+    if width_cm <= 0:
+        return False
+    width_twips = str(int(width_cm / 2.54 * 1440))
+    try:
+        table.autofit = False
+    except Exception:
+        pass
+    tblPr = table._element.tblPr
+    if tblPr is None:
+        return False
+    tbl_w = tblPr.find(f'{{{ns}}}tblW')
+    if tbl_w is None:
+        tbl_w = parse_xml(f'<w:tblW xmlns:w="{ns}" w:w="{width_twips}" w:type="dxa"/>')
+        tblPr.append(tbl_w)
+    else:
+        tbl_w.set(f'{{{ns}}}w', width_twips)
+        tbl_w.set(f'{{{ns}}}type', 'dxa')
+    tbl_layout = tblPr.find(f'{{{ns}}}tblLayout')
+    if tbl_layout is None:
+        tbl_layout = parse_xml(f'<w:tblLayout xmlns:w="{ns}" w:type="fixed"/>')
+        tblPr.append(tbl_layout)
+    else:
+        tbl_layout.set(f'{{{ns}}}type', 'fixed')
+    for row in table.rows:
+        for cell in row.cells:
+            tc_pr = cell._tc.get_or_add_tcPr()
+            tc_w = tc_pr.find(f'{{{ns}}}tcW')
+            if tc_w is None:
+                tc_w = parse_xml(f'<w:tcW xmlns:w="{ns}" w:w="{width_twips}" w:type="dxa"/>')
+                tc_pr.append(tc_w)
+            else:
+                tc_w.set(f'{{{ns}}}w', width_twips)
+                tc_w.set(f'{{{ns}}}type', 'dxa')
+                
+    # Remove gridCols to ensure fixed width takes effect fully without interference
+    tblGrid = tblPr.getparent().find(f'{{{ns}}}tblGrid')
+    if tblGrid is not None:
+        tblPr.getparent().remove(tblGrid)
+        
+    return True
+
+def _insert_or_update_tblInd(tblPr, ns, w="0", type="dxa"):
+    tblInd = tblPr.find(f'{{{ns}}}tblInd')
+    if tblInd is not None:
+        tblInd.set(f'{{{ns}}}w', str(w))
+        tblInd.set(f'{{{ns}}}type', type)
+        return tblInd
+    
+    tblInd = parse_xml(f'<w:tblInd xmlns:w="{ns}" w:w="{w}" w:type="{type}"/>')
+    tags_after = ['tblBorders', 'shd', 'tblLayout', 'tblCellMar', 'tblLook', 'tblCaption', 'tblDescription']
+    inserted = False
+    for tag in tags_after:
+        el = tblPr.find(f'{{{ns}}}{tag}')
+        if el is not None:
+            el.addprevious(tblInd)
+            inserted = True
+            break
+    if not inserted:
+        tblPr.append(tblInd)
+    return tblInd
+
+def _apply_table_layout(table, width_str, auto_fit, ns, min_col_width=120):
+    changed = False
+    try:
+        table.autofit = False
+        changed = True
+    except Exception:
+        pass
+
+    tblPr = table._element.tblPr
+    if tblPr is None:
+        return changed
+
+    layout_type = 'fixed'
+    tbl_layout = tblPr.find(f'{{{ns}}}tblLayout')
+    if tbl_layout is None:
+        tbl_layout = parse_xml(f'<w:tblLayout xmlns:w="{ns}" w:type="{layout_type}"/>')
+        tags_after = ['tblCellMar', 'tblLook', 'tblCaption', 'tblDescription']
+        inserted = False
+        for tag in tags_after:
+            el = tblPr.find(f'{{{ns}}}{tag}')
+            if el is not None:
+                el.addprevious(tbl_layout)
+                inserted = True
+                break
+        if not inserted:
+            tblPr.append(tbl_layout)
+    else:
+        tbl_layout.set(f'{{{ns}}}type', layout_type)
+
+    w_val = '0'
+    w_type = 'auto'
+    if width_str:
+        width_str = str(width_str).strip().lower()
+        if width_str.endswith('%'):
+            try:
+                pct = float(width_str[:-1])
+                w_val = str(int(pct * 50))
+                w_type = 'pct'
+            except:
+                pass
+        elif width_str == 'auto':
+            w_val = '0'
+            w_type = 'auto'
+        else:
+            try:
+                if width_str.endswith('cm'):
+                    cm_val = float(width_str[:-2])
+                else:
+                    cm_val = float(width_str)
+                w_val = str(int(cm_val / 2.54 * 1440))
+                w_type = 'dxa'
+            except:
+                pass
+    elif auto_fit:
+        w_val = '5000'
+        w_type = 'pct'
+
+    tbl_w = tblPr.find(f'{{{ns}}}tblW')
+    if tbl_w is None:
+        tbl_w = parse_xml(f'<w:tblW xmlns:w="{ns}" w:w="{w_val}" w:type="{w_type}"/>')
+        tags_after = ['jc', 'tblCellSpacing', 'tblInd', 'tblBorders', 'shd', 'tblLayout', 'tblCellMar', 'tblLook', 'tblCaption', 'tblDescription']
+        inserted = False
+        for tag in tags_after:
+            el = tblPr.find(f'{{{ns}}}{tag}')
+            if el is not None:
+                el.addprevious(tbl_w)
+                inserted = True
+                break
+        if not inserted:
+            tblPr.append(tbl_w)
+    else:
+        tbl_w.set(f'{{{ns}}}w', w_val)
+        tbl_w.set(f'{{{ns}}}type', w_type)
+
+    min_col_dxa = int(min_col_width * 240) if min_col_width else 8 * 240
+    is_single_col_fixed = w_type == 'dxa' and all(len(r.cells) == 1 for r in table.rows)
+
+    page_width_dxa = 9070
+    if w_type == 'pct':
+        actual_table_dxa = int((int(w_val) / 5000) * page_width_dxa)
+    elif w_type == 'dxa':
+        actual_table_dxa = int(w_val)
+    else:
+        actual_table_dxa = page_width_dxa
+        
+    min_pct = int((min_col_dxa / actual_table_dxa) * 5000) if actual_table_dxa > 0 else 5000
+
+    final_pcts = {}
+    if not is_single_col_fixed:
+        col_widths = {}
+        for row in table.rows:
+            for i, cell in enumerate(row.cells):
+                max_line_w = 0
+                for p in cell.paragraphs:
+                    text = p.text or ""
+                    line_w = sum(240 if ord(c) > 127 else 120 for c in text)
+                    max_line_w = max(max_line_w, line_w)
+                max_line_w += 200
+                col_widths[i] = max(col_widths.get(i, 0), max_line_w)
+                
+        targets = {i: max(cw, min_col_dxa) for i, cw in col_widths.items()}
+        
+        total_target = sum(targets.values())
+        
+        if total_target <= actual_table_dxa:
+            final_pcts = {i: int((w / actual_table_dxa) * 5000) for i, w in targets.items()}
+            leftover = 5000 - sum(final_pcts.values())
+            if leftover > 0 and targets:
+                max_w = max(targets.values())
+                max_cols = [i for i, w in targets.items() if w == max_w]
+                share = leftover // len(max_cols)
+                for i in max_cols:
+                    final_pcts[i] += share
+                final_pcts[max_cols[0]] += leftover % len(max_cols)
+        else:
+            final_pcts = {i: min_pct for i in targets}
+            leftover = 5000 - sum(final_pcts.values())
+            
+            if leftover < 0:
+                total_min = sum(final_pcts.values())
+                final_pcts = {i: int((min_pct / total_min) * 5000) for i in targets}
+            else:
+                extra_w = {i: targets[i] - min_col_dxa for i in targets}
+                total_extra = sum(extra_w.values())
+                
+                if total_extra > 0:
+                    for i in targets:
+                        share = int((extra_w[i] / total_extra) * leftover)
+                        final_pcts[i] += share
+                    
+                    current_total = sum(final_pcts.values())
+                    if current_total < 5000:
+                        max_extra = max(extra_w.values())
+                        max_col = [i for i, w in extra_w.items() if w == max_extra][0]
+                        final_pcts[max_col] += (5000 - current_total)
+
+    tblGrids = tblPr.getparent().findall(f'{{{ns}}}tblGrid')
+    for tblGrid in tblGrids:
+        gridCols = tblGrid.findall(f'{{{ns}}}gridCol')
+        for i, gridCol in enumerate(gridCols):
+            if is_single_col_fixed:
+                gridCol.set(f'{{{ns}}}w', str(max(int(w_val), min_col_dxa)))
+            elif i in final_pcts:
+                grid_dxa = int((final_pcts[i] / 5000) * actual_table_dxa)
+                gridCol.set(f'{{{ns}}}w', str(grid_dxa))
+                
+    if is_single_col_fixed:
+        for tg in tblGrids:
+            tblPr.getparent().remove(tg)
+
+    for row in table.rows:
+        for i, cell in enumerate(row.cells):
+            tc_pr = cell._tc.get_or_add_tcPr()
+            tc_w = tc_pr.find(f'{{{ns}}}tcW')
+            
+            if is_single_col_fixed:
+                target_w = str(max(int(w_val), min_col_dxa))
+                t_type = 'dxa'
+            else:
+                target_w = str(final_pcts.get(i, min_pct))
+                t_type = 'pct'
+            
+            if tc_w is not None:
+                tc_w.set(f'{{{ns}}}w', target_w)
+                tc_w.set(f'{{{ns}}}type', t_type)
+            else:
+                tc_w = parse_xml(f'<w:tcW xmlns:w="{ns}" w:w="{target_w}" w:type="{t_type}"/>')
+                tags_after = ['gridSpan', 'hMerge', 'vMerge', 'tcBorders', 'shd', 'noWrap', 'tcMar', 'textDirection', 'tcFitText', 'vAlign', 'hideMark']
+                inserted = False
+                for tag in tags_after:
+                    el = tc_pr.find(f'{{{ns}}}{tag}')
+                    if el is not None:
+                        el.addprevious(tc_w)
+                        inserted = True
+                        break
+                if not inserted:
+                    tc_pr.append(tc_w)
+
+    return True
+
+
 def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=False, body_style=None, image_style=None, table_config=None, margin_config=None, code_block_config=None, document_info=None):
     logger.debug('开始清理文档...')
     doc = Document(docx_path)
@@ -50,7 +365,6 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
         if progress_cb:
             progress_cb(92, '已跳过应用模板', 'success')
     
-    # Determine Image Config
     default_max_h = 23.0
     try:
         val = config.get('image.max_height', 23)
@@ -69,68 +383,145 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
     except (ValueError, TypeError):
         pass
 
-    target_max_h = default_max_h
-    target_max_w = default_max_w
-    target_align = 1 # Center by default
+    target_max_w, target_max_h, target_align = _resolve_image_style(image_style, default_max_w, default_max_h, 1)
+    table_image_style = image_style.get('tableImageStyle') if isinstance(image_style, dict) else None
+    table_target_max_w, table_target_max_h, table_target_align = _resolve_image_style(
+        table_image_style,
+        target_max_w,
+        target_max_h,
+        target_align
+    )
+    max_height = Mm(target_max_h * 10)
+    max_width = Mm(target_max_w * 10)
+    table_max_height = Mm(table_target_max_h * 10)
+    table_max_width = Mm(table_target_max_w * 10)
 
-    if image_style:
-        target_max_w = float(image_style.get('maxWidth', default_max_w))
-        target_max_h = float(image_style.get('maxHeight', default_max_h))
-        align_str = image_style.get('align', 'center').lower()
-        if align_str == 'left':
-            target_align = 0
-        elif align_str == 'right':
-            target_align = 2
-        else:
-            target_align = 1
-            
-    MAX_HEIGHT = Mm(target_max_h * 10)
-    MAX_WIDTH = Mm(target_max_w * 10)
-
-    # Determine Table Config
     force_clear_tbl_indent = True
+    force_clear_tbl_image_space = True
     header_align = None
     content_align = None
+    table_auto_fit = False
     
     if table_config:
         force_clear_tbl_indent = table_config.get('forceClearIndent', True)
+        force_clear_tbl_image_space = table_config.get('forceClearImageSpace', True)
+        table_auto_fit = bool(table_config.get('autoFit', True))
+        table_width_str = table_config.get('width', '100%')
+        min_col_width = table_config.get('minColWidth', 8)
         
-        # Mapping frontend align strings to docx alignment values
-        align_map = {'left': 0, 'center': 1, 'right': 2}
-        header_align_str = table_config.get('headerAlign', 'center').lower()
-        content_align_str = table_config.get('contentAlign', 'left').lower()
+        table_line_spacing = table_config.get('lineSpacing')
+        table_space_before = table_config.get('spaceBefore')
+        table_space_after = table_config.get('spaceAfter')
         
-        header_align = align_map.get(header_align_str, 1)
-        content_align = align_map.get(content_align_str, 0)
+        if not table_width_str:
+            table_width_str = '100%'
+        header_align = _align_to_docx(table_config.get('headerAlign', 'center'), 1)
+        content_align = _align_to_docx(table_config.get('contentAlign', 'left'), 0)
+        content_image_align = _align_to_docx(table_config.get('contentImageAlign', 'left'), 0)
+    else:
+        force_clear_tbl_indent = True
+        force_clear_tbl_image_space = True
+        table_auto_fit = True
+        table_width_str = '100%'
+        min_col_width = 8
+        table_line_spacing = None
+        table_space_before = None
+        table_space_after = None
+        header_align = 1  # 默认居中
+        content_align = 0 # 默认靠左
+        content_image_align = 0 # 默认靠左
 
     if progress_cb:
         progress_cb(93, '正在处理表格样式...', 'dynamic')
     cover_table_count = inserted_count[1] if isinstance(inserted_count, tuple) else 0
     cover_para_count = inserted_count[0] if isinstance(inserted_count, tuple) else inserted_count if isinstance(inserted_count, int) else 0
+    
+    top_tables = doc.tables[cover_table_count:] if cover_table_count < len(doc.tables) else []
+    all_tables = []
+    for t in top_tables:
+        all_tables.extend(_get_all_tables(t))
+
+    # First, handle indentation clearance for ALL tables 
+    # to avoid interference from nested table processing later.
     count_indent = 0
-    for i, table in enumerate(doc.tables):
-        if i < cover_table_count:
-            continue
+    for table in all_tables:
         count_indent += 1
         tblPr = table._element.tblPr
         if tblPr is not None:
-            tblInd = tblPr.find(f'{{{ns}}}tblInd')
-            if tblInd is not None:
-                tblInd.set(f'{{{ns}}}w', '0')
-                tblInd.set(f'{{{ns}}}type', 'dxa')
-            else:
-                tblInd = parse_xml(f'<w:tblInd xmlns:w="{ns}" w:w="0" w:type="dxa"/>')
-                tblPr.append(tblInd)
-            jc = tblPr.find(f'{{{ns}}}jc')
-            if jc is not None:
-                jc.set(f'{{{ns}}}val', 'left')
-    count_content = 0
-    for i, table in enumerate(doc.tables):
-        if i < cover_table_count:
-            continue
-        count_content += 1
+            _insert_or_update_tblInd(tblPr, ns, w="0", type="dxa")
+            
+            # Clear cell margin at table level as well if requested
+            if force_clear_tbl_indent:
+                tblCellMar = tblPr.find(f'{{{ns}}}tblCellMar')
+                if tblCellMar is None:
+                    tblCellMar = parse_xml(f'<w:tblCellMar xmlns:w="{ns}"><w:left w:w="0" w:type="dxa"/><w:right w:w="0" w:type="dxa"/></w:tblCellMar>')
+                    tags_after = ['tblLook', 'tblCaption', 'tblDescription']
+                    inserted = False
+                    for tag in tags_after:
+                        el = tblPr.find(f'{{{ns}}}{tag}')
+                        if el is not None:
+                            el.addprevious(tblCellMar)
+                            inserted = True
+                            break
+                    if not inserted:
+                        tblPr.append(tblCellMar)
+                else:
+                    for side in ['left', 'right']:
+                        side_elem = tblCellMar.find(f'{{{ns}}}{side}')
+                        if side_elem is not None:
+                            side_elem.set(f'{{{ns}}}w', '0')
+                            side_elem.set(f'{{{ns}}}type', 'dxa')
+                        else:
+                            tblCellMar.append(parse_xml(f'<w:{side} xmlns:w="{ns}" w:w="0" w:type="dxa"/>'))
         
-        # 通过标签识别代码块
+        # Now process all paragraphs in the table to clear indent
+        for r_idx, row in enumerate(table.rows):
+            for cell in row.cells:
+                # Also apply margin clear to cell level
+                if force_clear_tbl_indent:
+                    tcPr = cell._tc.get_or_add_tcPr()
+                    tcMar = tcPr.find(f'{{{ns}}}tcMar')
+                    if tcMar is None:
+                        tcMar = parse_xml(f'<w:tcMar xmlns:w="{ns}"><w:left w:w="0" w:type="dxa"/><w:right w:w="0" w:type="dxa"/></w:tcMar>')
+                        tags_after = ['textDirection', 'tcFitText', 'vAlign', 'hideMark']
+                        inserted = False
+                        for tag in tags_after:
+                            el = tcPr.find(f'{{{ns}}}{tag}')
+                            if el is not None:
+                                el.addprevious(tcMar)
+                                inserted = True
+                                break
+                        if not inserted:
+                            tcPr.append(tcMar)
+                    else:
+                        for side in ['left', 'right']:
+                            side_elem = tcMar.find(f'{{{ns}}}{side}')
+                            if side_elem is not None:
+                                side_elem.set(f'{{{ns}}}w', '0')
+                                side_elem.set(f'{{{ns}}}type', 'dxa')
+                            else:
+                                tcMar.append(parse_xml(f'<w:{side} xmlns:w="{ns}" w:w="0" w:type="dxa"/>'))
+
+                for p in cell.paragraphs:
+                    if force_clear_tbl_indent:
+                        _force_clear_indent(p, ns, clear_space_before=force_clear_tbl_image_space)
+                        # Ensure paragraph indentation properties are fully overridden
+                        pPr = p._element.get_or_add_pPr()
+                        ind = pPr.get_or_add_ind()
+                        ind.set(f'{{{ns}}}left', '0')
+                        ind.set(f'{{{ns}}}right', '0')
+                        ind.set(f'{{{ns}}}firstLine', '0')
+                        ind.set(f'{{{ns}}}hanging', '0')
+                    else:
+                        _clean_text_indent(p, ns)
+                        
+    count_content = 0
+    count_auto_fit = 0
+    count_table_image_resized = 0
+    count_table_image_aligned = 0
+    
+    # 1. 优先处理所有常规表格样式和内容
+    for table in all_tables:
         is_code_block = False
         try:
             tblPr = table._element.tblPr
@@ -140,42 +531,158 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
                     is_code_block = True
         except:
             pass
-        
-        # 代码块特殊处理：应用样式并跳过常规表格清洗
+            
         if is_code_block:
-            if code_block_config:
-                _apply_custom_code_block_style(table, code_block_config, ns)
             continue
+            
+        count_content += 1
+        if _apply_table_layout(table, table_width_str, table_auto_fit, ns, min_col_width):
+            count_auto_fit += 1
 
         for r_idx, row in enumerate(table.rows):
             is_header = (r_idx == 0)
             for cell in row.cells:
-                if not is_code_block:
-                    cell.vertical_alignment = 1
+                cell.vertical_alignment = 1
                 for p in cell.paragraphs:
-                    if force_clear_tbl_indent:
-                        # 强制清空所有缩进（包括首行缩进）
-                        _force_clear_indent(p, ns)
-                    else:
-                        # 按照正文样式处理（仅清空悬挂缩进和左缩进，保留首行缩进）
-                        _clean_text_indent(p, ns)
+                    if table_config:
+                        if is_header:
+                            p.alignment = header_align
+                        else:
+                            p.alignment = content_align
                     
-                    if is_code_block:
-                        p.alignment = 0
-                    else:
-                        if table_config:
-                            # Apply alignment if table_config is provided
-                            if is_header:
-                                p.alignment = header_align
-                            else:
-                                p.alignment = content_align
-                        
-                        # 如果提供了正文样式配置，也应用到表格段落中（使其与正文一致）
-                        if body_style:
-                            _apply_paragraph_style(p, body_style, ns)
+                    # 对于表格中的图片，让图片严格跟随单元格内容的图片对齐方式配置
+                    current_image_align = header_align if is_header else content_image_align
 
-    if progress_cb and (count_indent > 0 or count_content > 0):
-        progress_cb(95, f'已调整表格样式：处理缩进 {count_indent} 个，处理内容 {count_content} 个', 'success')
+                    resized, aligned = _apply_image_style_to_paragraph(
+                        p,
+                        ns,
+                        ns_wp,
+                        table_max_height,
+                        table_max_width,
+                        current_image_align,
+                        clear_space_before=force_clear_tbl_image_space
+                    )
+                    count_table_image_resized += resized
+                    count_table_image_aligned += aligned
+                    
+                    # Only apply body style to text paragraphs, not to image paragraphs
+                    # if we are meant to clear their spacing
+                    if body_style:
+                        if aligned > 0 and force_clear_tbl_image_space:
+                            # Create a copy of body_style without spaceBefore
+                            modified_body_style = body_style.copy()
+                            modified_body_style['spaceBefore'] = None
+                            modified_body_style['spaceBeforeUnit'] = None
+                            _apply_paragraph_style(p, modified_body_style, ns)
+                        else:
+                            _apply_paragraph_style(p, body_style, ns)
+                            
+                    # 覆盖表格独有的行间距和段前段后距
+                    if table_line_spacing is not None or table_space_before is not None or table_space_after is not None:
+                        p_pr = p._element.get_or_add_pPr()
+                        spacing = p_pr.find(f'{{{ns}}}spacing')
+                        if spacing is None:
+                            spacing = parse_xml(f'<w:spacing xmlns:w="{ns}"/>')
+                            p_pr.append(spacing)
+                            
+                        if table_line_spacing is not None:
+                            try:
+                                spacing.set(f'{{{ns}}}line', str(int(float(table_line_spacing) * 240)))
+                                spacing.set(f'{{{ns}}}lineRule', 'auto')
+                            except:
+                                pass
+                                
+                        if table_space_before is not None:
+                            try:
+                                spacing.set(f'{{{ns}}}beforeLines', str(int(float(table_space_before) * 100)))
+                            except:
+                                pass
+                                
+                        if table_space_after is not None:
+                            try:
+                                spacing.set(f'{{{ns}}}afterLines', str(int(float(table_space_after) * 100)))
+                            except:
+                                pass
+
+    # 2. 最后单独处理所有代码块表格，确保代码块的样式和宽度设置不会被外部常规表格覆盖
+    for table in all_tables:
+        is_code_block = False
+        try:
+            tblPr = table._element.tblPr
+            if tblPr is not None:
+                caption = tblPr.find(f'{{{ns}}}tblCaption')
+                if caption is not None and caption.get(f'{{{ns}}}val') == 'code_block':
+                    is_code_block = True
+        except:
+            pass
+            
+        if is_code_block:
+            count_content += 1
+            if code_block_config:
+                _apply_custom_code_block_style(table, code_block_config, ns)
+            
+            # Retrieve table width for code block alignment processing if needed
+            table_width = code_block_config.get('tableWidth') if code_block_config else None
+            
+            # Since Word doesn't natively center table easily without specific tag <w:jc>,
+            # apply alignment at the table level using <w:jc>
+            alignment = _align_to_docx(code_block_config.get('align', 'left') if code_block_config else 'left', 0)
+            align_val_map = {0: 'left', 1: 'center', 2: 'right'}
+            jc_val = align_val_map.get(alignment, 'left')
+            
+            tblPr = table._element.tblPr
+            if tblPr is not None:
+                jc = tblPr.find(f'{{{ns}}}jc')
+                if jc is not None:
+                    jc.set(f'{{{ns}}}val', jc_val)
+                else:
+                    jc = parse_xml(f'<w:jc xmlns:w="{ns}" w:val="{jc_val}"/>')
+                    tags_after = ['tblCellSpacing', 'tblInd', 'tblBorders', 'shd', 'tblLayout', 'tblCellMar', 'tblLook', 'tblCaption', 'tblDescription']
+                    inserted = False
+                    for tag in tags_after:
+                        el = tblPr.find(f'{{{ns}}}{tag}')
+                        if el is not None:
+                            el.addprevious(jc)
+                            inserted = True
+                            break
+                    if not inserted:
+                        tblPr.append(jc)
+                    
+            for r_idx, row in enumerate(table.rows):
+                for cell in row.cells:
+                    # Also apply margin to cell
+                    tcPr = cell._tc.get_or_add_tcPr()
+                    tcMar = tcPr.find(f'{{{ns}}}tcMar')
+                    if tcMar is None:
+                        tcMar = parse_xml(f'<w:tcMar xmlns:w="{ns}"><w:left w:w="0" w:type="dxa"/><w:right w:w="0" w:type="dxa"/></w:tcMar>')
+                        tags_after = ['textDirection', 'tcFitText', 'vAlign', 'hideMark']
+                        inserted = False
+                        for tag in tags_after:
+                            el = tcPr.find(f'{{{ns}}}{tag}')
+                            if el is not None:
+                                el.addprevious(tcMar)
+                                inserted = True
+                                break
+                        if not inserted:
+                            tcPr.append(tcMar)
+                    else:
+                        for side in ['left', 'right']:
+                            side_elem = tcMar.find(f'{{{ns}}}{side}')
+                            if side_elem is not None:
+                                side_elem.set(f'{{{ns}}}w', '0')
+                                side_elem.set(f'{{{ns}}}type', 'dxa')
+                            else:
+                                tcMar.append(parse_xml(f'<w:{side} xmlns:w="{ns}" w:w="0" w:type="dxa"/>'))
+
+                    for p in cell.paragraphs:
+                        # Use paragraph alignment as well for content alignment
+                        p.alignment = alignment
+
+    if progress_cb and (count_indent > 0 or count_content > 0 or count_auto_fit > 0):
+        table_msg = f'已调整表格样式：处理缩进 {count_indent} 个，处理内容 {count_content} 个'
+        if count_auto_fit > 0:
+            table_msg += f'，自适应 {count_auto_fit} 个'
+        progress_cb(95, table_msg, 'success')
     if progress_cb:
         progress_cb(96, '正在处理图片样式...', 'dynamic')
     count_resized = 0
@@ -183,39 +690,108 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
     for i, p in enumerate(doc.paragraphs):
         if i < cover_para_count:
             continue
-        xml = p._element.xml
-        if 'w:drawing' in xml or 'w:pict' in xml:
-            _force_clear_indent(p, ns)
-            p.alignment = target_align
-            count_centered += 1
-        for run in p.runs:
-            drawings = run._element.findall(f'.//{{{ns}}}drawing')
-            for drawing in drawings:
-                inlines = drawing.findall(f'.//{{{ns_wp}}}inline')
-                for inline in inlines:
-                    if _resize_inline_image(inline, MAX_HEIGHT, MAX_WIDTH):
-                        count_resized += 1
-                anchors = drawing.findall(f'.//{{{ns_wp}}}anchor')
-                for anchor in anchors:
-                    if _resize_inline_image(anchor, MAX_HEIGHT, MAX_WIDTH):
-                        count_resized += 1
-    if progress_cb and (count_resized > 0 or count_centered > 0):
+        resized, aligned = _apply_image_style_to_paragraph(p, ns, ns_wp, max_height, max_width, target_align)
+        count_resized += resized
+        count_centered += aligned
+    if progress_cb and (count_resized > 0 or count_centered > 0 or count_table_image_resized > 0 or count_table_image_aligned > 0):
         align_desc = {0: '左对齐', 1: '居中对齐', 2: '右对齐'}.get(target_align, '居中对齐')
-        progress_cb(97, f'已调整图片样式：处理大小 {count_resized} 张，{align_desc} {count_centered} 张', 'success')
+        image_msg = f'已调整图片样式：全文处理大小 {count_resized} 张，{align_desc} {count_centered} 张'
+        if count_table_image_resized > 0 or count_table_image_aligned > 0:
+            table_align_desc = {0: '左对齐', 1: '居中对齐', 2: '右对齐'}.get(table_target_align, '居中对齐')
+            image_msg += f'；表格内处理大小 {count_table_image_resized} 张，{table_align_desc} {count_table_image_aligned} 张'
+        progress_cb(97, image_msg, 'success')
 
     if progress_cb:
         progress_cb(98, '正在清理文本缩进并应用样式...', 'dynamic')
+        
+    # 处理列表缩进（修改 numbering_part 中的缩进设置）
+    try:
+        numbering_part = doc.part.numbering_part
+        if numbering_part:
+            for abstractNum in numbering_part._element.findall('.//w:abstractNum', namespaces=numbering_part._element.nsmap):
+                for lvl in abstractNum.findall('w:lvl', namespaces=numbering_part._element.nsmap):
+                    pPr = lvl.find('w:pPr', namespaces=numbering_part._element.nsmap)
+                    if pPr is not None:
+                        ind = pPr.find('w:ind', namespaces=numbering_part._element.nsmap)
+                        if ind is not None:
+                            # 保证 numbering 层级不会有强制缩进干扰段落层的首行缩进
+                            for attr in list(ind.attrib):
+                                del ind.attrib[attr]
+                            # 在 OOXML 规范中，firstLine 和 hanging 是互斥的。如果 hanging 存在（即使为 0），
+                            # firstLine 也可能会被忽略或者表现不一致。
+                            # 用户明确要求“特殊格式：首行缩进 2 字符”以及“文本之前：0 字符”。
+                            # 为此，我们彻底清理 hanging，并且不设置 hanging/hangingChars，只设置 left 和 firstLine
+                            ind.set(qn('w:left'), '0')
+                            ind.set(qn('w:leftChars'), '0')
+                            ind.set(qn('w:firstLine'), '420')
+                            ind.set(qn('w:firstLineChars'), '200')
+    except Exception as e:
+        logger.warning(f'处理列表缩进失败: {e}')
     
     count_style_applied = 0
     for i, p in enumerate(doc.paragraphs):
         if i < cover_para_count:
             continue
-        _clean_text_indent(p, ns)
+        
+        style = p.style
+        style_name = style.name if style else ""
+        
+        is_list = False
+        if p._element.pPr is not None and p._element.pPr.numPr is not None:
+            is_list = True
+        else:
+            curr_style = style
+            while curr_style is not None:
+                if curr_style.name and curr_style.name.startswith('List'):
+                    is_list = True
+                    break
+                if hasattr(curr_style, '_element') and curr_style._element.pPr is not None and curr_style._element.pPr.numPr is not None:
+                    is_list = True
+                    break
+                curr_style = curr_style.base_style
+        
+        # 飞书列表默认会有 w:left 和 w:hanging 缩进，导致“文本之前 1.48cm”
+        # 按照用户需求，无序列表（或所有列表）应该像正文一样，只保留首行缩进，不要左缩进
+        # 但是这里不再手动调用 _clean_text_indent，因为 _clean_text_indent 会把所有缩进相关的 tag 强行置 0，
+        # 会影响到后面我们设置 firstLine 和 left 的效果。
+        
+        if is_list:
+            # 列表缩进已经在 numbering_part 中统一处理，此处不需要再修改段落上的 ind 属性
+            # 但为防万一，清除段落上的 left 和 hanging 属性（保留 numbering 的效果）
+            pPr = p._element.get_or_add_pPr()
+            ind = pPr.find(f'{{{ns}}}ind')
+            if ind is None:
+                ind = pPr.get_or_add_ind()
+                
+            # 首行缩进会使得列表符号（项目符号）向右移动，这对于无序列表通常不符合常规。
+            # Word 默认处理下，如果不设左侧缩进，项目符号就在页面最左边缘。如果要有缩进，应该是文本和符号整体缩进。
+            # 这里我们仍然应用首行缩进，但同时需要处理左缩进（left）来保证符合要求
+            # 为了达到首行缩进 2 字符效果并且让符号也缩进，我们将首行缩进 w:firstLineChars 设为 200。
+            # 同时也保持悬挂缩进 w:hanging 存在，以保证多行文本对齐。
+            for attr in list(ind.attrib):
+                del ind.attrib[attr]
+            
+            # 正文首行缩进2字符效果，对于列表意味着：
+            # 符号从左侧缩进2字符（leftChars=200），后续行与符号对齐（hangingChars=0）？
+            # 还是说文本缩进2字符，符号在前面？
+            # 用户要求“首行缩进2字符”，这通常表示：
+            # 左侧无额外缩进(left=0)，首行由于有项目符号，我们使用首行缩进（firstLineChars=200）
+            # 注意：在 Word 的机制中，如果要达到“首行缩进 2 字符”并与正文一致：
+            # 我们直接将段落的缩进设置与正文一样，让 Word 的样式引擎负责处理项目符号
+            # 用户明确要求：
+            # 文本之前：0 字符
+            # 特殊格式：首行缩进，度量值：2 字符
+            # OOXML 中 hanging 和 firstLine 互斥，如果要强制首行缩进生效，绝不能设置 hanging。
+            ind.set(f'{{{ns}}}left', '0')
+            ind.set(f'{{{ns}}}leftChars', '0')
+            ind.set(f'{{{ns}}}firstLine', '420')
+            ind.set(f'{{{ns}}}firstLineChars', '200')
+        else:
+            _clean_text_indent(p, ns)
         
         # 应用正文样式
         if body_style:
             # 排除标题样式 (Heading 1-9, Title, Subtitle)
-            style_name = p.style.name
             is_heading = style_name.startswith('Heading') or style_name in ['Title', 'Subtitle']
             # 排除列表 (可选，这里暂时不排除列表，让列表也应用字体大小，但缩进可能受影响，需谨慎)
             # 这里的 _clean_text_indent 已经处理了缩进。
@@ -795,37 +1371,61 @@ def _resize_inline_image(drawing_element, max_height, max_width=None):
             resized = True
     return resized
 
-def _force_clear_indent(paragraph, ns):
+def _force_clear_indent(paragraph, ns, clear_space_before=False):
     pPr = paragraph._element.get_or_add_pPr()
-    ind = pPr.find(f'{{{ns}}}ind')
-    if ind is None:
-        ind = parse_xml(f'<w:ind xmlns:w="{ns}"/>')
-        pPr.append(ind)
+    ind = pPr.get_or_add_ind()
     ind.set(f'{{{ns}}}left', '0')
     ind.set(f'{{{ns}}}right', '0')
     ind.set(f'{{{ns}}}hanging', '0')
     ind.set(f'{{{ns}}}firstLine', '0')
+    ind.set(f'{{{ns}}}leftChars', '0')
+    ind.set(f'{{{ns}}}rightChars', '0')
     ind.set(f'{{{ns}}}firstLineChars', '0')
+    ind.set(f'{{{ns}}}hangingChars', '0')
+    
+    # Check if there is an override in style itself if we are applying inline styles
+    # Feishu sometimes passes jc directly or we inherit paragraph properties. 
+    # Just to be safe, set justification left if not overriden properly later.
+    jc = pPr.find(f'{{{ns}}}jc')
+    if jc is not None and jc.get(f'{{{ns}}}val') == 'both':
+        jc.set(f'{{{ns}}}val', 'left')
+        
+    # Clear paragraph margin properties which sometimes override indentation
+    spacing = pPr.find(f'{{{ns}}}spacing')
+    if spacing is not None:
+        if clear_space_before:
+            if f'{{{ns}}}before' in spacing.attrib:
+                spacing.set(f'{{{ns}}}before', '0')
+            if f'{{{ns}}}beforeLines' in spacing.attrib:
+                spacing.set(f'{{{ns}}}beforeLines', '0')
+        else:
+            if spacing.get(f'{{{ns}}}beforeLines'):
+                pass # Keep vertical spacing
+        
+        if spacing.get(f'{{{ns}}}afterLines'):
+            pass # Keep vertical spacing
+        # Clear horizontal spacing if mistakenly placed here
+        pass
 
 def _clean_text_indent(paragraph, ns):
     pPr = paragraph._element.get_or_add_pPr()
-    ind = pPr.find(f'{{{ns}}}ind')
-    if ind is not None:
-        if ind.get(f'{{{ns}}}hanging'):
-            ind.set(f'{{{ns}}}hanging', '0')
-        if ind.get(f'{{{ns}}}hangingChars'):
-            ind.set(f'{{{ns}}}hangingChars', '0')
-        if ind.get(f'{{{ns}}}left'):
-            ind.set(f'{{{ns}}}left', '0')
-        if ind.get(f'{{{ns}}}leftChars'):
-            ind.set(f'{{{ns}}}leftChars', '0')
-        if ind.get(f'{{{ns}}}start'):
-            ind.set(f'{{{ns}}}start', '0')
-        if ind.get(f'{{{ns}}}startChars'):
-            ind.set(f'{{{ns}}}startChars', '0')
-    else:
-        ind = parse_xml(f'<w:ind xmlns:w="{ns}" w:left="0" w:hanging="0"/>')
-        pPr.append(ind)
+    ind = pPr.get_or_add_ind()
+    if ind.get(f'{{{ns}}}hanging'):
+        ind.set(f'{{{ns}}}hanging', '0')
+    if ind.get(f'{{{ns}}}hangingChars'):
+        ind.set(f'{{{ns}}}hangingChars', '0')
+    if ind.get(f'{{{ns}}}left'):
+        ind.set(f'{{{ns}}}left', '0')
+    if ind.get(f'{{{ns}}}leftChars'):
+        ind.set(f'{{{ns}}}leftChars', '0')
+    if ind.get(f'{{{ns}}}start'):
+        ind.set(f'{{{ns}}}start', '0')
+    if ind.get(f'{{{ns}}}startChars'):
+        ind.set(f'{{{ns}}}startChars', '0')
+    if ind.get(f'{{{ns}}}firstLine'):
+        ind.set(f'{{{ns}}}firstLine', '0')
+    if ind.get(f'{{{ns}}}firstLineChars'):
+        ind.set(f'{{{ns}}}firstLineChars', '0')
 
 def _apply_border(cell, top=None, bottom=None, left=None, right=None):
     tc = cell._tc
@@ -863,32 +1463,45 @@ def _set_cell_text_color(cell, color_hex, bold=False):
                 run.font.bold = True
 
 def _apply_custom_code_block_style(table, config, ns):
-    """
-    config: {
-        bgColor: str (#RRGGBB),
-        fontColor: str (#RRGGBB),
-        fontFamily: str,
-        fontSize: float,
-        align: str (left|center|right),
-        cleanTextIndent: bool,
-        forceClearIndent: bool,
-        borderColor: str (#RRGGBB),
-        borders: {
-            top: { type: str, width: int },
-            ...
-        }
-    }
-    """
     def hex_to_docx(h):
         return h.lstrip('#').upper()
 
     cell = table.cell(0, 0)
-    
-    # 1. Background Color
+    table_width = config.get('tableWidth')
+    if table_width not in (None, ''):
+        _apply_table_layout(table, f"{table_width}cm", False, ns)
+    else:
+        # 默认不指定宽度时，强制清除表格固定宽度标签，允许自适应或按外部环境流式布局
+        tblPr = table._element.tblPr
+        if tblPr is not None:
+            tbl_w = tblPr.find(f'{{{ns}}}tblW')
+            if tbl_w is not None:
+                tbl_w.set(f'{{{ns}}}w', '0')
+                tbl_w.set(f'{{{ns}}}type', 'auto')
+                
+        for row in table.rows:
+            for c in row.cells:
+                tc_pr = c._tc.get_or_add_tcPr()
+                tc_w = tc_pr.find(f'{{{ns}}}tcW')
+                if tc_w is not None:
+                    tc_w.set(f'{{{ns}}}w', '0')
+                    tc_w.set(f'{{{ns}}}type', 'auto')
+                else:
+                    tc_w = parse_xml(f'<w:tcW xmlns:w="{ns}" w:w="0" w:type="auto"/>')
+                    tags_after = ['gridSpan', 'hMerge', 'vMerge', 'tcBorders', 'shd', 'noWrap', 'tcMar', 'textDirection', 'tcFitText', 'vAlign', 'hideMark']
+                    inserted = False
+                    for tag in tags_after:
+                        el = tc_pr.find(f'{{{ns}}}{tag}')
+                        if el is not None:
+                            el.addprevious(tc_w)
+                            inserted = True
+                            break
+                    if not inserted:
+                        tc_pr.append(tc_w)
+
     bg_color = hex_to_docx(config.get('bgColor', '#F5F5F5'))
     _apply_shading(cell, bg_color)
-    
-    # 2. Borders
+
     border_color = hex_to_docx(config.get('borderColor', '#D9D9D9'))
     borders = config.get('borders', {})
     
@@ -898,33 +1511,58 @@ def _apply_custom_code_block_style(table, config, ns):
         left={'val': borders.get('left', {}).get('type', 'single'), 'sz': borders.get('left', {}).get('width', 4), 'color': border_color},
         right={'val': borders.get('right', {}).get('type', 'single'), 'sz': borders.get('right', {}).get('width', 4), 'color': border_color}
     )
-    
-    # 3. Text Styles & Alignment
+
     font_color = hex_to_docx(config.get('fontColor', '#000000'))
     font_family = config.get('fontFamily', 'Courier New')
     font_size = config.get('fontSize', 9)
-    align_map = {'left': 0, 'center': 1, 'right': 2}
-    alignment = align_map.get(config.get('align', 'left'), 0)
-    
-    # Indentation handling
+    alignment = _align_to_docx(config.get('align', 'left'), 0)
     force_clear_indent = config.get('forceClearIndent', True)
+    
+    line_spacing = config.get('lineSpacing')
+    space_before = config.get('spaceBefore')
+    space_after = config.get('spaceAfter')
     
     for p in cell.paragraphs:
         if force_clear_indent:
             _force_clear_indent(p, ns)
-        # cleanTextIndent is now deprecated as it's merged into forceClearIndent
         elif config.get('cleanTextIndent', False):
             _clean_text_indent(p, ns)
-            
-        # Alignment
         p.alignment = alignment
         
-        # Font settings
+        # 处理行间距、段前段后距
+        if line_spacing is not None or space_before is not None or space_after is not None:
+            p_pr = p._element.get_or_add_pPr()
+            spacing = p_pr.find(f'{{{ns}}}spacing')
+            if spacing is None:
+                spacing = parse_xml(f'<w:spacing xmlns:w="{ns}"/>')
+                p_pr.append(spacing)
+                
+            if line_spacing is not None:
+                try:
+                    # w:line 单位为 240 = 1 行
+                    spacing.set(f'{{{ns}}}line', str(int(float(line_spacing) * 240)))
+                    spacing.set(f'{{{ns}}}lineRule', 'auto')
+                except:
+                    pass
+                    
+            if space_before is not None:
+                try:
+                    # w:beforeLines 单位为 100 = 1 行
+                    spacing.set(f'{{{ns}}}beforeLines', str(int(float(space_before) * 100)))
+                except:
+                    pass
+                    
+            if space_after is not None:
+                try:
+                    # w:afterLines 单位为 100 = 1 行
+                    spacing.set(f'{{{ns}}}afterLines', str(int(float(space_after) * 100)))
+                except:
+                    pass
+                    
         for run in p.runs:
             run.font.name = font_family
             run.font.size = Pt(font_size)
             run.font.color.rgb = RGBColor.from_string(font_color)
-            # Ensure font name applies correctly in Word
             r = run._element
             r.rPr.rFonts.set(qn('w:eastAsia'), font_family)
 

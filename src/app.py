@@ -1,5 +1,12 @@
-import json
+import sys
 import os
+
+# 确保项目根目录在 Python 路径中
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
+import json
 import threading
 import uuid
 import shutil
@@ -276,6 +283,8 @@ def admin_page():
         html = html.replace('Hawkon 2025', config.get('copyright.text', 'Hawkon 2025 -2026'))
         html = html.replace('[/* page_title */]', config.get('page.title', '飞书文档下载工具'))
         html = html.replace('[/* default_template */]', config.get('template.default', 'template.docx'))
+        html = html.replace('[/* image_max_width */]', str(config.get('image.max_width', '16')))
+        html = html.replace('[/* image_max_height */]', str(config.get('image.max_height', '23')))
         return html
     return send_file(os.path.join(HTML_DIR, 'login.html'))
 

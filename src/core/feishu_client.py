@@ -14,6 +14,10 @@ class FeishuClient:
         self._token = ''
         self._expire_at = 0
         self._lock = threading.Lock()
+        self.session = requests.Session()
+        adapter = requests.adapters.HTTPAdapter(max_retries=3, pool_connections=10, pool_maxsize=10)
+        self.session.mount('http://', adapter)
+        self.session.mount('https://', adapter)
 
     def get_token(self):
         now = int(time.time())
@@ -29,7 +33,7 @@ class FeishuClient:
         url = 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal'
         payload = {'app_id': self.app_id, 'app_secret': self.app_secret}
         try:
-            res = requests.post(url, json=payload, timeout=10).json()
+            res = self.session.post(url, json=payload, timeout=10).json()
         except Exception as e:
             self.logger.error('获取 Token 错误: ' + str(e))
             return ''
@@ -55,9 +59,9 @@ class FeishuClient:
         if not token:
             return {}
         url = f'https://open.feishu.cn/open-apis/docx/v1/documents/{doc_id}'
-        headers = {'Authorization': 'Bearer ' + token}
+        headers = {'Authorization': 'Bearer ' + token, 'Connection': 'keep-alive'}
         try:
-            res = requests.get(url, headers=headers, timeout=10).json()
+            res = self.session.get(url, headers=headers, timeout=10).json()
         except Exception as e:
             self.logger.error('获取文档元数据错误: ' + str(e))
             return {}
@@ -79,18 +83,25 @@ class FeishuClient:
         if not token:
             return []
         url = f'https://open.feishu.cn/open-apis/docx/v1/documents/{doc_id}/blocks'
-        headers = {'Authorization': 'Bearer ' + token}
+        headers = {'Authorization': 'Bearer ' + token, 'Connection': 'keep-alive'}
         items = []
         page_token = ''
         while True:
             params = {'page_size': 500}
             if page_token:
                 params['page_token'] = page_token
-            try:
-                res = requests.get(url, headers=headers, params=params, timeout=20).json()
-            except Exception as e:
-                self.logger.error(f'获取块请求错误: {str(e)}')
-                raise RuntimeError(f'请求飞书接口失败: {str(e)}')
+            max_retries = 3
+            res = None
+            for attempt in range(max_retries):
+                try:
+                    res = self.session.get(url, headers=headers, params=params, timeout=20).json()
+                    break
+                except Exception as e:
+                    self.logger.warning(f'获取块请求错误 (尝试 {attempt+1}/{max_retries}): {str(e)}')
+                    if attempt == max_retries - 1:
+                        self.logger.error(f'获取块请求最终失败: {str(e)}')
+                        raise RuntimeError(f'请求飞书接口失败: {str(e)}')
+                    time.sleep(1)
             code = res.get('code')
             if code != 0:
                 msg = res.get('msg', '')
@@ -115,11 +126,19 @@ class FeishuClient:
         if not token:
             return False
         url = f'https://open.feishu.cn/open-apis/drive/v1/medias/{file_token}/download'
-        headers = {'Authorization': 'Bearer ' + token}
-        try:
-            r = requests.get(url, headers=headers, stream=True, timeout=30)
-        except Exception as e:
-            self.logger.error('下载媒体错误: ' + str(e))
+        headers = {'Authorization': 'Bearer ' + token, 'Connection': 'keep-alive'}
+        r = None
+        for attempt in range(3):
+            try:
+                r = self.session.get(url, headers=headers, stream=True, timeout=30)
+                break
+            except Exception as e:
+                self.logger.warning(f'下载媒体错误 (尝试 {attempt+1}/3): {str(e)}')
+                if attempt == 2:
+                    self.logger.error('下载媒体最终失败: ' + str(e))
+                    return False
+                time.sleep(1)
+        if not r:
             return False
         if r.status_code != 200:
             self.logger.error(f'下载媒体失败: {r.status_code}, 响应: {r.text[:200]}')
@@ -144,11 +163,19 @@ class FeishuClient:
         if not token:
             return False
         url = f'https://open.feishu.cn/open-apis/board/v1/whiteboards/{whiteboard_id}/download_as_image'
-        headers = {'Authorization': 'Bearer ' + token}
-        try:
-            r = requests.get(url, headers=headers, stream=True, timeout=30)
-        except Exception as e:
-            self.logger.error('下载画板错误: ' + str(e))
+        headers = {'Authorization': 'Bearer ' + token, 'Connection': 'keep-alive'}
+        r = None
+        for attempt in range(3):
+            try:
+                r = self.session.get(url, headers=headers, stream=True, timeout=30)
+                break
+            except Exception as e:
+                self.logger.warning(f'下载画板错误 (尝试 {attempt+1}/3): {str(e)}')
+                if attempt == 2:
+                    self.logger.error('下载画板最终失败: ' + str(e))
+                    return False
+                time.sleep(1)
+        if not r:
             return False
         if r.status_code != 200:
             self.logger.error('下载画板失败: ' + str(r.status_code))
@@ -165,9 +192,19 @@ class FeishuClient:
         if not token:
             return {} if sheet_id else []
         url = f'https://open.feishu.cn/open-apis/sheets/v3/spreadsheets/{spreadsheet_token}/sheets/query'
-        headers = {'Authorization': 'Bearer ' + token}
-        try:
-            res = requests.get(url, headers=headers, timeout=10).json()
+        headers = {'Authorization': 'Bearer ' + token, 'Connection': 'keep-alive'}
+        res = None
+        for attempt in range(3):
+            try:
+                res = self.session.get(url, headers=headers, timeout=10).json()
+                break
+            except Exception as e:
+                self.logger.warning(f'获取表格元数据错误 (尝试 {attempt+1}/3): {str(e)}')
+                if attempt == 2:
+                    self.logger.error('获取表格元数据最终失败: ' + str(e))
+                    return {} if sheet_id else []
+                time.sleep(1)
+        if res:
             if res.get('code') == 0:
                 sheets = res.get('data', {}).get('sheets', [])
                 if sheet_id:
@@ -177,8 +214,6 @@ class FeishuClient:
                     return {}
                 return sheets
             self.logger.error(f"获取表格元数据失败: {res.get('msg')}")
-        except Exception as e:
-            self.logger.error('获取表格元数据错误: ' + str(e))
         return {} if sheet_id else []
 
     def get_sheet_values(self, spreadsheet_token, range_str):
@@ -187,14 +222,22 @@ class FeishuClient:
             return {}
         url = f'https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/{spreadsheet_token}/values/{range_str}'
         params = {'valueRenderOption': 'ToString', 'dateTimeRenderOption': 'FormattedString'}
-        headers = {'Authorization': 'Bearer ' + token}
-        try:
-            res = requests.get(url, headers=headers, params=params, timeout=20).json()
+        headers = {'Authorization': 'Bearer ' + token, 'Connection': 'keep-alive'}
+        res = None
+        for attempt in range(3):
+            try:
+                res = self.session.get(url, headers=headers, params=params, timeout=10).json()
+                break
+            except Exception as e:
+                self.logger.warning(f'获取表格内容错误 (尝试 {attempt+1}/3): {str(e)}')
+                if attempt == 2:
+                    self.logger.error('获取表格内容最终失败: ' + str(e))
+                    return {}
+                time.sleep(1)
+        if res:
             if res.get('code') == 0:
                 return res.get('data', {}).get('valueRange', {})
-            self.logger.error(f"获取表格数据失败: {res.get('msg')}")
-        except Exception as e:
-            self.logger.error('获取表格数据错误: ' + str(e))
+            self.logger.error(f"获取表格内容失败: {res.get('msg')}")
         return {}
 
     def get_user_info(self, user_id):
@@ -202,12 +245,20 @@ class FeishuClient:
         if not token:
             return {}
         url = f'https://open.feishu.cn/open-apis/contact/v3/users/{user_id}'
-        headers = {'Authorization': 'Bearer ' + token}
-        try:
-            res = requests.get(url, headers=headers, timeout=10).json()
+        headers = {'Authorization': 'Bearer ' + token, 'Connection': 'keep-alive'}
+        res = None
+        for attempt in range(3):
+            try:
+                res = self.session.get(url, headers=headers, timeout=10).json()
+                break
+            except Exception as e:
+                self.logger.warning(f'获取用户信息错误 (尝试 {attempt+1}/3): {str(e)}')
+                if attempt == 2:
+                    self.logger.error('获取用户信息最终失败: ' + str(e))
+                    return {}
+                time.sleep(1)
+        if res:
             if res.get('code') == 0:
                 return res.get('data', {}).get('user', {})
-            self.logger.error(f"获取用户信息失败: {res.get('msg')} ({res.get('code')})")
-        except Exception as e:
-            self.logger.error(f'获取用户信息错误: {str(e)}')
+            self.logger.error(f"获取用户信息失败: {res.get('msg')}")
         return {}
