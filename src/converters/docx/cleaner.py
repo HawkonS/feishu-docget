@@ -228,7 +228,7 @@ def _apply_table_layout(table, width_str, auto_fit, ns, min_col_width=120):
         tbl_w.set(f'{{{ns}}}w', w_val)
         tbl_w.set(f'{{{ns}}}type', w_type)
 
-    min_col_dxa = int(min_col_width * 240) if min_col_width else 8 * 240
+    min_col_dxa = int(min_col_width * 240) if min_col_width is not None else 8 * 240
     is_single_col_fixed = w_type == 'dxa' and all(len(r.cells) == 1 for r in table.rows)
 
     page_width_dxa = 9070
@@ -1529,7 +1529,7 @@ def _apply_custom_code_block_style(table, config, ns):
     cell = table.cell(0, 0)
     table_width = config.get('tableWidth')
     if table_width not in (None, ''):
-        _apply_table_layout(table, f"{table_width}cm", False, ns)
+        _apply_table_layout(table, f"{table_width}cm", False, ns, min_col_width=0)
     else:
         # 默认不指定宽度时，强制清除表格固定宽度标签，允许自适应或按外部环境流式布局
         tblPr = table._element.tblPr
