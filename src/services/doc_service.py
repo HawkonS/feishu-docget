@@ -6,7 +6,7 @@ from src.core.config_loader import config, ConfigLoader
 from src.core.utils import sanitize_name
 from docx import Document
 
-def process_document(doc_url, template_path=None, table_style=None, base_dir='.', output_root='output', progress_cb=None, add_cover=False, check_stop_func=None, unordered_list_style='default', body_style=None, image_style=None, ignore_mention=False, table_config=None, margin_config=None, code_block_config=None, document_info=None, add_title=False):
+def process_document(doc_url, template_path=None, table_style=None, base_dir='.', output_root='output', progress_cb=None, add_cover=False, check_stop_func=None, unordered_list_style='default', body_style=None, image_style=None, ignore_mention=False, ignore_template_heading_num=False, table_config=None, margin_config=None, code_block_config=None, document_info=None, add_title=False):
     logger = ConfigLoader.get_logger('service')
     if check_stop_func and check_stop_func():
         raise InterruptedError('任务已停止')
@@ -101,7 +101,7 @@ def process_document(doc_url, template_path=None, table_style=None, base_dir='.'
         if progress_cb:
             progress_cb(80, '已完成样式应用', 'success')
         try:
-            clean_document(docx_path, progress_cb=progress_cb, template_path=template_path, add_cover=add_cover, body_style=body_style, image_style=image_style, table_config=table_config, margin_config=margin_config, code_block_config=code_block_config, document_info=document_info)
+            clean_document(docx_path, progress_cb=progress_cb, template_path=template_path, add_cover=add_cover, body_style=body_style, image_style=image_style, table_config=table_config, margin_config=margin_config, code_block_config=code_block_config, document_info=document_info, ignore_template_heading_num=ignore_template_heading_num)
             if document_info is not None:
                 apply_document_info(docx_path, document_info)
         except Exception as e:
