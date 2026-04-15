@@ -625,22 +625,46 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
     # 2. 最后单独处理所有代码块表格，确保代码块的样式和宽度设置不会被外部常规表格覆盖
     for table in all_tables:
         is_code_block = False
+        is_inner_code_block = False
         try:
             tblPr = table._element.tblPr
             if tblPr is not None:
                 caption = tblPr.find(f'{{{ns}}}tblCaption')
                 if caption is not None and caption.get(f'{{{ns}}}val') == 'code_block':
                     is_code_block = True
+                    # Check if it's inside another table
+                    parent = table._element.getparent()
+                    while parent is not None:
+                        if parent.tag == f'{{{ns}}}tbl':
+                            is_inner_code_block = True
+                            break
+                        parent = parent.getparent()
         except:
             pass
             
         if is_code_block:
             count_content += 1
+            
+            # Determine actual width to use
+            actual_table_width = None
             if code_block_config:
+                if is_inner_code_block and code_block_config.get('innerTableWidth') is not None:
+                    actual_table_width = code_block_config.get('innerTableWidth')
+                else:
+                    actual_table_width = code_block_config.get('tableWidth')
+                
+                # Temporarily set the config's tableWidth to actual_table_width
+                # so that _apply_custom_code_block_style uses it
+                original_table_width = code_block_config.get('tableWidth')
+                code_block_config['tableWidth'] = actual_table_width
+                
                 _apply_custom_code_block_style(table, code_block_config, ns)
+                
+                # Restore it
+                code_block_config['tableWidth'] = original_table_width
             
             # Retrieve table width for code block alignment processing if needed
-            table_width = code_block_config.get('tableWidth') if code_block_config else None
+            table_width = actual_table_width
             
             # Since Word doesn't natively center table easily without specific tag <w:jc>,
             # apply alignment at the table level using <w:jc>
