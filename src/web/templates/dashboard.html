@@ -1132,6 +1132,15 @@
                                         <div><label style="font-size:13px; color:#475569;">右边框</label><div style="display:flex; gap:4px;"><select id="codeBorderRightType" class="form-select" style="padding:6px; font-size:13px;"><option value="single" selected>单实线</option><option value="none">无</option><option value="double">双实线</option><option value="dotted">点线</option><option value="dashed">虚线</option></select><input type="number" id="codeBorderRightWidth" value="4" class="form-select" style="width:56px; padding:6px; font-size:13px;"></div></div>
                                     </div>
                                 </div>
+                                <div class="option-divider" style="margin-top: 10px;">
+                                    <div class="option-card-title" style="font-size: 13px; color: #475569; margin-bottom: 8px;">表格代码块覆盖设置</div>
+                                    <div class="compact-grid-2">
+                                        <div>
+                                            <label style="font-size: 11px; color: #64748b;">表格宽度 (cm)</label>
+                                            <input type="number" id="codeInnerTableWidth" placeholder="留空则跟随上方表格宽度" step="0.5" class="form-select">
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1946,6 +1955,7 @@
             document.getElementById("codeFontSize").value = "9";
             document.getElementById("codeAlign").value = "left";
             document.getElementById("codeTableWidth").value = "";
+            document.getElementById("codeInnerTableWidth").value = "";
             document.getElementById("codeLineSpacing").value = "";
             document.getElementById("codeSpaceBefore").value = "";
             document.getElementById("codeSpaceAfter").value = "";
@@ -2231,6 +2241,7 @@
             // Collect Code Block Config Options
             let codeBlockConfig = null;
             const codeTableWidth = document.getElementById("codeTableWidth").value.trim();
+            const codeInnerTableWidth = document.getElementById("codeInnerTableWidth").value.trim();
             const codeLineSpacing = document.getElementById("codeLineSpacing").value.trim();
             const codeSpaceBefore = document.getElementById("codeSpaceBefore").value.trim();
             const codeSpaceAfter = document.getElementById("codeSpaceAfter").value.trim();
@@ -2242,6 +2253,7 @@
                 fontSize: parseFloat(document.getElementById("codeFontSize").value),
                 align: document.getElementById("codeAlign").value,
                 tableWidth: codeTableWidth ? parseFloat(codeTableWidth) : null,
+                innerTableWidth: codeInnerTableWidth ? parseFloat(codeInnerTableWidth) : null,
                 lineSpacing: codeLineSpacing ? parseFloat(codeLineSpacing) : null,
                 spaceBefore: codeSpaceBefore ? parseFloat(codeSpaceBefore) : null,
                 spaceAfter: codeSpaceAfter ? parseFloat(codeSpaceAfter) : null,
