@@ -632,46 +632,71 @@
 
     <!-- Upload Modal -->
     <div id="uploadModal" class="modal">
-        <div class="modal-content" style="width: 400px;">
-            <h3 style="margin-top:0;">上传自定义模板</h3>
+        <div class="modal-content" style="width: 480px; padding: 0;">
+            <div class="modal-header">
+                <div class="advanced-title">
+                    <h3>上传自定义模板</h3>
+                    <p>支持一次性临时使用或永久保存</p>
+                </div>
+                <button onclick="closeUploadModal()" style="background:none; border:none; cursor:pointer; color:#94a3b8; padding: 4px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
             
-            <div class="form-group">
-                <label>模板名称 <span style="color:red">*</span></label>
-                <div class="input-group">
-                    <input type="text" id="tplName" class="form-select" placeholder="给模板起个名字(无需填写后缀)">
-                    <span class="input-group-addon">.docx/.png</span>
+            <div class="modal-body" style="padding: 24px;">
+                <div style="display: flex; flex-direction: column; gap: 20px; width: 100%;">
+                    
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 6px; display: block;">模板名称 <span style="color: #ef4444;">*</span></label>
+                        <div class="input-group" style="display: flex; box-shadow: 0 1px 2px rgba(0,0,0,0.05); border-radius: 6px; overflow: hidden;">
+                            <input type="text" id="tplName" placeholder="给模板起个名字(无需填写后缀)" style="flex: 1; padding: 10px 12px; border: 1px solid #cbd5e1; border-right: none; border-top-left-radius: 6px; border-bottom-left-radius: 6px; font-size: 14px; outline: none; transition: border-color 0.2s;">
+                            <span style="padding: 10px 12px; background: #f8fafc; border: 1px solid #cbd5e1; color: #64748b; font-size: 13px; font-weight: 500; border-top-right-radius: 6px; border-bottom-right-radius: 6px; display: flex; align-items: center;">.docx / .png</span>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 6px; display: block;">模板文件 <span style="color: #ef4444;">*</span></label>
+                        <div style="position: relative;">
+                            <input type="file" id="tplFile" accept=".docx" style="position: absolute; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10;">
+                            <div style="border: 2px dashed #cbd5e1; border-radius: 8px; padding: 24px 20px; text-align: center; background: #f8fafc; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="12" y2="12"></line><line x1="15" y1="15" x2="12" y2="12"></line></svg>
+                                <div>
+                                    <span style="color: #3b82f6; font-weight: 500;">点击或拖拽文件</span>
+                                    <span style="color: #64748b; font-size: 13px; display: block; margin-top: 4px;">支持 .docx 格式</span>
+                                </div>
+                                <div id="tplFileName" style="font-size: 13px; color: #10b981; font-weight: 500; margin-top: 4px; display: none; word-break: break-all;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+                            <span>预览图片 <span style="font-weight:normal; color:#94a3b8;">(可选)</span></span>
+                            <span style="font-size: 11px; color: #94a3b8; font-weight: normal;">图片名称将自动同步</span>
+                        </label>
+                        <input type="file" id="tplImage" accept="image/*" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; color: #475569; background: #fff;">
+                    </div>
+                    
+                    <div class="compact-grid-2" style="gap: 16px;">
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 6px; display: block;">存储模式 <span style="color: #ef4444;">*</span></label>
+                            <select id="tplMode" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; outline: none; background: #fff; cursor: pointer;">
+                                <option value="one_time">仅本次使用 (临时)</option>
+                                <option value="long_term">长期存储 (永久)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 6px; display: block;">上传密码 <span style="color: #ef4444;">*</span></label>
+                            <input type="password" id="tplPassword" placeholder="请输入对应密码" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; outline: none; box-sizing: border-box;">
+                        </div>
+                    </div>
                 </div>
             </div>
             
-            <div class="form-group">
-                <label>模板文件<span style="color:red">*</span></label>
-                <input type="file" id="tplFile" class="form-select" accept=".docx">
-            </div>
-            
-            <div class="form-group">
-                <label>预览图片 (选填)</label>
-                <div class="input-group">
-                    <input type="file" id="tplImage" class="form-select" accept="image/*" style="flex:1;">
-                </div>
-                <div style="font-size:11px; color:#94a3b8; margin-top:4px;">图片名称将自动与模板同步</div>
-            </div>
-            
-            <div class="form-group">
-                <label>存储模式 <span style="color:red">*</span></label>
-                <select id="tplMode" class="form-select">
-                    <option value="one_time">仅本次使用 (临时)</option>
-                    <option value="long_term">长期存储 (永久)</option>
-                </select>
-            </div>
-            
-            <div class="form-group">
-                <label>上传密码 <span style="color:red">*</span></label>
-                <input type="password" id="tplPassword" class="form-select" placeholder="请输入对应模式的密码">
-            </div>
-            
-            <div style="text-align:right; display:flex; justify-content:flex-end; gap:10px;">
-                <button onclick="closeUploadModal()" style="padding:8px 16px; border:1px solid #ddd; background:#fff; border-radius:6px; cursor:pointer;">取消</button>
-                <button onclick="uploadTemplate()" class="btn-start" style="padding:8px 16px;">上传</button>
+            <div class="modal-footer" style="padding: 16px 24px; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end; gap: 12px; background: #f8fafc; border-bottom-left-radius: 14px; border-bottom-right-radius: 14px;">
+                <button onclick="closeUploadModal()" style="padding: 8px 20px; border: 1px solid #cbd5e1; background: #fff; color: #475569; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s;">取消</button>
+                <button onclick="uploadTemplate()" style="padding: 8px 24px; background: #3b82f6; color: #fff; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);">上传模板</button>
             </div>
         </div>
     </div>
@@ -1993,11 +2018,31 @@
             }
         }
 
+        document.getElementById('tplFile').addEventListener('change', function(e) {
+            const fileNameDiv = document.getElementById('tplFileName');
+            if (this.files && this.files.length > 0) {
+                fileNameDiv.innerText = this.files[0].name;
+                fileNameDiv.style.display = 'block';
+                this.nextElementSibling.style.borderColor = '#3b82f6';
+                this.nextElementSibling.style.background = '#eff6ff';
+            } else {
+                fileNameDiv.style.display = 'none';
+                this.nextElementSibling.style.borderColor = '#cbd5e1';
+                this.nextElementSibling.style.background = '#f8fafc';
+            }
+        });
+        
         function clearUploadForm() {
             document.getElementById("tplName").value = "";
             document.getElementById("tplFile").value = "";
             document.getElementById("tplImage").value = "";
             document.getElementById("tplPassword").value = "";
+            document.getElementById('tplFileName').style.display = 'none';
+            const dropZone = document.getElementById('tplFile').nextElementSibling;
+            if(dropZone) {
+                dropZone.style.borderColor = '#cbd5e1';
+                dropZone.style.background = '#f8fafc';
+            }
         }
 
         function uploadTemplate() {
