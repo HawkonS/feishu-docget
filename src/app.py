@@ -285,6 +285,7 @@ def admin_page():
         html = html.replace('[/* default_template */]', config.get('template.default', 'template.docx'))
         html = html.replace('[/* image_max_width */]', str(config.get('image.max_width', '16')))
         html = html.replace('[/* image_max_height */]', str(config.get('image.max_height', '23')))
+        html = html.replace('/* [style_css] */', TableStyleManager.get_frontend_css())
         return html
     return send_file(os.path.join(HTML_DIR, 'login.html'))
 

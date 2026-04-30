@@ -3,7 +3,9 @@ from docx.oxml.ns import nsdecls, qn
 from docx.oxml import parse_xml
 
 class TableStyleManager:
-    STYLES = {1: '样式 1: 深蓝表头 + 白字加粗', 2: '样式 2: 浅蓝表头 + 网格边框', 3: '样式 3: 浅灰表头 + 2磅黑边框', 4: '样式 4: 全黑实线 (2px)', 5: '样式 5: 上下黑边 + 中间灰竖线', 6: '样式 6: 黑表头 + 斑马纹'}
+    BORDER_1PX = 6
+    BORDER_2PX = 12
+    STYLES = {1: '样式 1: 深蓝表头 + 白字加粗', 2: '样式 2: 浅蓝表头 + 网格边框', 3: '样式 3: 浅灰表头 + 细网格边框', 4: '样式 4: 全黑实线 (2px)', 5: '样式 5: 上下黑边 + 中间灰竖线', 6: '样式 6: 黑表头 + 斑马纹'}
 
     @staticmethod
     def list_styles():
@@ -11,7 +13,7 @@ class TableStyleManager:
 
     @staticmethod
     def get_frontend_css():
-        return '\n        /* 样式 1: 深蓝表头 + 白字加粗 */\n        .style-1 th { background: #445bdc; color: white; font-weight: bold; border: 1px solid #D9D9D9; }\n        .style-1 td { background: white; color: black; border: 1px solid #D9D9D9; }\n        \n        /* 样式 2: 浅蓝表头 + 网格边框 */\n        .style-2 th { background: #E6F3FF; color: black; font-weight: bold; border: 1px solid #999; }\n        .style-2 td { background: white; color: black; border: 1px solid #999; }\n        \n        /* 样式 3: 浅灰表头 + 2磅黑边框 */\n        .style-3 th { background: #F2F2F2; color: black; border: 3px solid black; }\n        .style-3 td { background: white; color: black; border: 3px solid black; }\n        \n        /* 样式 4: 全黑实线 (2px) */\n        table.style-4 th, table.style-4 td { background: white; color: black; border: 2px solid black !important; }\n        \n        /* 样式 5: 上下黑边 + 中间灰竖线 */\n        .style-5 table { border-top: 1px solid black; border-bottom: 1px solid black; }\n        .style-5 th, .style-5 td { border: 1px solid #D9D9D9; color: black; }\n        .style-5 tr:first-child th { border-top: 1px solid black; }\n        .style-5 tr:last-child td { border-bottom: 1px solid black; }\n        \n        /* 样式 6: 黑表头 + 斑马纹 */\n        .style-6 tbody tr:nth-child(odd) td { background: #F2F2F2; }\n        .style-6 tbody tr:nth-child(even) td { background: white; }\n        .style-6 thead tr th { background: black; color: white; font-weight: bold; border: 1px solid #D9D9D9; }\n        .style-6 td, .style-6 th { border: 1px solid #D9D9D9; color: black; }\n        '
+        return '\n        /* 样式 1: 深蓝表头 + 白字加粗 */\n        table.style-1 th { background: #445bdc; color: white; font-weight: bold; border: 1px solid #D9D9D9; }\n        table.style-1 td { background: white; color: black; border: 1px solid #D9D9D9; }\n        \n        /* 样式 2: 浅蓝表头 + 网格边框 */\n        table.style-2 th { background: #E6F3FF; color: black; font-weight: bold; border: 1px solid #999; }\n        table.style-2 td { background: white; color: black; border: 1px solid #999; }\n        \n        /* 样式 3: 浅灰表头 + 细网格边框 */\n        table.style-3 th { background: #F2F2F2; color: black; border: 1px solid #D9D9D9; }\n        table.style-3 td { background: white; color: black; border: 1px solid #D9D9D9; }\n        \n        /* 样式 4: 全黑实线 (2px) */\n        table.style-4 th, table.style-4 td { background: white; color: black; border: 2px solid black; }\n        \n        /* 样式 5: 上下黑边 + 中间灰竖线 */\n        table.style-5 th, table.style-5 td { border: 1px solid #D9D9D9; color: black; background: white; }\n        table.style-5 tr:first-child th, table.style-5 tr:first-child td { border-top: 1px solid black; }\n        table.style-5 tr:last-child th, table.style-5 tr:last-child td { border-bottom: 1px solid black; }\n        \n        /* 样式 6: 黑表头 + 斑马纹 */\n        table.style-6 thead tr th, table.style-6 thead tr td { background: black; color: white; font-weight: bold; border: 1px solid #D9D9D9; }\n        table.style-6 tbody tr:nth-child(odd) td, table.style-6 tbody tr:nth-child(odd) th { background: #F2F2F2; }\n        table.style-6 tbody tr:nth-child(even) td, table.style-6 tbody tr:nth-child(even) th { background: white; }\n        table.style-6 td, table.style-6 th { border: 1px solid #D9D9D9; color: black; }\n        '
 
     @staticmethod
     def apply_style(table, style_id):
@@ -36,7 +38,7 @@ class TableStyleManager:
     @staticmethod
     def apply_default_sheet_style(table):
         TableStyleManager._clear_table_borders(table)
-        border_light = {'val': 'single', 'sz': 4, 'color': 'D9D9D9'}
+        border_light = {'val': 'single', 'sz': TableStyleManager.BORDER_1PX, 'color': 'D9D9D9'}
         for r_idx, c_idx, tc in TableStyleManager._iter_cells(table):
             TableStyleManager._apply_border(tc, top=border_light, bottom=border_light, left=border_light, right=border_light)
             TableStyleManager._apply_shading(tc, 'FFFFFF')
@@ -134,7 +136,7 @@ class TableStyleManager:
 
     @staticmethod
     def _apply_style_1(table):
-        border_gray = {'val': 'single', 'sz': 4, 'color': 'D9D9D9'}
+        border_gray = {'val': 'single', 'sz': TableStyleManager.BORDER_1PX, 'color': 'D9D9D9'}
         for r_idx, c_idx, tc in TableStyleManager._iter_cells(table):
             TableStyleManager._apply_border(tc, top=border_gray, bottom=border_gray, left=border_gray, right=border_gray)
             if r_idx == 0:
@@ -146,7 +148,7 @@ class TableStyleManager:
 
     @staticmethod
     def _apply_style_2(table):
-        border = {'val': 'single', 'sz': 8, 'color': '000000'}
+        border = {'val': 'single', 'sz': TableStyleManager.BORDER_1PX, 'color': '999999'}
         for r_idx, c_idx, tc in TableStyleManager._iter_cells(table):
             TableStyleManager._apply_border(tc, top=border, bottom=border, left=border, right=border)
             if r_idx == 0:
@@ -158,9 +160,9 @@ class TableStyleManager:
 
     @staticmethod
     def _apply_style_3(table):
-        border_black = {'val': 'single', 'sz': 16, 'color': '000000'}
+        border_gray = {'val': 'single', 'sz': TableStyleManager.BORDER_1PX, 'color': 'D9D9D9'}
         for r_idx, c_idx, tc in TableStyleManager._iter_cells(table):
-            TableStyleManager._apply_border(tc, top=border_black, bottom=border_black, left=border_black, right=border_black)
+            TableStyleManager._apply_border(tc, top=border_gray, bottom=border_gray, left=border_gray, right=border_gray)
             if r_idx == 0:
                 TableStyleManager._apply_shading(tc, 'F2F2F2')
             else:
@@ -169,7 +171,7 @@ class TableStyleManager:
 
     @staticmethod
     def _apply_style_4(table):
-        border_black = {'val': 'single', 'sz': 12, 'color': '000000'}
+        border_black = {'val': 'single', 'sz': TableStyleManager.BORDER_2PX, 'color': '000000'}
         for r_idx, c_idx, tc in TableStyleManager._iter_cells(table):
             TableStyleManager._apply_border(tc, top=border_black, bottom=border_black, left=border_black, right=border_black)
             TableStyleManager._apply_shading(tc, 'FFFFFF')
@@ -177,8 +179,8 @@ class TableStyleManager:
 
     @staticmethod
     def _apply_style_5(table):
-        border_black = {'val': 'single', 'sz': 8, 'color': '000000'}
-        border_gray = {'val': 'single', 'sz': 4, 'color': 'D9D9D9'}
+        border_black = {'val': 'single', 'sz': TableStyleManager.BORDER_1PX, 'color': '000000'}
+        border_gray = {'val': 'single', 'sz': TableStyleManager.BORDER_1PX, 'color': 'D9D9D9'}
         last_row_idx = len(table._element.tr_lst) - 1
         for r_idx, c_idx, tc in TableStyleManager._iter_cells(table):
             top = border_gray
@@ -190,18 +192,19 @@ class TableStyleManager:
             if r_idx == last_row_idx:
                 bottom = border_black
             TableStyleManager._apply_border(tc, top=top, bottom=bottom, left=left, right=right)
+            TableStyleManager._apply_shading(tc, 'FFFFFF')
             TableStyleManager._set_cell_text_color(tc, '000000')
 
     @staticmethod
     def _apply_style_6(table):
-        border = {'val': 'single', 'sz': 4, 'color': 'D9D9D9'}
+        border = {'val': 'single', 'sz': TableStyleManager.BORDER_1PX, 'color': 'D9D9D9'}
         for r_idx, c_idx, tc in TableStyleManager._iter_cells(table):
             if r_idx == 0:
                 color = '000000'
                 text_color = 'FFFFFF'
                 bold = True
             else:
-                color = 'F2F2F2' if r_idx % 2 == 0 else 'FFFFFF'
+                color = 'F2F2F2' if (r_idx - 1) % 2 == 0 else 'FFFFFF'
                 text_color = '000000'
                 bold = False
             TableStyleManager._apply_shading(tc, color)
