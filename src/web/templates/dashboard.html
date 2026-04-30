@@ -548,6 +548,202 @@
             grid-template-columns: 1fr 1fr;
             gap: 10px;
         }
+        .upload-modal-content {
+            width: min(500px, 95vw);
+        }
+        .upload-template-form {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+        }
+        .modal-close-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #94a3b8;
+            padding: 4px;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-close-btn:hover {
+            background: #f1f5f9;
+            color: #475569;
+        }
+        .upload-modal-body {
+            padding: 24px;
+            display: block;
+        }
+        .upload-form-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 100%;
+        }
+        .upload-field {
+            margin: 0;
+        }
+        .upload-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 6px;
+            display: block;
+        }
+        .upload-label-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+        .required-mark {
+            color: #ef4444;
+        }
+        .upload-input-group {
+            display: flex;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .upload-text-input {
+            flex: 1;
+            min-width: 0;
+            padding: 10px 12px;
+            border: 1px solid #cbd5e1;
+            border-right: none;
+            border-top-left-radius: 6px;
+            border-bottom-left-radius: 6px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            box-sizing: border-box;
+        }
+        .upload-text-input:focus {
+            border-color: #3b82f6;
+            box-shadow: inset 0 0 0 1px #3b82f6;
+        }
+        .upload-text-input[readonly] {
+            background: #f8fafc;
+            color: #64748b;
+        }
+        .upload-suffix {
+            padding: 10px 12px;
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            color: #64748b;
+            font-size: 13px;
+            font-weight: 500;
+            border-top-right-radius: 6px;
+            border-bottom-right-radius: 6px;
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
+        }
+        .upload-hint {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-top: 6px;
+        }
+        .file-drop-zone {
+            position: relative;
+        }
+        .file-drop-input {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+            z-index: 2;
+        }
+        .file-drop-card {
+            border: 2px dashed #cbd5e1;
+            border-radius: 8px;
+            padding: 24px 20px;
+            text-align: center;
+            background: #f8fafc;
+            transition: border-color 0.2s, background 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-height: 124px;
+            box-sizing: border-box;
+        }
+        .file-drop-input:hover + .file-drop-card,
+        .file-drop-input:focus + .file-drop-card {
+            border-color: #3b82f6;
+            background: #eff6ff;
+        }
+        .file-drop-primary {
+            color: #3b82f6;
+            font-weight: 500;
+        }
+        .file-drop-secondary {
+            color: #64748b;
+            font-size: 13px;
+            display: block;
+            margin-top: 4px;
+        }
+        .upload-file-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 13px;
+            color: #475569;
+            background: #fff;
+            box-sizing: border-box;
+        }
+        .upload-file-name {
+            font-size: 13px;
+            color: #10b981;
+            font-weight: 500;
+            margin-top: 6px;
+            word-break: break-all;
+        }
+        .upload-modal-footer {
+            justify-content: flex-end;
+            gap: 12px;
+            border-bottom-left-radius: 14px;
+            border-bottom-right-radius: 14px;
+        }
+        .btn-secondary {
+            padding: 8px 20px;
+            border: 1px solid #cbd5e1;
+            background: #fff;
+            color: #475569;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+        }
+        .btn-secondary:hover {
+            background: #f8fafc;
+            border-color: #94a3b8;
+        }
+        .btn-primary {
+            padding: 8px 24px;
+            background: #3b82f6;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s, box-shadow 0.2s;
+            box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+        }
+        .btn-primary:hover {
+            background: #2563eb;
+            box-shadow: 0 4px 10px rgba(59, 130, 246, 0.24);
+        }
         .option-divider {
             border-top: 1px dashed #e2e8f0;
             margin-top: 10px;
@@ -743,29 +939,69 @@
 
     <!-- Modals -->
     <div id="uploadTemplateModal" class="modal">
-        <div class="modal-content" style="width: 500px;">
-            <h3 style="margin-top:0;" id="uploadModalTitle">上传模板</h3>
-            <form id="uploadTemplateForm" onsubmit="event.preventDefault(); submitUploadTemplate();">
+        <div class="modal-content upload-modal-content">
+            <form id="uploadTemplateForm" class="upload-template-form" onsubmit="event.preventDefault(); submitUploadTemplate();">
                 <input type="hidden" id="uploadMode" value="new">
-                <div style="margin-bottom:15px;" id="uploadNameGroup">
-                    <label style="display:block; margin-bottom:5px; font-size:14px; font-weight:600;">模板名称</label>
-                    <input type="text" id="uploadName" class="form-select" placeholder="例如：我的通用模板" required style="width:100%; box-sizing:border-box;">
-                    <div style="font-size:12px; color:#94a3b8; margin-top:4px;" id="uploadNameHint">如果名称已存在，将覆盖原有模板文件</div>
-                </div>
-                
-                <div style="margin-bottom:15px;" id="uploadFileGroup">
-                    <label style="display:block; margin-bottom:5px; font-size:14px; font-weight:600;">Word 模板文件 (.docx)</label>
-                    <input type="file" id="uploadFile" accept=".docx" class="form-select" style="width:100%; box-sizing:border-box; padding: 6px;">
+
+                <div class="modal-header">
+                    <div class="advanced-title">
+                        <h3 id="uploadModalTitle">上传模板</h3>
+                        <p id="uploadModalSubtitle">管理后台会永久保存模板文件</p>
+                    </div>
+                    <button type="button" onclick="closeUploadModal()" class="modal-close-btn" aria-label="关闭">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
                 </div>
 
-                <div style="margin-bottom:15px;" id="uploadImageGroup">
-                    <label style="display:block; margin-bottom:5px; font-size:14px; font-weight:600;">预览图片 (.png) <span style="font-weight:normal; color:#94a3b8;">(可选)</span></label>
-                    <input type="file" id="uploadImage" accept=".png" class="form-select" style="width:100%; box-sizing:border-box; padding: 6px;">
+                <div class="modal-body upload-modal-body">
+                    <div class="upload-form-stack">
+                        <div class="upload-field" id="uploadNameGroup">
+                            <label class="upload-label">模板名称 <span class="required-mark">*</span></label>
+                            <div class="upload-input-group">
+                                <input type="text" id="uploadName" class="upload-text-input" placeholder="例如：我的通用模板" required>
+                                <span class="upload-suffix">.docx / .png</span>
+                            </div>
+                            <div class="upload-hint" id="uploadNameHint">如果名称已存在，将覆盖原有模板文件</div>
+                        </div>
+
+                        <div class="upload-field" id="uploadFileGroup">
+                            <label class="upload-label">Word 模板文件 <span class="required-mark">*</span></label>
+                            <div class="file-drop-zone">
+                                <input type="file" id="uploadFile" accept=".docx" class="file-drop-input">
+                                <div class="file-drop-card">
+                                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                        <polyline points="14 2 14 8 20 8"></polyline>
+                                        <line x1="12" y1="18" x2="12" y2="12"></line>
+                                        <line x1="9" y1="15" x2="12" y2="12"></line>
+                                        <line x1="15" y1="15" x2="12" y2="12"></line>
+                                    </svg>
+                                    <div>
+                                        <span class="file-drop-primary">点击或拖拽文件</span>
+                                        <span class="file-drop-secondary">支持 .docx 格式</span>
+                                    </div>
+                                    <div id="uploadFileName" class="upload-file-name" style="display:none;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="upload-field" id="uploadImageGroup">
+                            <label class="upload-label upload-label-row">
+                                <span>预览图片 <span style="font-weight:normal; color:#94a3b8;">(可选)</span></span>
+                                <span style="font-size: 11px; color: #94a3b8; font-weight: normal;">图片名称将自动同步</span>
+                            </label>
+                            <input type="file" id="uploadImage" accept=".png,image/png" class="upload-file-input">
+                            <div id="uploadImageName" class="upload-file-name" style="display:none;"></div>
+                        </div>
+                    </div>
                 </div>
-                
-                <div style="text-align:right; display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
-                    <button type="button" onclick="closeUploadModal()" class="magnify-btn" style="position:static; width:80px; background:#f1f5f9;">取消</button>
-                    <button type="submit" class="btn-start">确定</button>
+
+                <div class="modal-footer upload-modal-footer">
+                    <button type="button" onclick="closeUploadModal()" class="btn-secondary">取消</button>
+                    <button type="submit" id="uploadSubmitButton" class="btn-primary">上传模板</button>
                 </div>
             </form>
         </div>
@@ -859,6 +1095,7 @@
         // 初始化加载
         document.addEventListener('DOMContentLoaded', () => {
              loadData(); // 加载基础数据 (templates, styles)
+             bindUploadModalInputs();
              
              const hash = window.location.hash.substring(1);
              const validTabs = ['projects', 'config', 'stats', 'logs', 'templates', 'system'];
@@ -1890,6 +2127,8 @@
             
             const modal = document.getElementById("uploadTemplateModal");
             const title = document.getElementById("uploadModalTitle");
+            const subtitle = document.getElementById("uploadModalSubtitle");
+            const submitButton = document.getElementById("uploadSubmitButton");
             const nameInput = document.getElementById("uploadName");
             const fileInput = document.getElementById("uploadFile");
             const imgInput = document.getElementById("uploadImage");
@@ -1902,10 +2141,14 @@
             
             // Reset form
             document.getElementById("uploadTemplateForm").reset();
+            updateUploadFileName(fileInput, "uploadFileName");
+            updateUploadFileName(imgInput, "uploadImageName");
             modeInput.value = mode;
             
             if (mode === 'new') {
                 title.innerText = "上传新模板";
+                subtitle.innerText = "管理后台会永久保存模板文件";
+                submitButton.innerText = "上传模板";
                 nameInput.value = "";
                 nameInput.readOnly = false;
                 nameGroup.style.display = "block";
@@ -1914,6 +2157,8 @@
                 nameHint.style.display = "block";
             } else if (mode === 'file') {
                 title.innerText = "更换 Word 文件";
+                subtitle.innerText = "仅替换当前模板的 .docx 文件";
+                submitButton.innerText = "更换文件";
                 nameInput.value = editName;
                 nameInput.readOnly = true;
                 // Hide Name input visually but keep value? Better to show as read-only text.
@@ -1924,6 +2169,8 @@
                 nameHint.style.display = "none";
             } else if (mode === 'image') {
                 title.innerText = "更换预览图片";
+                subtitle.innerText = "仅替换当前模板的预览图片";
+                submitButton.innerText = "更换图片";
                 nameInput.value = editName;
                 nameInput.readOnly = true;
                 nameGroup.style.display = "block";
@@ -1933,6 +2180,25 @@
             }
             
             modal.style.display = "flex";
+        }
+
+        function bindUploadModalInputs() {
+            const fileInput = document.getElementById("uploadFile");
+            const imgInput = document.getElementById("uploadImage");
+            if (fileInput) {
+                fileInput.addEventListener("change", () => updateUploadFileName(fileInput, "uploadFileName"));
+            }
+            if (imgInput) {
+                imgInput.addEventListener("change", () => updateUploadFileName(imgInput, "uploadImageName"));
+            }
+        }
+
+        function updateUploadFileName(input, targetId) {
+            const target = document.getElementById(targetId);
+            if (!input || !target) return;
+            const file = input.files && input.files[0];
+            target.innerText = file ? file.name : "";
+            target.style.display = file ? "block" : "none";
         }
         
         function openRenameModal(name) {
