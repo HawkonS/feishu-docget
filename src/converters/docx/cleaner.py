@@ -383,6 +383,9 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
         if progress_cb:
             progress_cb(92, '已跳过应用模板', 'success')
     
+    heading_style_ids = _get_heading_style_ids(doc, ns)
+    template_heading_numbering_indents = _get_template_heading_numbering_indents(template_path, heading_style_ids, ns)
+
     default_max_h = 23.0
     try:
         val = config.get('image.max_height', 23)
@@ -752,10 +755,20 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
         if numbering_part:
             for abstractNum in numbering_part._element.findall('.//w:abstractNum', namespaces=numbering_part._element.nsmap):
                 for lvl in abstractNum.findall('w:lvl', namespaces=numbering_part._element.nsmap):
+                    p_style = lvl.find('w:pStyle', namespaces=numbering_part._element.nsmap)
+                    p_style_id = p_style.get(qn('w:val')) if p_style is not None else None
                     pPr = lvl.find('w:pPr', namespaces=numbering_part._element.nsmap)
                     if pPr is not None:
                         ind = pPr.find('w:ind', namespaces=numbering_part._element.nsmap)
                         if ind is not None:
+                            if p_style_id in heading_style_ids:
+                                # Heading numbering belongs to the template; do not apply body/list first-line indent to it.
+                                template_ind = template_heading_numbering_indents.get(p_style_id)
+                                if template_ind is not None:
+                                    for attr in list(ind.attrib):
+                                        del ind.attrib[attr]
+                                    ind.attrib.update(template_ind)
+                                continue
                             # 保证 numbering 层级不会有强制缩进干扰段落层的首行缩进
                             for attr in list(ind.attrib):
                                 del ind.attrib[attr]
@@ -777,11 +790,12 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
         
         style = p.style
         style_name = style.name if style else ""
+        is_heading = _is_heading_paragraph(p, ns)
         
         is_list = False
-        if p._element.pPr is not None and p._element.pPr.numPr is not None:
+        if not is_heading and p._element.pPr is not None and p._element.pPr.numPr is not None:
             is_list = True
-        else:
+        elif not is_heading:
             curr_style = style
             while curr_style is not None:
                 if curr_style.name and curr_style.name.startswith('List'):
@@ -797,7 +811,9 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
         # 但是这里不再手动调用 _clean_text_indent，因为 _clean_text_indent 会把所有缩进相关的 tag 强行置 0，
         # 会影响到后面我们设置 firstLine 和 left 的效果。
         
-        if is_list:
+        if is_heading:
+            _clean_text_indent(p, ns)
+        elif is_list:
             # 列表缩进已经在 numbering_part 中统一处理，此处不需要再修改段落上的 ind 属性
             # 但为防万一，清除段落上的 left 和 hanging 属性（保留 numbering 的效果）
             pPr = p._element.get_or_add_pPr()
@@ -834,7 +850,7 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
         # 应用正文样式
         if body_style:
             # 排除标题样式 (Heading 1-9, Title, Subtitle)
-            is_heading = style_name.startswith('Heading') or style_name in ['Title', 'Subtitle']
+            # is_heading is computed from the complete paragraph style chain above.
             # 排除列表 (可选，这里暂时不排除列表，让列表也应用字体大小，但缩进可能受影响，需谨慎)
             # 这里的 _clean_text_indent 已经处理了缩进。
             # 飞书列表通常是 List Paragraph。
@@ -844,8 +860,7 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
                 
         # 强制移除标题的直接编号属性（防止转换时直接附加了编号）
         if ignore_template_heading_num:
-            style_lower = style_name.lower()
-            if style_lower.startswith('heading') or '标题' in style_name or 'title' in style_lower or 'subtitle' in style_lower:
+            if is_heading:
                 pPr = p._element.get_or_add_pPr()
                 numPr = pPr.find(f"{{{ns}}}numPr")
                 if numPr is not None:
@@ -1102,14 +1117,72 @@ def _apply_paragraph_style(paragraph, style_config, ns):
                     del spacing.attrib[f'{{{ns}}}afterLines']
 
 def _is_heading_style(style_element, ns_w):
-    style_id = style_element.get(f"{{{ns_w}}}styleId") or ""
-    if style_id.lower().startswith('heading') or 'title' in style_id.lower():
+    style_id = (style_element.get(f"{{{ns_w}}}styleId") or "").lower()
+    if style_id.startswith('heading') or 'title' in style_id:
         return True
     name_elem = style_element.find(f"{{{ns_w}}}name")
     if name_elem is not None:
         val = (name_elem.get(f"{{{ns_w}}}val") or "").lower()
-        if val.startswith('heading') or '标题' in val or 'title' in val or 'subtitle' in val:
+        if val.startswith('heading') or val.startswith("\u6807\u9898") or val.startswith("\u526f\u6807\u9898") or 'title' in val or 'subtitle' in val:
             return True
+    return False
+
+def _get_heading_style_ids(doc, ns_w):
+    heading_style_ids = set()
+    try:
+        for style in doc.styles:
+            style_element = getattr(style, '_element', None)
+            if style_element is None:
+                continue
+            if _is_heading_style(style_element, ns_w):
+                style_id = style_element.get(f"{{{ns_w}}}styleId")
+                if style_id:
+                    heading_style_ids.add(style_id)
+    except Exception as e:
+        logger.debug(f'Failed to collect heading style ids: {e}')
+    return heading_style_ids
+
+def _get_template_heading_numbering_indents(template_path, heading_style_ids, ns_w):
+    if not template_path or not heading_style_ids or not os.path.exists(template_path):
+        return {}
+    try:
+        with zipfile.ZipFile(template_path) as z:
+            if 'word/numbering.xml' not in z.namelist():
+                return {}
+            root = ET.fromstring(z.read('word/numbering.xml'))
+    except Exception as e:
+        logger.debug(f'Failed to read template heading numbering indents: {e}')
+        return {}
+
+    result = {}
+    for lvl in root.findall(f'.//{{{ns_w}}}lvl'):
+        p_style = lvl.find(f'{{{ns_w}}}pStyle')
+        p_style_id = p_style.get(f'{{{ns_w}}}val') if p_style is not None else None
+        if p_style_id not in heading_style_ids or p_style_id in result:
+            continue
+        pPr = lvl.find(f'{{{ns_w}}}pPr')
+        ind = pPr.find(f'{{{ns_w}}}ind') if pPr is not None else None
+        result[p_style_id] = dict(ind.attrib) if ind is not None else {}
+    return result
+
+def _is_heading_paragraph(paragraph, ns_w):
+    try:
+        style = paragraph.style
+    except Exception:
+        style = None
+    visited = set()
+    while style is not None:
+        style_element = getattr(style, '_element', None)
+        if style_element is not None and _is_heading_style(style_element, ns_w):
+            return True
+        style_key = id(style)
+        if style_key in visited:
+            break
+        visited.add(style_key)
+        try:
+            style = style.base_style
+        except Exception:
+            break
     return False
 
 def _copy_styles_from_template(template_path, target_doc, ignore_template_heading_num=False):
