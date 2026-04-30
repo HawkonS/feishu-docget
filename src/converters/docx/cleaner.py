@@ -422,6 +422,7 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
     header_align = None
     content_align = None
     table_auto_fit = False
+    table_border_enabled = False
     
     if table_config:
         force_clear_tbl_indent = table_config.get('forceClearIndent', True)
@@ -439,6 +440,7 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
         header_align = _align_to_docx(table_config.get('headerAlign', 'center'), 1)
         content_align = _align_to_docx(table_config.get('contentAlign', 'left'), 0)
         content_image_align = _align_to_docx(table_config.get('contentImageAlign', 'left'), 0)
+        table_border_enabled = bool(table_config.get('borderEnabled'))
     else:
         force_clear_tbl_indent = True
         force_clear_tbl_image_space = True
@@ -559,6 +561,8 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
         count_content += 1
         if _apply_table_layout(table, table_width_str, table_auto_fit, ns, min_col_width):
             count_auto_fit += 1
+        if table_border_enabled:
+            _apply_custom_table_borders(table, table_config, ns)
 
         for r_idx, row in enumerate(table.rows):
             is_header = (r_idx == 0)
@@ -1618,6 +1622,56 @@ def _set_cell_text_color(cell, color_hex, bold=False):
             run.font.color.rgb = RGBColor.from_string(color_hex)
             if bold:
                 run.font.bold = True
+
+def _hex_to_docx_color(value, default='D9D9D9'):
+    if not isinstance(value, str):
+        return default
+    color = value.strip().lstrip('#').upper()
+    if re.fullmatch(r'[0-9A-F]{6}', color):
+        return color
+    return default
+
+def _safe_border_width(value, fallback=6):
+    try:
+        width = int(value)
+    except (TypeError, ValueError):
+        width = fallback
+    return max(0, min(width, 96))
+
+def _build_border_edge(border_config, edge, color, default_width=6):
+    allowed_types = {'single', 'double', 'dotted', 'dashed', 'none'}
+    borders = border_config.get('borders') if isinstance(border_config, dict) else {}
+    edge_config = borders.get(edge, {}) if isinstance(borders, dict) else {}
+    line_type = str(edge_config.get('type', 'single')).lower()
+    if line_type not in allowed_types:
+        line_type = 'single'
+    width = _safe_border_width(edge_config.get('width'), default_width)
+    if width <= 0:
+        line_type = 'none'
+    return {'val': line_type, 'sz': width, 'color': color}
+
+def _apply_custom_table_borders(table, border_config, ns):
+    border_color = _hex_to_docx_color(border_config.get('borderColor', '#D9D9D9'))
+    border_edges = {
+        'top': _build_border_edge(border_config, 'top', border_color),
+        'bottom': _build_border_edge(border_config, 'bottom', border_color),
+        'left': _build_border_edge(border_config, 'left', border_color),
+        'right': _build_border_edge(border_config, 'right', border_color),
+    }
+    seen_cells = set()
+    for row in table.rows:
+        for cell in row.cells:
+            cell_id = id(cell._tc)
+            if cell_id in seen_cells:
+                continue
+            seen_cells.add(cell_id)
+            _apply_border(
+                cell,
+                top=border_edges['top'],
+                bottom=border_edges['bottom'],
+                left=border_edges['left'],
+                right=border_edges['right']
+            )
 
 def _apply_custom_code_block_style(table, config, ns):
     def hex_to_docx(h):
