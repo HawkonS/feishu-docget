@@ -8,6 +8,10 @@
     <script src="https://unpkg.com/docx-preview/dist/docx-preview.min.js"></script>
     <style>
         /* [style_css] */
+        html, body {
+            max-width: 100%;
+            overflow-x: hidden;
+        }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             margin: 0;
@@ -143,8 +147,14 @@
         }
         .task-list {
             flex: 1;
-            min-height: 0;
+            min-height: 112px;
             margin-bottom: 12px;
+            padding: 12px;
+        }
+        .task-list .task-empty-placeholder {
+            min-height: 88px;
+            padding: 18px 12px;
+            line-height: 1.6;
         }
         .btn-success {
             background: #10b981;
@@ -265,15 +275,31 @@
         }
 
         @media (max-width: 1200px) {
-            .layout { grid-template-columns: 1fr; gap: 20px; }
-            .hero { flex-direction: column; align-items: flex-start; padding: 20px; }
+            .layout { grid-template-columns: 1fr; gap: 20px; flex: none; min-height: 0; }
+            .hero {
+                flex-direction: column;
+                align-items: flex-start;
+                width: 100%;
+                max-width: 100%;
+                min-width: 0;
+                padding: 20px;
+                overflow: hidden;
+            }
             .hero > div:first-child { width: 100%; }
             .hero-title { width: 100%; white-space: normal; word-break: break-word; font-size: 22px; }
-            .hero-sub { width: 100%; white-space: normal; margin-bottom: 10px; }
+            .hero-sub { width: 100%; white-space: normal; overflow-wrap: anywhere; margin-bottom: 10px; }
             
-            .hero-input { flex-direction: column; width: 100%; align-items: stretch; }
+            .hero-input {
+                flex-direction: column;
+                width: 100%;
+                max-width: 100%;
+                min-width: 0;
+                align-items: stretch;
+            }
             .hero-input input { 
                 width: 100% !important; 
+                max-width: 100%;
+                min-width: 0;
                 box-sizing: border-box; 
                 margin-bottom: 10px; 
                 font-size: 16px; 
@@ -281,28 +307,80 @@
             }
             .hero-input button { 
                 width: 100%; 
+                max-width: 100%;
                 white-space: nowrap; 
                 font-size: 16px;
                 padding: 12px;
             }
             
-            .page { padding: 16px; padding-bottom: 40px; }
+            .page {
+                height: auto;
+                min-height: 100vh;
+                padding: 16px;
+                padding-bottom: 40px;
+            }
             
             .list-view { display: none; }
-            .mobile-select { display: block; }
+            .mobile-select {
+                display: block;
+                max-width: 100%;
+                min-width: 0;
+                min-height: 48px;
+                border-radius: 12px;
+                color: #1f2a44;
+                box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+            }
             
             .split-view { 
                 grid-template-columns: 1fr !important; 
                 height: auto !important; 
                 display: flex;
                 flex-direction: column;
+                width: 100%;
+                max-width: 100%;
+                min-width: 0;
+                margin-bottom: 16px;
             }
-            .preview-pane { height: 200px !important; width: 100%; }
+            .preview-pane { height: 160px !important; width: 100%; }
+            .template-split { display: none; }
+            .style-split { margin-top: 4px; overflow: hidden; }
+            .style-split .preview-pane,
+            .style-split .preview-content {
+                max-width: 100%;
+                min-width: 0;
+            }
             
             .task-list { height: 200px; display: block; }
             .log-container { height: 160px; }
             
-            .panel { padding: 16px; }
+            .panel {
+                width: 100%;
+                max-width: 100%;
+                min-width: 0;
+                height: auto;
+                overflow: visible;
+                padding: 16px;
+            }
+            .panel-title {
+                height: auto;
+                min-height: 32px;
+                align-items: flex-start;
+                flex-wrap: wrap;
+                gap: 12px;
+            }
+            .panel-header-actions {
+                flex-shrink: 0;
+                flex-wrap: wrap;
+                max-width: 100%;
+                justify-content: flex-end;
+                gap: 8px;
+            }
+            .footer-copyright {
+                position: static;
+                margin-top: 16px;
+                text-align: right;
+                padding-right: 4px;
+            }
             .docx { width: 100% !important; }
         }
 
@@ -592,7 +670,7 @@
                 
                 <select id="templateSelectMobile" class="mobile-select" onchange="onMobileTemplateChange()"></select>
                 
-                <div class="split-view" style="flex: 1; min-height: 0;">
+                <div class="split-view template-split" style="flex: 1; min-height: 0;">
                     <div class="list-view" id="templateList"></div>
                     <div class="preview-pane" id="templatePreview">
                         <div class="centered-placeholder">请选择模板</div>
@@ -603,7 +681,7 @@
                 
                 <select id="styleSelectMobile" class="mobile-select" onchange="onMobileStyleChange()"></select>
                 
-                <div class="split-view" style="height:180px; flex-shrink: 0;">
+                <div class="split-view style-split" style="height:180px; flex-shrink: 0;">
                     <div class="list-view" id="styleList"></div>
                     <div class="preview-pane">
                         <div class="preview-content tbl-preview" id="stylePreview">
@@ -620,7 +698,7 @@
                 </div>
                 <label style="font-weight:600; font-size:14px; display:block; margin-bottom:8px;">任务清单</label>
                 <div class="list-view task-list" id="taskList" style="margin-bottom:20px">
-                    <div class="centered-placeholder">任务待开始</div>
+                    <div class="centered-placeholder task-empty-placeholder">任务待开始</div>
                 </div>
                 <label style="font-weight:600; font-size:14px; display:block; margin-bottom:8px;">日志记录</label>
                 <div class="log-container" id="logList">
@@ -1703,7 +1781,7 @@
         function renderTaskList() {
             const list = document.getElementById("taskList");
             if (!tasks.length) {
-                list.innerHTML = `<div class="centered-placeholder">任务待开始</div>`;
+                list.innerHTML = `<div class="centered-placeholder task-empty-placeholder">任务待开始</div>`;
                 document.getElementById("taskDownloadArea").innerHTML = "";
                 return;
             }
