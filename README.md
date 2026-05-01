@@ -132,16 +132,28 @@ http://127.0.0.1:7800/admin
 python src/cli/feishu2word.py "https://example.feishu.cn/wiki/xxxx" \
   --template Hawkon.docx \
   --style 3 \
-  --cover
+  --margin-preset narrow \
+  --table-border \
+  --table-border-color "#D9D9D9" \
+  --code-bg-color "#F5F5F5"
 ```
 
 参数说明：
 
 - `url`：飞书文档链接。
 - `--template/-t`：模板文件名，默认读取 `template.default`。
+- `--template-path`：直接使用任意本地 `.docx` 模板路径。
 - `--style/-s`：表格样式 ID，范围 `1-6`。
 - `--output/-o`：输出目录，默认读取 `output.dir`。
-- `--cover/-c`：从模板追加封面。
+- `--cover/-c` / `--no-cover`：是否从模板追加封面，默认与前台一致为添加封面。
+- `--list-templates` / `--list-styles`：查看可用模板和 6 种表格样式。
+- `--print-options`：只打印本次命令组装出的前台兼容参数，不执行下载，便于检查高级选项。
+
+CLI 已覆盖前台高级选项，包括标题、页边距、文档信息、正文样式、图片样式、表格布局、表格内容调整、自定义表格边框和代码块样式。完整用法执行：
+
+```bash
+python src/cli/feishu2word.py --help
+```
 
 ## 使用说明
 
