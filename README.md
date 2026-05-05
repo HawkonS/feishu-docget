@@ -20,7 +20,7 @@
 - 文档信息写入：可写入作者、标题、主题、创建/修改时间、公司、模板等 Word 元数据。
 - 任务管理：Web 前台支持任务队列、进度、日志和下载。
 - 管理后台：支持项目管理、模板维护、配置管理、下载统计、日志检查和系统操作。
-- 命令行导出：`src/cli/feishu2word.py` 可用于脚本化下载。
+- 命令行导出：`tools/feishu2word.bat`、`tools/feishu2word.sh` 可用于脚本化下载。
 
 ## 技术栈
 
@@ -47,7 +47,7 @@ feishu-docget/
 ├── run.sh                       # Linux/macOS 启动脚本
 ├── src/
 │   ├── app.py                   # Flask Web、API、任务队列和管理后台入口
-│   ├── cli/feishu2word.py       # 命令行入口
+│   ├── cli/feishu2word.py       # CLI 实现逻辑
 │   ├── core/
 │   │   ├── config_loader.py     # 配置加载、默认配置补全、日志初始化
 │   │   ├── feishu_client.py     # 飞书 Token、文档块、媒体/画板下载
@@ -64,6 +64,9 @@ feishu-docget/
 │       ├── index.html           # 前台下载页面
 │       ├── dashboard.html       # 管理后台
 │       └── login.html           # 管理后台登录页
+├── tools/
+│   ├── feishu2word.bat          # Windows CLI 入口
+│   └── feishu2word.sh           # Linux/macOS CLI 入口
 ├── template/                    # Word 模板和同名预览图片
 ├── output/                      # 导出结果
 └── logs/                        # 运行日志和下载统计
@@ -128,8 +131,22 @@ http://127.0.0.1:7800/admin
 
 ### 4. 命令行导出
 
+Windows：
+
+```powershell
+tools\feishu2word.bat "https://example.feishu.cn/wiki/xxxx" `
+  --template Hawkon.docx `
+  --style 3 `
+  --margin-preset narrow `
+  --table-border `
+  --table-border-color "#D9D9D9" `
+  --code-bg-color "#F5F5F5"
+```
+
+Linux/macOS：
+
 ```bash
-python src/cli/feishu2word.py "https://example.feishu.cn/wiki/xxxx" \
+sh tools/feishu2word.sh "https://example.feishu.cn/wiki/xxxx" \
   --template Hawkon.docx \
   --style 3 \
   --margin-preset narrow \
@@ -152,8 +169,10 @@ python src/cli/feishu2word.py "https://example.feishu.cn/wiki/xxxx" \
 CLI 已覆盖前台高级选项，包括标题、页边距、文档信息、正文样式、图片样式、表格布局、表格内容调整、自定义表格边框和代码块样式。完整用法执行：
 
 ```bash
-python src/cli/feishu2word.py --help
+sh tools/feishu2word.sh --help
 ```
+
+Windows 下执行 `tools\feishu2word.bat --help`。
 
 ## 使用说明
 

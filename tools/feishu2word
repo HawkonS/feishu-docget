@@ -1,5 +1,0 @@
-#!/bin/bash
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PROJECT_ROOT="$( dirname "$DIR" )"
-export PYTHONPATH="$PROJECT_ROOT:$PYTHONPATH"
-python3 "$PROJECT_ROOT/src/cli/feishu2word.py" "$@"
