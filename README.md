@@ -21,6 +21,7 @@
 - 任务管理：Web 前台支持任务队列、进度、日志和下载。
 - 管理后台：支持项目管理、模板维护、配置管理、下载统计、日志检查和系统操作。
 - 命令行导出：`tools/feishu2word.bat`、`tools/feishu2word.sh` 可用于脚本化下载。
+- 自定义下载机器人：高级选项和 CLI 可填写飞书机器人应用信息，校验通过后优先使用该机器人下载，权限不足时回退系统默认机器人。
 
 ## 技术栈
 
@@ -49,6 +50,7 @@ feishu-docget/
 │   ├── app.py                   # Flask Web、API、任务队列和管理后台入口
 │   ├── cli/feishu2word.py       # CLI 实现逻辑
 │   ├── core/
+│   │   ├── bot_store.py         # 自定义机器人校验
 │   │   ├── config_loader.py     # 配置加载、默认配置补全、日志初始化
 │   │   ├── feishu_client.py     # 飞书 Token、文档块、媒体/画板下载
 │   │   ├── image_processor.py   # 图片裁剪
@@ -69,7 +71,7 @@ feishu-docget/
 │   └── feishu2word.sh           # Linux/macOS CLI 入口
 ├── template/                    # Word 模板和同名预览图片
 ├── output/                      # 导出结果
-└── logs/                        # 运行日志和下载统计
+└── logs/                        # 运行日志和下载统计等本地运行数据
 ```
 
 ## 快速开始
@@ -101,6 +103,8 @@ log.dir=logs
 ```
 
 注意：`feishu-docget.properties` 包含敏感凭据，不要提交到 Git。
+
+前台高级选项和 CLI 也支持输入自定义机器人 `App ID` / `App Secret`。系统会先验证机器人是否可用；不可用时不会启用。下载时优先使用自定义机器人，文档或资源权限不足时自动回退系统默认机器人。
 
 ### 3. 启动 Web 服务
 
@@ -163,6 +167,7 @@ sh tools/feishu2word.sh "https://example.feishu.cn/wiki/xxxx" \
 - `--style/-s`：表格样式 ID，范围 `1-6`。
 - `--output/-o`：输出目录，默认读取 `output.dir`。
 - `--cover/-c` / `--no-cover`：是否从模板追加封面，默认与前台一致为添加封面。
+- `--bot-app-id` / `--bot-app-secret`：自定义下载机器人应用信息，需同时提供。
 - `--list-templates` / `--list-styles`：查看可用模板和 6 种表格样式。
 - `--print-options`：只打印本次命令组装出的前台兼容参数，不执行下载，便于检查高级选项。
 
@@ -201,6 +206,7 @@ output/<doc_id>/<文档标题>.docx
 - 图片设置：图片尺寸、图片对齐。
 - 表格设置：表格规则、布局、内容对齐、段落间距、表格内容调整、边框管理。
 - 代码块：代码外观、布局、段落间距、缩进规则、边框设置。
+- 机器人：自定义飞书机器人 App ID 和 App Secret，默认留空即使用系统默认机器人。
 
 高级选项只影响当前下载任务，不会自动修改模板文件。
 
@@ -259,13 +265,14 @@ template.password.one_time=
 整体流程如下：
 
 1. `src/app.py` 接收 Web/API 请求，创建任务并放入下载队列。
-2. `src/services/doc_service.py` 根据链接解析文档 ID，创建输出目录。
-3. `FeishuClient` 获取飞书文档元信息、文档块、图片和画板资源。
-4. `FeishuDocxConverter` 将飞书 Block 递归渲染为 Word 内容。
-5. `TableStyleManager` 应用前台选择的表格样式。
-6. `clean_document` 复制模板样式、页眉页脚、封面，并执行图片、表格、代码块、正文、页边距等清洗。
-7. `apply_document_info` 写入 Word 元数据。
-8. Web 前台轮询任务状态，任务完成后提供下载。
+2. `src/services/doc_service.py` 校验自定义机器人，按“自定义优先、权限不足回退系统默认”的顺序准备下载身份。
+3. `src/services/doc_service.py` 根据链接解析文档 ID，创建输出目录。
+4. `FeishuClient` 获取飞书文档元信息、文档块、图片和画板资源。
+5. `FeishuDocxConverter` 将飞书 Block 递归渲染为 Word 内容。
+6. `TableStyleManager` 应用前台选择的表格样式。
+7. `clean_document` 复制模板样式、页眉页脚、封面，并执行图片、表格、代码块、正文、页边距等清洗。
+8. `apply_document_info` 写入 Word 元数据。
+9. Web 前台轮询任务状态，任务完成后提供下载。
 
 ## 配置项
 

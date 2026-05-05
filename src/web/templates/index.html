@@ -883,6 +883,7 @@
                 <div class="modal-tab-item" onclick="switchAdvancedTab('image', this)">图片设置</div>
                 <div class="modal-tab-item" onclick="switchAdvancedTab('table', this)">表格设置</div>
                 <div class="modal-tab-item" onclick="switchAdvancedTab('code', this)">代码块</div>
+                <div class="modal-tab-item" onclick="switchAdvancedTab('bot', this)">机器人</div>
             </div>
             <div class="advanced-content-wrap">
                 <div class="modal-tab-content active" id="tab-basic">
@@ -1455,6 +1456,23 @@
                         </div>
                     </div>
                 </div>
+                <div class="modal-tab-content" id="tab-bot">
+                    <div class="advanced-grid">
+                        <div class="option-card full">
+                            <div class="option-card-title">自定义下载机器人</div>
+                            <div class="compact-grid-2">
+                                <div>
+                                    <label style="font-size: 12px; color: #64748b;">App ID</label>
+                                    <input type="text" id="botAppId" placeholder="默认留空，使用系统机器人" autocomplete="off" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 12px; color: #64748b;">App Secret</label>
+                                    <input type="password" id="botAppSecret" placeholder="默认留空，使用系统机器人" autocomplete="new-password" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <div class="advanced-footer">
@@ -1899,6 +1917,19 @@
                 };
             }
 
+            const botAppId = document.getElementById("botAppId").value.trim();
+            const botAppSecret = document.getElementById("botAppSecret").value.trim();
+            let botConfig = null;
+            if (botAppId || botAppSecret) {
+                if (!botAppId || !botAppSecret) {
+                    return alert("请同时填写机器人 App ID 和 App Secret");
+                }
+                botConfig = {
+                    appId: botAppId,
+                    appSecret: botAppSecret
+                };
+            }
+
             if (!url) return alert("请输入文档链接");
             
             if (timer) clearTimeout(timer);
@@ -1920,7 +1951,8 @@
                     tableConfig,
                     marginConfig,
                     codeBlockConfig,
-                    documentInfo
+                    documentInfo,
+                    botConfig
                 })
             }).then(r => r.json()).then(res => {
                 if (res.status !== "ok") {
@@ -2223,6 +2255,8 @@
             document.getElementById("codeBorderLeftWidth").value = "4";
             document.getElementById("codeBorderRightType").value = "single";
             document.getElementById("codeBorderRightWidth").value = "4";
+            document.getElementById("botAppId").value = "";
+            document.getElementById("botAppSecret").value = "";
         }
 
         function toggleListStyle() {

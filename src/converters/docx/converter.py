@@ -224,6 +224,9 @@ class FeishuDocxConverter:
                     if not success:
                         logger.warning(f'下载 {type_} 失败: {token}')
                         failed_count += 1
+                except PermissionError:
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    raise
                 except Exception as e:
                     logger.error(f'下载任务异常 {token}: {e}')
                     failed_count += 1
@@ -253,6 +256,8 @@ class FeishuDocxConverter:
                         pass
                     return True
             return False
+        except PermissionError:
+            raise
         except Exception as e:
             logger.debug(f'预下载 {type_} 异常 {token}: {e}')
             return False
@@ -347,6 +352,8 @@ class FeishuDocxConverter:
         block['_level'] = level
         try:
             handler(block, container)
+        except PermissionError:
+            raise
         except Exception as e:
             logger.error(f"处理块错误 {block.get('block_id')} ({btype}): {str(e)}")
 
@@ -606,6 +613,7 @@ class FeishuDocxConverter:
             except PermissionError as e:
                 logger.error(str(e))
                 self._update_progress(message=f'下载失败(无权限): {token}', log_type='error')
+                raise
             except Exception as e:
                 logger.error(f'下载图片异常 {token}: {e}')
         if os.path.exists(file_path):
@@ -720,6 +728,8 @@ class FeishuDocxConverter:
                     except Exception as e:
                         logger.warning(f'合并表格单元格失败 {token}: {e}')
             logger.info(f'已渲染表格 {token} ({row_count}x{col_count})')
+        except PermissionError:
+            raise
         except Exception as e:
             logger.error(f'处理表格失败 {token}: {e}')
             logger.error(traceback.format_exc())
@@ -798,8 +808,12 @@ class FeishuDocxConverter:
                         for p in doc_cell.paragraphs:
                             for run in p.runs:
                                 run.font.bold = True
+                except PermissionError:
+                    raise
                 except Exception as e:
                     logger.warning(f'渲染单元格错误 {cell_id} 位于 {r},{c}: {e}')
+        except PermissionError:
+            raise
         except Exception as e:
             logger.error(f"创建表格失败 {block.get('block_id')}: {e}")
             logger.error(traceback.format_exc())

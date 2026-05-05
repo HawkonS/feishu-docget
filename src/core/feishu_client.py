@@ -19,6 +19,22 @@ class FeishuClient:
         self.session.mount('http://', adapter)
         self.session.mount('https://', adapter)
 
+    def _is_permission_error(self, code=None, msg='', status_code=None):
+        msg_lower = str(msg or '').lower()
+        return (
+            status_code == 403
+            or code in (99991668, 99991663, 1770032)
+            or 'no permission' in msg_lower
+            or 'permission denied' in msg_lower
+            or 'forbidden' in msg_lower
+        )
+
+    def _permission_error(self, detail='应用无权限'):
+        from src.core.config_loader import config
+        bot_name = config.get('bot.name', 'Hawkon-Tool')
+        contact_name = config.get('contact.name', 'Hakwon')
+        return PermissionError(f'{detail}: 应用无权限，请为“{bot_name}”机器人开通相关权限，如有问题请联系 {contact_name}')
+
     def get_token(self):
         now = int(time.time())
         with self._lock:
@@ -106,7 +122,7 @@ class FeishuClient:
             if code != 0:
                 msg = res.get('msg', '')
                 self.logger.error(f'获取块 API 失败: code={code}, msg={msg}')
-                if code == 1770032:
+                if self._is_permission_error(code, msg):
                     from src.core.config_loader import config
                     bot_name = config.get('bot.name', 'Hawkon-Tool')
                     contact_name = config.get('contact.name', 'Hakwon')
@@ -179,6 +195,8 @@ class FeishuClient:
             return False
         if r.status_code != 200:
             self.logger.error('下载画板失败: ' + str(r.status_code))
+            if self._is_permission_error(status_code=r.status_code):
+                raise self._permission_error(f'下载画板失败({r.status_code})')
             return False
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         with open(save_path, 'wb') as f:
@@ -213,7 +231,11 @@ class FeishuClient:
                             return sheet
                     return {}
                 return sheets
-            self.logger.error(f"获取表格元数据失败: {res.get('msg')}")
+            code = res.get('code')
+            msg = res.get('msg')
+            self.logger.error(f"获取表格元数据失败: {msg}")
+            if self._is_permission_error(code, msg):
+                raise self._permission_error('获取电子表格元数据失败')
         return {} if sheet_id else []
 
     def get_sheet_values(self, spreadsheet_token, range_str):
@@ -237,7 +259,11 @@ class FeishuClient:
         if res:
             if res.get('code') == 0:
                 return res.get('data', {}).get('valueRange', {})
-            self.logger.error(f"获取表格内容失败: {res.get('msg')}")
+            code = res.get('code')
+            msg = res.get('msg')
+            self.logger.error(f"获取表格内容失败: {msg}")
+            if self._is_permission_error(code, msg):
+                raise self._permission_error('获取电子表格内容失败')
         return {}
 
     def get_user_info(self, user_id):
