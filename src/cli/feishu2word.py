@@ -274,6 +274,19 @@ def build_document_info(args):
     return None
 
 
+def build_bot_config(args):
+    app_id = str(args.bot_app_id or "").strip()
+    app_secret = str(args.bot_app_secret or "").strip()
+    if not app_id and not app_secret:
+        return None
+    if not app_id or not app_secret:
+        raise ValueError("请同时提供 --bot-app-id 和 --bot-app-secret")
+    return {
+        "appId": app_id,
+        "appSecret": app_secret,
+    }
+
+
 def build_effective_options(args):
     return {
         "addCover": args.cover,
@@ -287,6 +300,7 @@ def build_effective_options(args):
         "marginConfig": build_margin_config(args),
         "codeBlockConfig": build_code_block_config(args),
         "documentInfo": build_document_info(args),
+        "botConfig": build_bot_config(args),
     }
 
 
@@ -392,6 +406,10 @@ def create_parser():
     code.add_argument("--code-force-clear-indent", action=argparse.BooleanOptionalAction, default=True, help="强制删除代码块缩进")
     add_border_arguments(code, "code", "代码块", 4)
 
+    bot = parser.add_argument_group("高级选项 - 机器人")
+    bot.add_argument("--bot-app-id", help="自定义飞书机器人 App ID；留空使用系统默认机器人")
+    bot.add_argument("--bot-app-secret", help="自定义飞书机器人 App Secret；需要与 --bot-app-id 同时提供")
+
     return parser
 
 
@@ -409,13 +427,17 @@ def resolve_template_path(args, base_dir):
 
 
 def print_effective_options(args, template_name, template_path, output_root, effective_options):
+    safe_options = dict(effective_options)
+    if safe_options.get("botConfig"):
+        safe_options["botConfig"] = dict(safe_options["botConfig"])
+        safe_options["botConfig"]["appSecret"] = "***"
     payload = {
         "url": args.url,
         "template": template_name,
         "templatePath": template_path,
         "tableStyle": args.style,
         "output": output_root,
-        **effective_options,
+        **safe_options,
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2))
 
@@ -445,7 +467,10 @@ def main():
         print(f"警告: 未找到模板文件于 {template_path}")
 
     output_root = args.output or os.path.join(base_dir, config.get("output.dir", "output"))
-    effective_options = build_effective_options(args)
+    try:
+        effective_options = build_effective_options(args)
+    except ValueError as e:
+        parser.error(str(e))
     document_info_error = validate_document_info(effective_options.get("documentInfo"))
     if document_info_error:
         parser.error(document_info_error)
@@ -491,6 +516,7 @@ def main():
             code_block_config=effective_options["codeBlockConfig"],
             document_info=effective_options["documentInfo"],
             add_title=effective_options["addTitle"],
+            bot_config=effective_options["botConfig"],
         )
         duration = time.time() - start_time
 

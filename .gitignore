@@ -3,6 +3,9 @@
 .env.local
 .env.*.local
 feishu-docget.properties
+# 自定义机器人凭据跟随 log.dir，默认位于 logs/custom_bots.json
+custom_bots.json
+custom_bots.json.tmp
 
 # Python
 __pycache__/
