@@ -917,5 +917,13 @@ def api_admin_system():
 
 if __name__ == '__main__':
     port = int(config.get('server.port', '7800'))
-    logger.info(f'服务启动于端口 {port}...')
+    https_enabled = config.get('server.https.enabled', 'false').lower() == 'true'
+    if https_enabled:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+        app.config['SESSION_COOKIE_SECURE'] = True
+        app.config['PREFERRED_URL_SCHEME'] = 'https'
+        logger.info(f'服务启动于端口 {port} (HTTPS 代理模式)...')
+    else:
+        logger.info(f'服务启动于端口 {port}...')
     app.run(host='0.0.0.0', port=port)
