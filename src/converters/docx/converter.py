@@ -10,6 +10,149 @@ import docx.opc.constants
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
 from src.core.config_loader import ConfigLoader
 from src.core.image_processor import smart_crop
+
+
+def _is_svg_file(file_path):
+    """检测文件是否为 SVG 格式"""
+    try:
+        with open(file_path, 'rb') as f:
+            header = f.read(512)
+        if b'<svg' in header or (b'<?xml' in header and b'<svg' in f.read(2048)):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+_SVG_XML_TEMPLATE = (
+    '<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"'
+    ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+    ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"'
+    ' xmlns:asvg="http://schemas.microsoft.com/office/drawing/2016/SVG/main"'
+    ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+    '<w:drawing>'
+    '<wp:inline distT="0" distB="0" distL="0" distR="0">'
+    '<wp:extent cx="{cx}" cy="{cy}"/>'
+    '<wp:docPr id="{doc_pr_id}" name="SVG {doc_pr_id}"/>'
+    '<a:graphic>'
+    '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+    '<pic:pic>'
+    '<pic:nvPicPr>'
+    '<pic:cNvPr id="{doc_pr_id}" name="SVG {doc_pr_id}"/>'
+    '<pic:cNvPicPr/>'
+    '</pic:nvPicPr>'
+    '<pic:blipFill>'
+    '<a:blip r:embed="{png_rid}"><a:extLst>'
+    '<a:ext uri="{svg_ext_uri}"><asvg:svgBlip r:embed="{svg_rid}"/>'
+    '</a:ext></a:extLst></a:blip>'
+    '<a:stretch><a:fillRect/></a:stretch>'
+    '</pic:blipFill>'
+    '<pic:spPr>'
+    '<a:xfrm><a:off x="0" y="0"/><a:ext cx="{cx}" cy="{cy}"/></a:xfrm>'
+    '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
+    '</pic:spPr>'
+    '</pic:pic>'
+    '</a:graphicData>'
+    '</a:graphic>'
+    '</wp:inline>'
+    '</w:drawing>'
+    '</w:r>'
+)
+_SVG_EXT_URI = 'http://schemas.microsoft.com/office/drawing/2016/SVG/main'
+
+
+def _get_svg_dimensions(svg_path, fallback_width_cm=15):
+    """从 SVG 文件中提取宽高（像素），失败则返回默认值"""
+    import re as _re
+    try:
+        with open(svg_path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read(4096)
+        w = h = None
+        wm = _re.search(r'<svg[^>]*\bwidth=["\']([\d.]+)', content)
+        hm = _re.search(r'<svg[^>]*\bheight=["\']([\d.]+)', content)
+        if wm and hm:
+            w, h = float(wm.group(1)), float(hm.group(1))
+        else:
+            vm = _re.search(r'viewBox=["\'][\d.]+\s+[\d.]+\s+([\d.]+)\s+([\d.]+)', content)
+            if vm:
+                w, h = float(vm.group(1)), float(vm.group(2))
+        if w and h and w > 0 and h > 0:
+            return int(w * 9525), int(h * 9525)
+    except Exception:
+        pass
+    cx = int(fallback_width_cm * 360000)
+    cy = int(cx * 0.75)
+    return cx, cy
+
+
+def _create_placeholder_png(path, width=100, height=75):
+    """创建最小的占位 PNG 文件（灰色矩形），供旧版 Word 回退显示"""
+    try:
+        from PIL import Image, ImageDraw
+        img = Image.new('RGB', (width, height), (230, 230, 230))
+        ImageDraw.Draw(img).text((10, height // 2 - 6), 'SVG', fill=(150, 150, 150))
+        img.save(path, 'PNG')
+        return True
+    except Exception:
+        pass
+    # 最小有效 PNG（1x1 灰色像素）
+    import struct, zlib
+    def _chunk(ctype, data):
+        c = ctype + data
+        return struct.pack('>I', len(data)) + c + struct.pack('>I', zlib.crc32(c) & 0xFFFFFFFF)
+    ihdr = struct.pack('>IIBBBBB', 1, 1, 8, 2, 0, 0, 0)
+    raw = zlib.compress(b'\x00\xe6\xe6\xe6')
+    png = b'\x89PNG\r\n\x1a\n' + _chunk(b'IHDR', ihdr) + _chunk(b'IDAT', raw) + _chunk(b'IEND', b'')
+    with open(path, 'wb') as f:
+        f.write(png)
+    return True
+
+
+def _add_svg_to_docx(run, svg_path, width_cm=15):
+    """将 SVG 直接嵌入 DOCX（Word 2019+/M365 原生渲染），附带 PNG 回退"""
+    from docx.opc.part import Part as OpcPart
+    from docx.opc.packuri import PackURI
+
+    part = run.part
+    package = part.package
+
+    # 创建 SVG Part 并添加关系
+    svg_partname = PackURI('/word/media/' + os.path.basename(svg_path).replace('.png', '.svg'))
+    with open(svg_path, 'rb') as f:
+        svg_blob = f.read()
+    svg_part = OpcPart(svg_partname, 'image/svg+xml', svg_blob, package)
+    svg_rid = part.relate_to(svg_part, _SVG_EXT_URI)
+
+    # 生成占位 PNG 并创建 Part
+    placeholder = svg_path.rsplit('.', 1)[0] + '.fallback.png'
+    if not os.path.exists(placeholder):
+        _create_placeholder_png(placeholder)
+    png_partname = PackURI('/word/media/' + os.path.basename(placeholder))
+    with open(placeholder, 'rb') as f:
+        png_blob = f.read()
+    png_part = OpcPart(png_partname, 'image/png', png_blob, package)
+    png_rid = part.relate_to(png_part, docx.opc.constants.RELATIONSHIP_TYPE.IMAGE)
+
+    # 计算尺寸
+    cx, cy = _get_svg_dimensions(svg_path, width_cm)
+
+    # 构建 Drawing XML 并替换 run 内容
+    doc_pr_id = abs(hash(svg_path)) % 100000
+    xml_str = _SVG_XML_TEMPLATE.format(
+        cx=cx, cy=cy, doc_pr_id=doc_pr_id,
+        png_rid=png_rid, svg_rid=svg_rid,
+        svg_ext_uri=_SVG_EXT_URI,
+    )
+    run_elem = parse_xml(xml_str)
+    rPr = run._r.find(qn('w:rPr'))
+    for child in list(run._r):
+        run._r.remove(child)
+    if rPr is not None:
+        run._r.append(rPr)
+    drawing = run_elem.find(qn('w:drawing'))
+    if drawing is not None:
+        run._r.append(drawing)
 logger = ConfigLoader.get_logger('feishu2docx')
 BLOCK_TYPES = {1: 'page', 2: 'text', 3: 'heading1', 4: 'heading2', 5: 'heading3', 6: 'heading4', 7: 'heading5', 8: 'heading6', 9: 'heading7', 10: 'heading8', 11: 'heading9', 12: 'bullet', 13: 'ordered', 14: 'code', 15: 'quote', 17: 'todo', 18: 'bitable', 19: 'highlight', 20: 'callout', 21: 'iframe', 22: 'divider', 23: 'file', 24: 'column', 25: 'column', 26: 'iframe', 27: 'image', 28: 'callout', 29: 'mindnote', 30: 'sheet', 31: 'table', 32: 'table_cell', 33: 'view', 34: 'quote_container', 35: 'task', 36: 'okr', 37: 'okr_objective', 38: 'okr_key_result', 39: 'okr_progress', 40: 'callout', 41: 'file', 42: 'callout', 43: 'whiteboard'}
 TEXT_COLOR_MAP = {1: 'E85E5E', 2: 'F08C4A', 3: 'F5D450', 4: '7ED321', 5: '4A90E2', 6: '9013FE', 7: '9B9B9B'}
@@ -617,6 +760,7 @@ class FeishuDocxConverter:
             except Exception as e:
                 logger.error(f'下载图片异常 {token}: {e}')
         if os.path.exists(file_path):
+            is_svg = _is_svg_file(file_path)
             try:
                 try:
                     val_w = ConfigLoader.load_config().get('image.max_width', 16)
@@ -628,7 +772,11 @@ class FeishuDocxConverter:
                 p = container.add_paragraph()
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 run = p.add_run()
-                run.add_picture(file_path, width=Cm(max_w_cm - 1 if max_w_cm > 1 else max_w_cm))
+                if is_svg:
+                    logger.info(f'检测到 SVG 图片，直接嵌入 DOCX: {token}')
+                    _add_svg_to_docx(run, file_path, width_cm=max_w_cm - 1 if max_w_cm > 1 else max_w_cm)
+                else:
+                    run.add_picture(file_path, width=Cm(max_w_cm - 1 if max_w_cm > 1 else max_w_cm))
             except Exception as e:
                 logger.error(f'添加图片失败 {token}: {e}')
 
