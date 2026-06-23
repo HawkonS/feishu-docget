@@ -779,6 +779,17 @@ class FeishuDocxConverter:
                     run.add_picture(file_path, width=Cm(max_w_cm - 1 if max_w_cm > 1 else max_w_cm))
             except Exception as e:
                 logger.error(f'添加图片失败 {token}: {e}')
+        # 渲染图片描述（caption），按正文段落处理
+        caption_data = image_data.get('caption') or {}
+        caption_text = (caption_data.get('content') or '').strip()
+        if caption_text:
+            try:
+                cp = container.add_paragraph()
+                cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cp.add_run(caption_text)
+                logger.info(f'已添加图片描述: {caption_text}')
+            except Exception as e:
+                logger.error(f'添加图片描述失败: {e}')
 
     def _handle_whiteboard(self, block, container):
         wb_data = block.get('whiteboard') or {}
