@@ -839,6 +839,13 @@
                                     <button id="deleteLogBtn" onclick="deleteCurrentLog()" class="btn-start" style="padding: 6px 16px; background-color: #ef4444; font-size: 13px;">删除日志</button>
                                 </div>
                             </div>
+                            <div id="logStatusBar" style="display:none; padding: 8px 20px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; font-size: 12px; color: #64748b; align-items: center; justify-content: space-between;">
+                                <div style="display:flex; align-items:center; gap:12px;">
+                                    <span id="logLineInfo"></span>
+                                    <span id="logSizeInfo" style="color:#94a3b8;"></span>
+                                </div>
+                                <button id="loadEarlierBtn" onclick="loadEarlierLogs()" style="display:none; padding: 4px 12px; font-size: 12px; background: #3b82f6; color: #fff; border: none; border-radius: 4px; cursor: pointer;">加载更早日志</button>
+                            </div>
                             <pre id="logContent" style="flex: 1; overflow: auto; padding: 20px; margin: 0; font-family: 'Menlo', 'Monaco', 'Courier New', monospace; font-size: 13px; color: #334155; line-height: 1.6; white-space: pre-wrap; background: #fff;"></pre>
                         </div>
                     </div>
@@ -1325,6 +1332,23 @@
         let currentLog = null;
         let logMonitorTimer = null;
         let isLogMonitoring = false;
+        // 日志分页状态
+        let logPagination = { totalLines: 0, currentSkip: 0, loadedLines: 0, hasMore: false, pageSize: 2000 };
+
+        function updateLogStatusBar() {
+            const bar = document.getElementById('logStatusBar');
+            const lineInfo = document.getElementById('logLineInfo');
+            const sizeInfo = document.getElementById('logSizeInfo');
+            const loadBtn = document.getElementById('loadEarlierBtn');
+            
+            bar.style.display = 'flex';
+            
+            const startLine = logPagination.totalLines - logPagination.currentSkip - logPagination.loadedLines;
+            const endLine = logPagination.totalLines - logPagination.currentSkip;
+            lineInfo.textContent = `显示第 ${Math.max(1, startLine)} - ${endLine} 行 / 共 ${logPagination.totalLines} 行`;
+            
+            loadBtn.style.display = logPagination.hasMore ? 'inline-block' : 'none';
+        }
 
         async function loadLogs() {
             try {
@@ -1377,8 +1401,11 @@
             stopLogMonitor();
             
             currentLog = name;
+            // 重置分页状态
+            logPagination = { totalLines: 0, currentSkip: 0, loadedLines: 0, hasMore: false, pageSize: 2000 };
             document.getElementById('currentLogName').innerText = name;
             document.getElementById('logControls').style.display = 'flex';
+            document.getElementById('logStatusBar').style.display = 'none';
             
             // Re-render list to update selection style
             const list = document.getElementById('logList');
@@ -1399,10 +1426,12 @@
             fetchLogContent(name);
         }
         
-        async function fetchLogContent(name) {
+        async function fetchLogContent(name, isLoadEarlier = false) {
             if (!name) return;
             try {
-                const res = await fetch('/api/admin/logs/' + encodeURIComponent(name));
+                const skipLines = isLoadEarlier ? logPagination.currentSkip + logPagination.pageSize : 0;
+                const url = '/api/admin/logs/' + encodeURIComponent(name) + '?lines=' + logPagination.pageSize + '&skip_lines=' + (isLoadEarlier ? logPagination.currentSkip : 0);
+                const res = await fetch(url);
                 const data = await res.json();
                 
                 // 防止请求返回时已经切换了日志
@@ -1410,23 +1439,54 @@
                 
                 if (data.status === 'ok') {
                     const el = document.getElementById('logContent');
-                    const wasScrolledBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 50; // 50px buffer
+                    const wasScrolledBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 50;
                     
-                    el.innerText = data.content || '(空文件)';
+                    if (isLoadEarlier && data.content) {
+                        // 加载更多：在顶部追加内容
+                        const prevScrollHeight = el.scrollHeight;
+                        el.innerText = data.content + '\n' + el.innerText;
+                        // 保持滚动位置
+                        el.scrollTop = el.scrollHeight - prevScrollHeight;
+                        logPagination.currentSkip += data.returned_lines;
+                    } else {
+                        el.innerText = data.content || '(空文件)';
+                        logPagination.currentSkip = 0;
+                    }
+                    
+                    logPagination.totalLines = data.total_lines || 0;
+                    logPagination.loadedLines = (logPagination.loadedLines || 0) + (isLoadEarlier ? data.returned_lines : data.returned_lines);
+                    if (!isLoadEarlier) logPagination.loadedLines = data.returned_lines;
+                    logPagination.hasMore = data.has_more;
+                    logPagination.fileSize = data.file_size;
+                    
+                    const sizeInfo = document.getElementById('logSizeInfo');
+                    if (sizeInfo) sizeInfo.textContent = formatSize(data.file_size || 0);
+                    updateLogStatusBar();
                     
                     // 如果正在监控且之前在底部，保持在底部
-                    if (isLogMonitoring && wasScrolledBottom) {
+                    if (isLogMonitoring && wasScrolledBottom && !isLoadEarlier) {
                         el.scrollTop = el.scrollHeight;
                     }
                 } else {
                      document.getElementById('logContent').innerText = '加载失败: ' + data.message;
-                     stopLogMonitor(); // 出错停止监控
+                     stopLogMonitor();
                 }
             } catch(e) {
                 if (name !== currentLog) return;
                 document.getElementById('logContent').innerText = '请求错误: ' + e.message;
                 stopLogMonitor();
             }
+        }
+        
+        function loadEarlierLogs() {
+            if (!currentLog) return;
+            const btn = document.getElementById('loadEarlierBtn');
+            btn.disabled = true;
+            btn.textContent = '加载中...';
+            fetchLogContent(currentLog, true).finally(() => {
+                btn.disabled = false;
+                btn.textContent = '加载更早日志';
+            });
         }
         
         function stopLogMonitor() {
@@ -1466,8 +1526,13 @@
                 btn.innerText = "暂停监控";
                 btn.style.background = "#ef4444";
                 
-                fetchLogContent(currentLog); // 立即刷新一次
-                logMonitorTimer = setInterval(() => fetchLogContent(currentLog), interval * 1000);
+                fetchLogContent(currentLog); // 立即刷新一次（监控时始终加载最新）
+                logMonitorTimer = setInterval(() => {
+                    // 监控时重置分页，始终显示最新内容
+                    logPagination.currentSkip = 0;
+                    logPagination.loadedLines = 0;
+                    fetchLogContent(currentLog);
+                }, interval * 1000);
             }
         }
 
@@ -1484,6 +1549,7 @@
                     document.getElementById('currentLogName').innerText = '请选择日志文件';
                     document.getElementById('logContent').innerText = '';
                     document.getElementById('logControls').style.display = 'none';
+                    document.getElementById('logStatusBar').style.display = 'none';
                     loadLogs();
                     alert('日志文件已删除');
                 } else {

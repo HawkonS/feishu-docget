@@ -829,9 +829,97 @@ def api_admin_get_log(filename):
     if not os.path.exists(path) or not os.path.isfile(path):
         return jsonify({'status': 'error', 'message': 'File not found'})
     try:
-        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-            content = f.read()
-        return jsonify({'status': 'ok', 'content': content})
+        # 分页参数: lines=每次返回行数(默认2000), skip_lines=从末尾跳过行数(默认0)
+        max_lines = min(int(request.args.get('lines', 2000)), 10000)
+        skip_lines = max(int(request.args.get('skip_lines', 0)), 0)
+        
+        file_size = os.path.getsize(path)
+        
+        if file_size == 0:
+            return jsonify({'status': 'ok', 'content': '', 'total_lines': 0, 'returned_lines': 0, 'has_more': False, 'file_size': 0})
+        
+        # 高效读取文件末尾N行：从文件尾部反向读取块，拼接后分割
+        with open(path, 'rb') as f:
+            # 第一遍：从尾部反向读取块，收集原始字节直到获得足够行
+            raw_tail = b''
+            offset = file_size
+            found_enough = False
+            needed_lines = skip_lines + max_lines + 1  # 多读一行用于准确判断 has_more
+            
+            while offset > 0:
+                chunk_size = min(65536, offset)
+                offset -= chunk_size
+                f.seek(offset)
+                raw_tail = f.read(chunk_size) + raw_tail
+                
+                # 在安全边界（非文件起始时的完整行边界）统计行数
+                check_data = raw_tail
+                if offset > 0 and check_data and check_data[0:1] != b'\n':
+                    # 首行可能不完整，跳过它再计数
+                    first_nl = check_data.find(b'\n')
+                    if first_nl >= 0:
+                        check_data = check_data[first_nl + 1:]
+                    else:
+                        check_data = b''
+                
+                est_lines = check_data.count(b'\n')
+                if est_lines >= needed_lines:
+                    found_enough = True
+                    break
+            
+            # 在行边界处分割
+            raw_tail_began_incomplete = False
+            if offset > 0 and raw_tail and raw_tail[0:1] != b'\n':
+                first_nl = raw_tail.find(b'\n')
+                if first_nl >= 0:
+                    raw_tail = raw_tail[first_nl + 1:]
+                    raw_tail_began_incomplete = True
+                else:
+                    raw_tail = b''
+            
+            # 分割得到所有行（尾部已经去掉了不完整的首行）
+            tail_lines = raw_tail.split(b'\n')
+            # 去除文件末尾换行产生的空元素
+            if tail_lines and tail_lines[-1] == b'':
+                tail_lines.pop()
+            
+            tail_count = len(tail_lines)
+            
+            # 计算总行数
+            if offset > 0:
+                # 文件还有未读取的前缀部分，统计其行数
+                f.seek(0)
+                prefix = f.read(offset)
+                prefix_lines = prefix.count(b'\n')
+                # 如果 raw_tail 的首行是不完整的（跨越了 chunk 边界），
+                # 它会属于前缀的最后一行，需要额外 +1
+                incomplete_first_line = (raw_tail_began_incomplete and tail_count > 0)
+                total_lines = prefix_lines + tail_count + (1 if incomplete_first_line else 0)
+            else:
+                total_lines = tail_count
+            
+            # 应用分页：从 tail_lines 尾部跳过 skip_lines，取 max_lines
+            if skip_lines >= tail_count:
+                collected = []
+            else:
+                end_idx = tail_count - skip_lines
+                start_idx = max(0, end_idx - max_lines)
+                collected = tail_lines[start_idx:end_idx]
+            
+            has_more = total_lines > (skip_lines + len(collected))
+        
+        content = '\n'.join(line.decode('utf-8', errors='ignore') for line in collected)
+        returned_lines = len(collected)
+        
+        return jsonify({
+            'status': 'ok',
+            'content': content,
+            'total_lines': total_lines,
+            'returned_lines': returned_lines,
+            'skip_lines': skip_lines,
+            'has_more': has_more,
+            'file_size': file_size
+        })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
 
