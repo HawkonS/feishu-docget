@@ -334,8 +334,7 @@ class FeishuDocxConverter:
                 wb_id = block.get('board', {}).get('token') or wb_data.get('token') or wb_data.get('whiteboard_id')
                 if wb_id:
                     path = os.path.join(self.img_dir, f'wb_{wb_id}.png')
-                    if not os.path.exists(path):
-                        media_tasks.append((wb_id, path, 'whiteboard'))
+                    media_tasks.append((wb_id, path, 'whiteboard'))
         if not media_tasks:
             return
         total = len(media_tasks)
@@ -775,6 +774,12 @@ class FeishuDocxConverter:
                 if is_svg:
                     logger.info(f'检测到 SVG 图片，直接嵌入 DOCX: {token}')
                     _add_svg_to_docx(run, file_path, width_cm=max_w_cm - 1 if max_w_cm > 1 else max_w_cm)
+                    # SVG 内容可能变动，删除缓存确保下次重新下载
+                    try:
+                        os.remove(file_path)
+                        logger.debug(f'SVG 缓存已清除，下次将重新下载: {token}')
+                    except Exception as e:
+                        logger.warning(f'清除 SVG 缓存失败: {token}: {e}')
                 else:
                     run.add_picture(file_path, width=Cm(max_w_cm - 1 if max_w_cm > 1 else max_w_cm))
             except Exception as e:
@@ -797,14 +802,13 @@ class FeishuDocxConverter:
         if not wb_id:
             return
         file_path = os.path.join(self.img_dir, f'wb_{wb_id}.png')
-        if not os.path.exists(file_path):
-            self._update_progress(message=f'正在下载画板 ({wb_id[:8]}...)')
-            if self.client.download_whiteboard(wb_id, file_path):
-                self.fallback_download_count += 1
-                try:
-                    smart_crop(file_path, padding=20)
-                except Exception as e:
-                    logger.warning(f'裁剪画板失败 {wb_id}: {e}')
+        self._update_progress(message=f'正在下载画板 ({wb_id[:8]}...)')
+        if self.client.download_whiteboard(wb_id, file_path):
+            self.fallback_download_count += 1
+            try:
+                smart_crop(file_path, padding=20)
+            except Exception as e:
+                logger.warning(f'裁剪画板失败 {wb_id}: {e}')
         if os.path.exists(file_path):
             try:
                 p = container.add_paragraph()
