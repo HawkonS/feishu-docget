@@ -441,6 +441,14 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
         content_align = _align_to_docx(table_config.get('contentAlign', 'left'), 0)
         content_image_align = _align_to_docx(table_config.get('contentImageAlign', 'left'), 0)
         table_border_enabled = bool(table_config.get('borderEnabled'))
+        table_font_enabled = bool(table_config.get('fontEnabled'))
+        table_font_name = table_config.get('fontName', '').strip() if table_font_enabled else ''
+        table_font_size = table_config.get('fontSize')  # float (pt) or None
+        if table_font_size is not None:
+            try:
+                table_font_size = float(table_font_size)
+            except (ValueError, TypeError):
+                table_font_size = None
     else:
         force_clear_tbl_indent = True
         force_clear_tbl_image_space = True
@@ -453,6 +461,9 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
         header_align = 1  # 默认居中
         content_align = 0 # 默认靠左
         content_image_align = 0 # 默认靠左
+        table_font_enabled = False
+        table_font_name = ''
+        table_font_size = None
 
     if progress_cb:
         progress_cb(93, '正在处理表格样式...', 'dynamic')
@@ -628,6 +639,21 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
                                 spacing.set(f'{{{ns}}}afterLines', str(int(float(table_space_after) * 100)))
                             except:
                                 pass
+
+                    # 应用表格自定义字体和字号
+                    if table_font_name or table_font_size is not None:
+                        for run in p.runs:
+                            if table_font_name:
+                                run.font.name = table_font_name
+                                # 设置东亚字体（中文字体需要此设置）
+                                r_pr = run._element.get_or_add_rPr()
+                                r_fonts = r_pr.find(f'{{{ns}}}rFonts')
+                                if r_fonts is None:
+                                    r_fonts = parse_xml(f'<w:rFonts xmlns:w="{ns}"/>')
+                                    r_pr.append(r_fonts)
+                                r_fonts.set(f'{{{ns}}}eastAsia', table_font_name)
+                            if table_font_size is not None:
+                                run.font.size = Pt(table_font_size)
 
     # 2. 最后单独处理所有代码块表格，确保代码块的样式和宽度设置不会被外部常规表格覆盖
     for table in all_tables:

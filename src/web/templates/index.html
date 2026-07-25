@@ -1223,6 +1223,27 @@
                         </div>
                         <div class="option-card full">
                             <div class="table-border-header">
+                                <div class="option-card-title" style="margin-bottom: 0;">字体指定</div>
+                                <label class="inline-check" style="margin-bottom: 0;">
+                                    <input type="checkbox" id="tableEnableFontOverride" onchange="toggleTableFontConfig()">
+                                    启用自定义表格字体
+                                </label>
+                            </div>
+                            <div id="tableFontConfig" style="display: none; margin-top: 12px;">
+                                <div class="compact-grid-2">
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">字体名称</label>
+                                        <input type="text" id="tableFontName" placeholder="如：微软雅黑、宋体、Arial" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 12px; color: #64748b;">字号 (pt)</label>
+                                        <input type="number" id="tableFontSize" placeholder="留空则跟随模板样式" step="0.5" min="1" style="width: 100%; padding: 6px; border: 1px solid #d9e4f5; border-radius: 6px;">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option-card full">
+                            <div class="table-border-header">
                                 <div class="option-card-title" style="margin-bottom: 0;">边框管理</div>
                                 <label class="inline-check" style="margin-bottom: 0;">
                                     <input type="checkbox" id="tableEnableBorderOverride" onchange="toggleTableBorderConfig()">
@@ -1666,6 +1687,19 @@
                 cell.style.borderRight = getTableBorderPreviewCss("Right");
             });
         }
+
+        function applyTableFontPreview(preview) {
+            const enabled = document.getElementById("tableEnableFontOverride")?.checked;
+            if (!enabled) return;
+            const fontName = (document.getElementById("tableFontName")?.value || "").trim();
+            const fontSizeVal = (document.getElementById("tableFontSize")?.value || "").trim();
+            const table = preview.querySelector("table");
+            if (!table) return;
+            table.querySelectorAll("th, td").forEach(cell => {
+                if (fontName) cell.style.fontFamily = fontName;
+                if (fontSizeVal) cell.style.fontSize = parseFloat(fontSizeVal) + "pt";
+            });
+        }
         
         function previewTemplate(name) {
             const preview = document.getElementById("templatePreview");
@@ -1753,6 +1787,7 @@
             `;
             preview.innerHTML = html;
             applyTableBorderPreview(preview);
+            applyTableFontPreview(preview);
         }
 
         function startDownload() {
@@ -1834,6 +1869,9 @@
                 lineSpacing: tableLineSpacing ? parseFloat(tableLineSpacing) : null,
                 spaceBefore: tableSpaceBefore ? parseFloat(tableSpaceBefore) : null,
                 spaceAfter: tableSpaceAfter ? parseFloat(tableSpaceAfter) : null,
+                fontEnabled: document.getElementById("tableEnableFontOverride").checked,
+                fontName: document.getElementById("tableEnableFontOverride").checked ? document.getElementById("tableFontName").value.trim() : "",
+                fontSize: document.getElementById("tableEnableFontOverride").checked ? (document.getElementById("tableFontSize").value.trim() ? parseFloat(document.getElementById("tableFontSize").value.trim()) : null) : null,
                 borderEnabled: tableBorderEnabled,
                 borderColor: document.getElementById("tableBorderColor").value,
                 borders: tableBorderEnabled ? {
@@ -2224,6 +2262,11 @@
             document.getElementById("tableBorderRightWidth").value = "6";
             toggleTableBorderConfig();
 
+            document.getElementById("tableEnableFontOverride").checked = false;
+            document.getElementById("tableFontName").value = "";
+            document.getElementById("tableFontSize").value = "";
+            toggleTableFontConfig();
+
             document.getElementById("marginPreset").value = "none";
             document.getElementById("marginTop").value = "";
             document.getElementById("marginBottom").value = "";
@@ -2362,6 +2405,32 @@
                 ["tableBorderRightType", "tableBorderRightWidth"]
             ], refreshPreview);
         }
+
+        function toggleTableFontConfig() {
+            const enabled = document.getElementById("tableEnableFontOverride").checked;
+            document.getElementById("tableFontConfig").style.display = enabled ? "block" : "none";
+            if (typeof selectedStyle !== "undefined") previewStyle(selectedStyle);
+        }
+
+        (function() {
+            const fontNameEl = document.getElementById("tableFontName");
+            if (fontNameEl && fontNameEl.dataset.boundPreview !== "1") {
+                fontNameEl.addEventListener("input", function() {
+                    if (typeof selectedStyle !== "undefined") previewStyle(selectedStyle);
+                });
+                fontNameEl.dataset.boundPreview = "1";
+            }
+        })();
+
+        (function() {
+            const fontSizeEl = document.getElementById("tableFontSize");
+            if (fontSizeEl && fontSizeEl.dataset.boundPreview !== "1") {
+                fontSizeEl.addEventListener("input", function() {
+                    if (typeof selectedStyle !== "undefined") previewStyle(selectedStyle);
+                });
+                fontSizeEl.dataset.boundPreview = "1";
+            }
+        })();
 
         function toggleTableBorderConfig() {
             const enabled = document.getElementById("tableEnableBorderOverride").checked;
@@ -2525,6 +2594,7 @@
         bindCodeBorderWidthBehavior();
         bindTableBorderWidthBehavior();
         toggleTableBorderConfig();
+        toggleTableFontConfig();
         renderTaskList();
         renderLogs();
     </script>
