@@ -13,11 +13,15 @@ import shutil
 import queue
 import time
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, timedelta
+import subprocess
+import secrets
+import tempfile
+import zipfile
 from flask import Flask, jsonify, request, send_file, send_from_directory, session, redirect, url_for
 from src.services.doc_service import process_document
 from src.core.bot_store import normalize_bot_config
-from src.core.config_loader import config, ConfigLoader, parse_size
+from src.core.config_loader import config, ConfigLoader, parse_size, SENSITIVE_KEYS
 from src.converters.docx.style_manager import TableStyleManager
 from src.core.stats import update_download_stat, get_download_stats
 base_dir = os.path.abspath(config.get('workspace.dir', '.'))
@@ -25,12 +29,30 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 HTML_DIR = os.path.join(CURRENT_DIR, 'web', 'templates')
 logger = ConfigLoader.get_logger('feishu_docget')
 app = Flask(__name__)
-app.secret_key = config.get('server.secret_key', 'feishu_docget_secret_key_2025')
+secret_key = config.get('server.secret_key', '').strip()
+if not secret_key or secret_key == 'feishu_docget_secret_key_2025':
+    secret_key = secrets.token_hex(32)
+    try:
+        ConfigLoader.save_config_from_admin({'server.secret_key': secret_key})
+        logger.warning('已自动生成新的 SECRET_KEY 并写入配置文件，请妥善保管')
+    except Exception as e:
+        logger.error(f'自动保存 SECRET_KEY 失败: {e}')
+app.secret_key = secret_key
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB
 jobs = {}
 jobs_lock = threading.Lock()
 download_queue = queue.Queue()
 active_downloads_lock = threading.Lock()
 active_downloads = 0
+
+_login_attempts = {}  # {ip: {'count': N, 'locked_until': timestamp, 'ban_level': N}}
+
+def _cleanup_temp(path):
+    """延迟清理临时文件"""
+    threading.Timer(60, lambda: os.path.exists(path) and os.remove(path)).start()
 
 def worker_thread():
     global active_downloads
@@ -292,12 +314,41 @@ def admin_page():
 
 @app.route('/api/admin/login', methods=['POST'])
 def api_admin_login():
+    client_ip = request.remote_addr or 'unknown'
+    now = time.time()
+    attempt = _login_attempts.get(client_ip)
+
+    # 锁定检查：过期则清理，未过期则拒绝
+    if attempt and attempt.get('locked_until', 0) > 0:
+        if now > attempt['locked_until']:
+            # 锁定已过期，清理记录
+            _login_attempts.pop(client_ip, None)
+            attempt = None
+        else:
+            # 仍在锁定中
+            remaining = int(attempt['locked_until'] - now)
+            return jsonify({'status': 'error', 'message': f'账户已锁定，请 {remaining} 秒后重试'})
+
     data = request.get_json(silent=True) or {}
     password = (data.get('password') or '').strip()
     admin_password = str(config.get('admin.password') or '').strip()
     if password == admin_password:
+        _login_attempts.pop(client_ip, None)
         session['is_admin'] = True
+        session.permanent = True
         return jsonify({'status': 'ok'})
+
+    # 登录失败，增加计数
+    if not attempt:
+        _login_attempts[client_ip] = {'count': 1, 'locked_until': 0, 'ban_level': 0}
+    else:
+        attempt['count'] = attempt.get('count', 0) + 1
+        if attempt['count'] >= 5:
+            ban_level = attempt.get('ban_level', 0)
+            lock_seconds = min(60 * (3 ** ban_level), 3600)
+            attempt['locked_until'] = now + lock_seconds
+            attempt['count'] = 0
+            attempt['ban_level'] = ban_level + 1
     return jsonify({'status': 'error', 'message': '密码错误'})
 
 @app.route('/api/admin/logout', methods=['POST', 'GET'])
@@ -323,70 +374,97 @@ def api_admin_projects():
 @admin_required
 def api_admin_download_project():
     path = request.args.get('path')
-    if not path or not os.path.exists(path) or (not path.startswith(os.path.join(base_dir, config['output.dir']))):
+    if not path:
         return jsonify({'status': 'error', 'message': '无效路径'})
-    import zipfile
-    import tempfile
+    output_dir = os.path.join(base_dir, config['output.dir'])
+    real_output = os.path.realpath(output_dir)
+    real_path = os.path.realpath(path)
+    if not real_path.startswith(real_output + os.sep) and real_path != real_output:
+        return jsonify({'status': 'error', 'message': '无效路径'})
+    if not os.path.exists(real_path):
+        return jsonify({'status': 'error', 'message': '无效路径'})
     try:
-        tmp_zip = tempfile.mktemp(suffix='.zip')
+        fd, tmp_zip = tempfile.mkstemp(suffix='.zip')
+        os.close(fd)
         with zipfile.ZipFile(tmp_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
             for root, dirs, files in os.walk(path):
                 for file in files:
                     abs_path = os.path.join(root, file)
                     rel_path = os.path.relpath(abs_path, path)
                     zipf.write(abs_path, rel_path)
+        _cleanup_temp(tmp_zip)
         return send_file(tmp_zip, as_attachment=True, download_name=f'{os.path.basename(path)}.zip')
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        logger.error(f'下载项目打包失败: {e}', exc_info=True)
+        return jsonify({'status': 'error', 'message': '打包下载失败，请稍后重试'})
 
 @app.route('/api/admin/delete_project', methods=['POST'])
 @admin_required
 def api_admin_delete_project():
     data = request.get_json(silent=True) or {}
     path = data.get('path')
-    if path and os.path.exists(path) and path.startswith(os.path.join(base_dir, config['output.dir'])):
-        try:
-            shutil.rmtree(path)
-            return jsonify({'status': 'ok'})
-        except Exception as e:
-            return jsonify({'status': 'error', 'message': str(e)})
-    return jsonify({'status': 'error', 'message': '无效路径'})
+    if not path:
+        return jsonify({'status': 'error', 'message': '无效路径'})
+    output_dir = os.path.join(base_dir, config['output.dir'])
+    real_output = os.path.realpath(output_dir)
+    real_path = os.path.realpath(path)
+    if not real_path.startswith(real_output + os.sep) and real_path != real_output:
+        return jsonify({'status': 'error', 'message': '无效路径'})
+    if not os.path.exists(real_path):
+        return jsonify({'status': 'error', 'message': '无效路径'})
+    try:
+        shutil.rmtree(real_path)
+        return jsonify({'status': 'ok'})
+    except Exception as e:
+        logger.error(f'删除项目失败: {e}', exc_info=True)
+        return jsonify({'status': 'error', 'message': '删除项目失败，请稍后重试'})
 
 @app.route('/api/admin/download_folder', methods=['GET'])
 @admin_required
 def api_admin_download_folder():
     path = request.args.get('path')
-    if not path or not os.path.exists(path) or (not path.startswith(os.path.join(base_dir, config['output.dir']))):
+    if not path:
         return jsonify({'status': 'error', 'message': '无效路径'})
-    import zipfile
-    import tempfile
+    output_dir = os.path.join(base_dir, config['output.dir'])
+    real_output = os.path.realpath(output_dir)
+    real_path = os.path.realpath(path)
+    if not real_path.startswith(real_output + os.sep) and real_path != real_output:
+        return jsonify({'status': 'error', 'message': '无效路径'})
+    if not os.path.exists(real_path):
+        return jsonify({'status': 'error', 'message': '无效路径'})
     try:
-        tmp_zip = tempfile.mktemp(suffix='.zip')
+        fd, tmp_zip = tempfile.mkstemp(suffix='.zip')
+        os.close(fd)
         with zipfile.ZipFile(tmp_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
             for root, dirs, files in os.walk(path):
                 for file in files:
                     abs_path = os.path.join(root, file)
                     rel_path = os.path.relpath(abs_path, path)
                     zipf.write(abs_path, rel_path)
+        _cleanup_temp(tmp_zip)
         return send_file(tmp_zip, as_attachment=True, download_name=f'{os.path.basename(path)}.zip')
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        logger.error(f'下载文件夹打包失败: {e}', exc_info=True)
+        return jsonify({'status': 'error', 'message': '打包下载失败，请稍后重试'})
 
 @app.route('/api/admin/delete_file', methods=['POST'])
+@admin_required
 def api_admin_delete_file():
     data = request.get_json(silent=True) or {}
     path = data.get('path')
     if not path:
         return jsonify({'status': 'error', 'message': '无效路径'})
     output_dir = os.path.join(base_dir, config['output.dir'])
-    abs_path = os.path.abspath(path)
-    if not abs_path.startswith(output_dir) or not os.path.isfile(abs_path):
+    real_output = os.path.realpath(output_dir)
+    real_path = os.path.realpath(path)
+    if not real_path.startswith(real_output + os.sep) or not os.path.isfile(real_path):
         return jsonify({'status': 'error', 'message': '无效文件'})
     try:
-        os.remove(abs_path)
+        os.remove(real_path)
         return jsonify({'status': 'ok'})
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        logger.error(f'删除文件失败: {e}', exc_info=True)
+        return jsonify({'status': 'error', 'message': '删除文件失败，请稍后重试'})
 
 @app.route('/api/upload_template', methods=['POST'])
 def api_upload_template():
@@ -454,8 +532,8 @@ def api_upload_template():
         try:
             file.save(path)
         except Exception as e:
-            logger.error(f'保存模板文件失败: {e}')
-            return jsonify({'status': 'error', 'message': str(e)})
+            logger.error(f'保存模板文件失败: {e}', exc_info=True)
+            return jsonify({'status': 'error', 'message': '保存模板文件失败，请稍后重试'})
             
     # 处理预览图
     if image_file:
@@ -465,8 +543,8 @@ def api_upload_template():
             img_path = os.path.join(template_dir, img_filename)
             image_file.save(img_path)
         except Exception as e:
-            logger.error(f'保存预览图失败: {e}')
-            return jsonify({'status': 'error', 'message': str(e)})
+            logger.error(f'保存预览图失败: {e}', exc_info=True)
+            return jsonify({'status': 'error', 'message': '保存预览图失败，请稍后重试'})
             
     return jsonify({'status': 'ok', 'filename': final_filename})
 
@@ -529,7 +607,8 @@ def api_admin_rename_template():
             
         return jsonify({'status': 'ok'})
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        logger.error(f'重命名模板失败: {e}', exc_info=True)
+        return jsonify({'status': 'error', 'message': '重命名模板失败，请稍后重试'})
 
 @app.route('/api/admin/delete_template', methods=['POST'])
 @admin_required
@@ -560,7 +639,8 @@ def api_admin_delete_template():
             os.remove(png_path)
         return jsonify({'status': 'ok'})
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        logger.error(f'删除模板失败: {e}', exc_info=True)
+        return jsonify({'status': 'error', 'message': '删除模板失败，请稍后重试'})
 
 @app.route('/api/admin/set_default_template', methods=['POST'])
 @admin_required
@@ -570,17 +650,22 @@ def api_admin_set_default_template():
     if not name:
         return jsonify({'status': 'error', 'message': '模板名称不能为空'})
         
+    safe_name = os.path.basename(name)
+    if '..' in name or safe_name != name:
+        return jsonify({'status': 'error', 'message': '无效文件名'})
+
     template_dir = os.path.join(base_dir, config['template.dir'])
-    if not os.path.exists(os.path.join(template_dir, name)):
+    if not os.path.exists(os.path.join(template_dir, safe_name)):
             return jsonify({'status': 'error', 'message': '模板文件不存在'})
 
     try:
-        ConfigLoader.save_config_from_admin({'template.default': name})
+        ConfigLoader.save_config_from_admin({'template.default': safe_name})
         # 更新内存中的 config 对象，确保立即生效。
         # 但为了保险，我们可以不操作，直接依赖 ConfigLoader 的单例特性。
         return jsonify({'status': 'ok'})
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        logger.error(f'设置默认模板失败: {e}', exc_info=True)
+        return jsonify({'status': 'error', 'message': '设置默认模板失败，请稍后重试'})
 
 @app.route('/api/start', methods=['POST'])
 def api_start():
@@ -721,9 +806,16 @@ def api_admin_info():
 @admin_required
 def api_admin_download_file():
     path = request.args.get('path')
-    if not path or not os.path.exists(path) or (not path.startswith(os.path.join(base_dir, config['output.dir']))):
+    if not path:
         return jsonify({'status': 'error', 'message': '无效文件'})
-    return send_file(path, as_attachment=True, download_name=os.path.basename(path))
+    output_dir = os.path.join(base_dir, config['output.dir'])
+    real_output = os.path.realpath(output_dir)
+    real_path = os.path.realpath(path)
+    if not real_path.startswith(real_output + os.sep) and real_path != real_output:
+        return jsonify({'status': 'error', 'message': '无效文件'})
+    if not os.path.exists(real_path) or not os.path.isfile(real_path):
+        return jsonify({'status': 'error', 'message': '无效文件'})
+    return send_file(real_path, as_attachment=True, download_name=os.path.basename(real_path))
 
 @app.route('/api/config', methods=['GET'])
 @admin_required
@@ -736,12 +828,18 @@ def save_config_api():
     data = request.get_json(silent=True) or {}
     new_config = {}
     for item in data:
-        new_config[item['key']] = item['value']
+        key = item.get('key', '')
+        value = item.get('value', '')
+        # 仅对敏感字段跳过脱敏值，避免将 ****** 写入配置
+        if key in SENSITIVE_KEYS and value == '******':
+            continue
+        new_config[key] = value
     try:
         ConfigLoader.save_config_from_admin(new_config)
         return jsonify({'status': 'ok'})
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        logger.error(f'保存配置失败: {e}', exc_info=True)
+        return jsonify({'status': 'error', 'message': '保存配置失败，请稍后重试'})
 
 @app.route('/api/stats', methods=['GET'])
 @admin_required
@@ -784,8 +882,8 @@ def api_admin_stats_delete():
             f.writelines(new_lines)
         return jsonify({'status': 'ok'})
     except Exception as e:
-        logger.error(f'删除统计记录失败: {e}')
-        return jsonify({'status': 'error', 'message': str(e)})
+        logger.error(f'删除统计记录失败: {e}', exc_info=True)
+        return jsonify({'status': 'error', 'message': '删除统计记录失败，请稍后重试'})
 
 @app.route('/api/download_all', methods=['GET'])
 @admin_required
@@ -794,7 +892,6 @@ def download_all_api():
     zip_path = os.path.join(base_dir, 'all_downloads.zip')
     if os.path.exists(zip_path):
         os.remove(zip_path)
-    import zipfile
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         for root, dirs, files in os.walk(output_dir):
             for file in files:
@@ -824,10 +921,17 @@ def api_admin_logs():
 def api_admin_get_log(filename):
     if filename == 'download_stats.jsonl':
          return jsonify({'status': 'error', 'message': 'Cannot read stats file'})
+    safe_name = os.path.basename(filename)
+    if safe_name != filename or '..' in filename:
+        return jsonify({'status': 'error', 'message': '无效文件名'})
     log_dir = os.path.join(base_dir, config.get('log.dir', 'logs'))
-    path = os.path.join(log_dir, filename)
-    if not os.path.exists(path) or not os.path.isfile(path):
+    log_path = os.path.join(log_dir, safe_name)
+    real_path = os.path.realpath(log_path)
+    if not real_path.startswith(os.path.realpath(log_dir) + os.sep):
+        return jsonify({'status': 'error', 'message': '无效文件'})
+    if not os.path.exists(real_path) or not os.path.isfile(real_path):
         return jsonify({'status': 'error', 'message': 'File not found'})
+    path = real_path
     try:
         # 分页参数: lines=每次返回行数(默认2000), skip_lines=从末尾跳过行数(默认0)
         max_lines = min(int(request.args.get('lines', 2000)), 10000)
@@ -921,22 +1025,31 @@ def api_admin_get_log(filename):
             'file_size': file_size
         })
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        logger.error(f'读取日志文件失败: {e}', exc_info=True)
+        return jsonify({'status': 'error', 'message': '读取日志文件失败，请稍后重试'})
 
 @app.route('/api/admin/logs/<filename>', methods=['DELETE'])
 @admin_required
 def api_admin_delete_log(filename):
     if filename == 'download_stats.jsonl':
          return jsonify({'status': 'error', 'message': 'Cannot delete stats file'})
+    safe_name = os.path.basename(filename)
+    if safe_name != filename or '..' in filename:
+        return jsonify({'status': 'error', 'message': '无效文件名'})
     log_dir = os.path.join(base_dir, config.get('log.dir', 'logs'))
-    path = os.path.join(log_dir, filename)
-    if not os.path.exists(path):
+    log_path = os.path.join(log_dir, safe_name)
+    real_path = os.path.realpath(log_path)
+    if not real_path.startswith(os.path.realpath(log_dir) + os.sep):
+        return jsonify({'status': 'error', 'message': '无效文件'})
+    if not os.path.exists(real_path):
         return jsonify({'status': 'error', 'message': 'File not found'})
+    path = real_path
     try:
         os.remove(path)
         return jsonify({'status': 'ok'})
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        logger.error(f'删除日志文件失败: {e}', exc_info=True)
+        return jsonify({'status': 'error', 'message': '删除日志文件失败，请稍后重试'})
 
 @app.route('/api/admin/system', methods=['POST'])
 @admin_required
@@ -950,7 +1063,6 @@ def api_admin_system():
 
     if action == 'status':
         try:
-            import subprocess
             # 使用 list-units 检查服务是否存在
             subprocess.check_call(['systemctl', 'status', 'feishu-docget'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
@@ -958,9 +1070,10 @@ def api_admin_system():
             output = subprocess.check_output(['systemctl', 'status', 'feishu-docget', '--no-pager'], stderr=subprocess.STDOUT)
             return jsonify({'status': 'ok', 'output': output.decode('utf-8')})
         except subprocess.CalledProcessError:
-             return jsonify({'status': 'error', 'message': '服务未运行或不存在'})
+            return jsonify({'status': 'error', 'message': '服务未运行或不存在'})
         except Exception as e:
-             return jsonify({'status': 'error', 'message': str(e)})
+            logger.error(f'获取服务状态失败: {e}', exc_info=True)
+            return jsonify({'status': 'error', 'message': '获取服务状态失败，请稍后重试'})
 
     elif action == 'update':
         script_path = os.path.join(base_dir, 'tools', 'update.sh')
@@ -968,11 +1081,10 @@ def api_admin_system():
              return jsonify({'status': 'error', 'message': '更新脚本未找到'})
         
         def run_update_bg():
-            import subprocess
             try:
                 # 使用 nohup 运行更新脚本，避免因服务重启导致脚本中断
                 # 脚本内部会处理重启逻辑
-                subprocess.Popen(['nohup', 'bash', script_path, '&'], cwd=base_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.Popen(['nohup', 'bash', script_path, '--yes'], cwd=base_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except Exception as e:
                 logger.error(f'启动更新脚本失败: {e}')
         
@@ -982,13 +1094,17 @@ def api_admin_system():
     elif action in ['restart', 'stop']:
         cmd = ['sudo', 'systemctl', action, 'feishu-docget']
         try:
-            import subprocess
             sudo_pass = config.get('system.sudo_password')
             
             def run_cmd_bg():
                 if sudo_pass:
-                    full_cmd = f"echo '{sudo_pass}' | sudo -S {' '.join(cmd[1:])}"
-                    subprocess.Popen(full_cmd, shell=True)
+                    proc = subprocess.Popen(
+                        ['sudo', '-S'] + cmd[1:],
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                    proc.communicate(input=(sudo_pass + '\n').encode())
                 else:
                     subprocess.Popen(cmd)
             
@@ -998,10 +1114,21 @@ def api_admin_system():
             msg = '正在重启服务...' if action == 'restart' else '正在停止服务...'
             return jsonify({'status': 'ok', 'message': msg})
         except Exception as e:
-            return jsonify({'status': 'error', 'message': str(e)})
+            logger.error(f'执行系统操作失败: {e}', exc_info=True)
+            return jsonify({'status': 'error', 'message': '系统操作失败，请稍后重试'})
             
     else:
         return jsonify({'status': 'error', 'message': '无效的操作'})
+
+@app.after_request
+def set_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    # HSTS 仅在 HTTPS 模式下启用
+    if app.config.get('SESSION_COOKIE_SECURE'):
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    return response
 
 if __name__ == '__main__':
     port = int(config.get('server.port', '7800'))

@@ -4,6 +4,14 @@
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR" || exit 1
 
+# 解析参数
+SKIP_CONFIRM=false
+for arg in "$@"; do
+    case "$arg" in
+        --yes|-y) SKIP_CONFIRM=true ;;
+    esac
+done
+
 echo "=========================================="
 echo "   正在更新 feishu-docget..."
 echo "=========================================="
@@ -12,6 +20,19 @@ echo "项目目录: $PROJECT_DIR"
 # 1. 强制拉取远程代码
 echo "[1/2] 正在拉取远程代码..."
 git fetch --all
+
+echo "=== 即将应用以下更新 ==="
+git log HEAD..origin/main --oneline 2>/dev/null || echo "(无法获取更新日志)"
+echo ""
+if [ "$SKIP_CONFIRM" != "true" ]; then
+    echo "确认更新？(y/N)"
+    read -r confirm
+    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+        echo "更新已取消"
+        exit 0
+    fi
+fi
+
 git reset --hard origin/main
 if [ $? -ne 0 ]; then
     echo "❌ 代码更新失败，请检查网络或 Git 配置"
@@ -38,10 +59,13 @@ if [ -z "$SUDO_PASS" ]; then
     fi
 fi
 
-SUDO_CMD="sudo"
-if [ -n "$SUDO_PASS" ]; then
-    SUDO_CMD="echo \"$SUDO_PASS\" | sudo -S"
-fi
+run_sudo() {
+    if [ -n "$SUDO_PASS" ]; then
+        echo "$SUDO_PASS" | sudo -S "$@"
+    else
+        sudo "$@"
+    fi
+}
 
 # 检查是否存在 systemd 服务
 if systemctl status feishu-docget >/dev/null 2>&1; then
@@ -49,7 +73,7 @@ if systemctl status feishu-docget >/dev/null 2>&1; then
     
     # 尝试重启
     echo "正在尝试重启..."
-    eval "$SUDO_CMD systemctl restart feishu-docget"
+    run_sudo systemctl restart feishu-docget
     
     if [ $? -eq 0 ]; then
         echo "✅ 服务重启成功！"

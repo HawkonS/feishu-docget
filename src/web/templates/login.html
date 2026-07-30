@@ -31,32 +31,10 @@
         .password-field input {
             width: 100%;
             padding: 10px;
-            padding-right: 40px; /* 为眼睛图标预留空间 */
             border: 1px solid #ccc;
             border-radius: 6px;
             box-sizing: border-box;
         }
-        .eye-toggle {
-            position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            border: none;
-            background: transparent;
-            padding: 0;
-            cursor: pointer;
-            color: #9ca3af;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .eye-toggle svg {
-            width: 18px;
-            height: 18px;
-        }
-        .eye-toggle .eye-open { display: none; }
-        .eye-toggle.is-open .eye-open { display: block; }
-        .eye-toggle.is-open .eye-closed { display: none; }
         button.login-btn {
             width: 100%;
             padding: 10px;
@@ -83,17 +61,6 @@
         <h3>管理后台登录</h3>
         <div class="password-field">
             <input type="password" id="adminPass" placeholder="请输入密码" onkeypress="if(event.key==='Enter') doLogin()" />
-            <button class="eye-toggle" id="togglePassBtn" onclick="togglePassword()" aria-label="显示或隐藏密码" type="button">
-                <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M2 12s4-6 10-6 10 6 10 6"></path>
-                    <path d="M4 14s3 4 8 4 8-4 8-4"></path>
-                    <line x1="3" y1="3" x2="21" y2="21"></line>
-                </svg>
-                <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M1.5 12s4.5-7.5 10.5-7.5S22.5 12 22.5 12s-4.5 7.5-10.5 7.5S1.5 12 1.5 12z"></path>
-                    <circle cx="12" cy="12" r="3.5"></circle>
-                </svg>
-            </button>
         </div>
         <button class="login-btn" onclick="doLogin()">登录</button>
         <div id="loginMsg" style="color:red; margin-top:10px; font-size:12px;"></div>
@@ -101,14 +68,6 @@
     <div class="footer-copyright">© Hawkon 2025</div>
 
     <script>
-        function togglePassword() {
-            const input = document.getElementById("adminPass");
-            const btn = document.getElementById("togglePassBtn");
-            const isHidden = input.type === "password";
-            input.type = isHidden ? "text" : "password";
-            btn.classList.toggle("is-open", isHidden);
-        }
-
         function doLogin() {
             const pwd = document.getElementById("adminPass").value;
             if (!pwd) return;
