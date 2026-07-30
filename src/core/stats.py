@@ -3,6 +3,25 @@ import json
 import time
 from datetime import datetime
 
+def _mask_ip(ip):
+    """IP 地址脱敏：保留前两段，后两段用 * 替换"""
+    if not ip:
+        return ''
+    parts = ip.split('.')
+    if len(parts) == 4:
+        return f'{parts[0]}.{parts[1]}.*.*'
+    return ip  # IPv6 等不做处理
+
+def _mask_url(url):
+    """URL 脱敏：去掉查询参数，截断长 URL"""
+    if not url:
+        return ''
+    if '?' in url:
+        url = url.split('?')[0]
+    if len(url) > 60:
+        url = url[:60] + '...'
+    return url
+
 def get_stats_file(base_dir, config):
     workspace = config.get('workspace.dir', '.')
     log_dir = os.path.join(workspace, config.get('log.dir', 'logs'))
@@ -11,7 +30,7 @@ def get_stats_file(base_dir, config):
 
 def update_download_stat(base_dir, config, task_id, status, doc_url='', file_path='', title='', ip_address=''):
     stats_file = get_stats_file(base_dir, config)
-    entry = {'id': task_id, 'status': status, 'ts': int(time.time()), 'time': datetime.now().isoformat(), 'url': doc_url, 'path': file_path, 'title': title, 'ip': ip_address}
+    entry = {'id': task_id, 'status': status, 'ts': int(time.time()), 'time': datetime.now().isoformat(), 'url': _mask_url(doc_url), 'path': file_path, 'title': title, 'ip': _mask_ip(ip_address)}
     with open(stats_file, 'a', encoding='utf-8') as f:
         f.write(json.dumps(entry, ensure_ascii=False) + '\n')
 

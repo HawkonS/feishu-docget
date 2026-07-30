@@ -1019,6 +1019,30 @@
 
 
     <script>
+        function escapeHtml(s) {
+            const div = document.createElement('div');
+            div.textContent = s;
+            return div.innerHTML;
+        }
+
+        function safeUrl(url) {
+            if (!url) return '#';
+            const s = String(url).trim().toLowerCase();
+            if (s.startsWith('javascript:') || s.startsWith('data:') || s.startsWith('vbscript:')) return '#';
+            return escapeHtml(url);
+        }
+
+        function escapeJsString(s) {
+            return String(s || '')
+                .replace(/\\/g, '\\\\')
+                .replace(/'/g, "\\'")
+                .replace(/"/g, '\\"')
+                .replace(/`/g, '\\`')
+                .replace(/\$/g, '\\$')
+                .replace(/\n/g, '\\n')
+                .replace(/\r/g, '\\r');
+        }
+
         let adminData = null;
         let selectedTemplate = "";
         let selectedStyle = "1";
@@ -1123,6 +1147,8 @@
             }
         }
         
+        const SENSITIVE_KEYS = new Set(['feishu.app_secret', 'admin.password', 'system.sudo_password', 'template.password.long_term', 'template.password.one_time', 'server.secret_key']);
+
         function renderConfigForm(data) {
             const container = document.getElementById('configForm');
             container.innerHTML = "";
@@ -1140,16 +1166,84 @@
                 label.style.color = "#1f2a44";
                 label.innerText = item.desc || item.key;
                 
+                const inputRow = document.createElement("div");
+                inputRow.style.display = "flex";
+                inputRow.style.gap = "8px";
+                inputRow.style.alignItems = "center";
+                inputRow.style.marginBottom = "4px";
+
                 const input = document.createElement("input");
                 input.type = "text";
                 input.className = "form-select";
-                input.style.marginBottom = "4px";
+                input.style.flex = "1";
                 input.style.padding = "10px";
                 input.style.fontSize = "14px";
                 input.style.border = "1px solid #d9e4f5";
                 input.style.borderRadius = "6px";
                 input.value = item.value;
                 input.dataset.key = item.key;
+
+                const isSensitive = SENSITIVE_KEYS.has(item.key) && item.value === '******';
+                if (isSensitive) {
+                    input.readOnly = true;
+                    input.style.color = "#94a3b8";
+                    input.dataset.masked = "true";
+
+                    const toggleBtn = document.createElement("button");
+                    toggleBtn.type = "button";
+                    toggleBtn.innerText = "显示";
+                    toggleBtn.style.padding = "8px 12px";
+                    toggleBtn.style.fontSize = "13px";
+                    toggleBtn.style.border = "1px solid #d9e4f5";
+                    toggleBtn.style.borderRadius = "6px";
+                    toggleBtn.style.cursor = "pointer";
+                    toggleBtn.style.whiteSpace = "nowrap";
+                    toggleBtn.onclick = function() {
+                        if (input.dataset.masked === "true") {
+                            input.value = "";
+                            input.readOnly = false;
+                            input.style.color = "#1f2a44";
+                            input.dataset.masked = "false";
+                            input.placeholder = "输入新值以覆盖，留空则不修改";
+                            toggleBtn.innerText = "隐藏";
+                        } else {
+                            input.value = "******";
+                            input.readOnly = true;
+                            input.style.color = "#94a3b8";
+                            input.dataset.masked = "true";
+                            input.placeholder = "";
+                            toggleBtn.innerText = "显示";
+                        }
+                    };
+                    inputRow.appendChild(input);
+                    inputRow.appendChild(toggleBtn);
+                } else {
+                    inputRow.appendChild(input);
+                }
+
+                if (item.key === 'server.secret_key') {
+                    const genBtn = document.createElement("button");
+                    genBtn.type = "button";
+                    genBtn.innerText = "生成密钥";
+                    genBtn.style.padding = "8px 12px";
+                    genBtn.style.fontSize = "13px";
+                    genBtn.style.border = "1px solid #3b82f6";
+                    genBtn.style.borderRadius = "6px";
+                    genBtn.style.cursor = "pointer";
+                    genBtn.style.whiteSpace = "nowrap";
+                    genBtn.style.background = "#eff6ff";
+                    genBtn.style.color = "#3b82f6";
+                    genBtn.onclick = function() {
+                        const arr = new Uint8Array(32);
+                        crypto.getRandomValues(arr);
+                        const hex = Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+                        input.value = hex;
+                        input.readOnly = false;
+                        input.style.color = "#1f2a44";
+                        input.dataset.masked = "false";
+                    };
+                    inputRow.appendChild(genBtn);
+                }
                 
                 const keyLabel = document.createElement("div");
                 keyLabel.style.fontSize = "12px";
@@ -1158,7 +1252,7 @@
                 keyLabel.innerText = item.key;
                 
                 div.appendChild(label);
-                div.appendChild(input);
+                div.appendChild(inputRow);
                 div.appendChild(keyLabel);
                 container.appendChild(div);
             });
@@ -1169,6 +1263,8 @@
                 const inputs = document.querySelectorAll('#configForm input');
                 const newData = [];
                 inputs.forEach(input => {
+                    // 跳过仍然处于脱敏状态的敏感字段
+                    if (input.dataset.masked === 'true') return;
                     newData.push({
                         key: input.dataset.key,
                         value: input.value
@@ -1242,12 +1338,12 @@
             } else {
                 for (const item of pageData) {
                     html += `<tr>
-                        <td style="text-align:center;"><input type="checkbox" class="stat-checkbox" value="${item.id ? 'id:'+item.id : 'ts:'+item.ts}"></td>
-                        <td style="color: #64748b; vertical-align:top;">${item.time.replace('T', ' ').split('.')[0]}</td>
-                        <td style="font-weight: 500; white-space: normal; word-break: break-all; vertical-align:top;">${item.title || '-'}</td>
-                        <td style="vertical-align:top; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${item.url}"><a href="${item.url}" target="_blank" style="color:#3b82f6;">链接</a></td>
-                        <td style="vertical-align:top;">${item.status || '-'}</td>
-                        <td style="color: #64748b; vertical-align:top;">${item.ip || '-'}</td>
+                        <td style="text-align:center;"><input type="checkbox" class="stat-checkbox" value="${item.id ? 'id:'+escapeHtml(item.id) : 'ts:'+escapeHtml(item.ts)}"></td>
+                        <td style="color: #64748b; vertical-align:top;">${escapeHtml(item.time.replace('T', ' ').split('.')[0])}</td>
+                        <td style="font-weight: 500; white-space: normal; word-break: break-all; vertical-align:top;">${escapeHtml(item.title) || '-'}</td>
+                        <td style="vertical-align:top; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(item.url)}"><a href="${safeUrl(item.url)}" target="_blank" style="color:#3b82f6;">链接</a></td>
+                        <td style="vertical-align:top;">${escapeHtml(item.status) || '-'}</td>
+                        <td style="color: #64748b; vertical-align:top;">${escapeHtml(item.ip) || '-'}</td>
                     </tr>`;
                 }
             }
@@ -1375,8 +1471,8 @@
                     div.style.transition = 'background 0.2s';
                     
                     div.innerHTML = `
-                        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 8px;" title="${f.name}">${f.name}</span>
-                        <span style="font-size: 11px; color: #94a3b8; flex-shrink: 0;">${formatSize(f.size)}</span>
+                        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 8px;" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
+                        <span style="font-size: 11px; color: #94a3b8; flex-shrink: 0;">${escapeHtml(formatSize(f.size))}</span>
                     `;
                     
                     div.onclick = () => selectLog(f.name);
@@ -1761,11 +1857,11 @@
             const download = `/api/admin/download_file?path=${encodeURIComponent(f.path)}`;
             return `
                 <div style="display:grid; grid-template-columns: 1fr 140px 100px; gap:8px; padding:6px 0; border-bottom:1px dashed #eee; align-items:center;">
-                    <div title="${name}" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</div>
-                    <div style="font-size:12px; color:#64748b;">${f.ctime}</div>
+                    <div title="${escapeHtml(name)}" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(name)}</div>
+                    <div style="font-size:12px; color:#64748b;">${escapeHtml(f.ctime)}</div>
                     <div style="text-align:right;">
                         <a href="${download}" style="color:#3b82f6; text-decoration:none; margin-right:8px; font-size:12px;">下载</a>
-                        <span style="color:#ef4444; cursor:pointer; font-size:12px;" onclick="deleteFile('${f.path.replace(/\\/g, '\\\\')}')">删除</span>
+                        <span style="color:#ef4444; cursor:pointer; font-size:12px;" onclick="deleteFile('${escapeJsString(f.path)}')">删除</span>
                     </div>
                 </div>
             `;
@@ -1783,15 +1879,15 @@
                 const folderPath = path.replace(/\\/g, '/') + "/" + folder;
                 html += `
                     <div style="padding:4px 0; font-weight:600; color:#475569; display:flex; justify-content:space-between; align-items:center;">
-                        <div style="cursor:pointer;" onclick="toggleSubfolder('${subId}')">
-                            📂 ${folder} <span id="arrow-${subId}" style="font-size:10px;">▼</span>
+                        <div style="cursor:pointer;" onclick="toggleSubfolder('${escapeJsString(subId)}')">
+                            📂 ${escapeHtml(folder)} <span id="arrow-${escapeHtml(subId)}" style="font-size:10px;">▼</span>
                         </div>
                         <div style="font-size:12px;">
                             <a href="/api/admin/download_folder?path=${encodeURIComponent(folderPath)}" style="color:#3b82f6; text-decoration:none; margin-right:8px;">打包下载</a>
-                            <span style="color:#ef4444; cursor:pointer;" onclick="deleteProject('${folderPath.replace(/\\/g, '\\\\')}')">删除</span>
+                            <span style="color:#ef4444; cursor:pointer;" onclick="deleteProject('${escapeJsString(folderPath)}')">删除</span>
                         </div>
                     </div>
-                    <div id="sub-${subId}" style="display:none; padding-left:16px;">
+                    <div id="sub-${escapeHtml(subId)}" style="display:none; padding-left:16px;">
                         ${grouped.folders[folder].map(f => renderFileRow(f, f.rel_path)).join("")}
                     </div>
                 `;
@@ -1838,15 +1934,15 @@
                     const tr = document.createElement("tr");
                     tr.innerHTML = `
                         <td>
-                            <div style="cursor:pointer; font-weight:600; color:#1e293b;" onclick="toggleFolder('${p.path.replace(/\\/g, '\\\\')}')">
-                                📁 ${p.name} <span style="font-size:10px; color:#94a3b8;">▼</span>
+                            <div style="cursor:pointer; font-weight:600; color:#1e293b;" onclick="toggleFolder('${escapeJsString(p.path)}')">
+                                📁 ${escapeHtml(p.name)} <span style="font-size:10px; color:#94a3b8;">▼</span>
                             </div>
                         </td>
-                        <td style="color:#64748b; font-size:13px;">${p.ctime}</td>
-                        <td style="color:#64748b; font-size:13px;">${formatSize(p.size || 0)}</td>
+                        <td style="color:#64748b; font-size:13px;">${escapeHtml(p.ctime)}</td>
+                        <td style="color:#64748b; font-size:13px;">${escapeHtml(formatSize(p.size || 0))}</td>
                         <td>
                             <a href="/api/admin/download_project?path=${encodeURIComponent(p.path)}" style="color:#3b82f6; text-decoration:none; margin-right:12px; font-size:13px;">下载</a>
-                            <span class="action-link red" onclick="deleteProject('${p.path.replace(/\\/g, '\\\\')}')">删除</span>
+                            <span class="action-link red" onclick="deleteProject('${escapeJsString(p.path)}')">删除</span>
                         </td>
                     `;
                     const trDetail = document.createElement("tr");

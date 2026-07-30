@@ -1505,6 +1505,12 @@
     </div>
 
     <script>
+        function escapeHtml(s) {
+            const div = document.createElement('div');
+            div.textContent = s;
+            return div.innerHTML;
+        }
+
         let jobId = "";
         let timer = null;
         let selectedTemplate = "";
@@ -2131,7 +2137,7 @@
             task.logs.slice().reverse().forEach(item => {
                 const div = document.createElement("div");
                 div.className = "log-item";
-                div.innerHTML = `<strong>${item.ts}</strong><br/>${item.message}`;
+                div.innerHTML = `<strong>${escapeHtml(item.ts)}</strong><br/>${escapeHtml(item.message)}`;
                 list.appendChild(div);
             });
             renderDownloadButton();
