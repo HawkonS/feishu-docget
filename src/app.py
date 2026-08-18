@@ -249,6 +249,12 @@ def page_not_found(e):
         target = 'http://' + target
     return redirect(target)
 
+@app.errorhandler(413)
+def request_entity_too_large(e):
+    # 返回 JSON，避免前端解析 HTML 错误页报 Unexpected token '<'
+    logger.warning(f'请求体超过大小限制: {request.path}')
+    return jsonify({'status': 'error', 'message': '上传文件超过大小限制（50MB），请压缩后重试；若经由反向代理访问，请检查代理层的请求体大小限制'}), 413
+
 def _validate_document_info(document_info):
     if not isinstance(document_info, dict):
         return None
