@@ -2410,7 +2410,17 @@
             fetch("/api/upload_template", {
                 method: "POST",
                 body: formData
-            }).then(r => r.json()).then(res => {
+            }).then(async r => {
+                const contentType = r.headers.get("Content-Type") || "";
+                if (!contentType.includes("application/json")) {
+                    // 反向代理（如 Nginx）拦截请求时会返回 HTML 错误页（常见于超过 client_max_body_size 限制的 413）
+                    if (r.status === 413) {
+                        throw new Error("上传文件过大，被服务器（或反向代理）拒绝，请联系管理员调大上传大小限制");
+                    }
+                    throw new Error(`服务器返回了非 JSON 响应（HTTP ${r.status}），可能是文件过大被反向代理拦截`);
+                }
+                return r.json();
+            }).then(res => {
                 if (res.status === "ok") {
                     closeUploadModal();
                     loadTemplates();
