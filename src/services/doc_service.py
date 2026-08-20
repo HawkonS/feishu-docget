@@ -5,7 +5,7 @@ from docx import Document
 
 from src.converters.docx.cleaner import apply_custom_styles, apply_document_info, clean_document
 from src.converters.docx.converter import FeishuDocxConverter
-from src.core.bot_store import normalize_bot_config, save_bot_credentials, validate_bot_credentials
+from src.core.bot_store import normalize_bot_config, validate_bot_credentials
 from src.core.config_loader import ConfigLoader, config
 from src.core.feishu_client import FeishuClient
 from src.core.utils import sanitize_name
@@ -154,12 +154,8 @@ def process_document(doc_url, template_path=None, table_style=None, base_dir='.'
     if custom_bot:
         if progress_cb:
             progress_cb(6, '正在校验自定义机器人', 'dynamic')
-        if validate_bot_credentials(custom_bot['app_id'], custom_bot['app_secret']):
-            try:
-                save_bot_credentials(base_dir, custom_bot)
-            except Exception as e:
-                logger.warning(f'自定义机器人可用，但保存记录失败: {e}')
-        else:
+        # 自定义机器人凭据仅在当前任务内存中使用，不做磁盘持久化，避免明文存储风险
+        if not validate_bot_credentials(custom_bot['app_id'], custom_bot['app_secret']):
             logger.warning('自定义机器人身份验证未通过，自动回退至系统默认机器人')
             if progress_cb:
                 progress_cb(8, '自定义机器人身份验证未通过，自动回退至系统默认机器人', 'info')

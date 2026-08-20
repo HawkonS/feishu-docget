@@ -50,6 +50,57 @@ active_downloads_lock = threading.Lock()
 active_downloads = 0
 
 _login_attempts = {}  # {ip: {'count': N, 'locked_until': timestamp, 'ban_level': N}}
+_upload_attempts = {}  # {ip: {'count': N, 'locked_until': timestamp, 'ban_level': N}} 模板上传密码尝试记录
+_start_attempts = {}  # {ip: [timestamps]} 任务提交接口的滑动窗口限流
+START_RATE_LIMIT = 10  # 单 IP 每分钟最多提交任务数
+
+
+def _check_login_lock(attempts, client_ip):
+    """检查 IP 是否处于锁定状态。返回 (是否锁定, 剩余秒数)，锁定期过期时自动清理记录"""
+    attempt = attempts.get(client_ip)
+    if attempt and attempt.get('locked_until', 0) > 0:
+        now = time.time()
+        if now > attempt['locked_until']:
+            attempts.pop(client_ip, None)
+            return False, 0
+        return True, int(attempt['locked_until'] - now)
+    return False, 0
+
+
+def _record_login_failure(attempts, client_ip):
+    """记录一次密码校验失败，失败 5 次后按指数退避锁定"""
+    now = time.time()
+    attempt = attempts.get(client_ip)
+    if not attempt:
+        attempts[client_ip] = {'count': 1, 'locked_until': 0, 'ban_level': 0}
+    else:
+        attempt['count'] = attempt.get('count', 0) + 1
+        if attempt['count'] >= 5:
+            ban_level = attempt.get('ban_level', 0)
+            lock_seconds = min(60 * (3 ** ban_level), 3600)
+            attempt['locked_until'] = now + lock_seconds
+            attempt['count'] = 0
+            attempt['ban_level'] = ban_level + 1
+
+
+def _check_start_rate_limit(client_ip):
+    """任务提交接口的滑动窗口限流，超限返回 False"""
+    now = time.time()
+    window = _start_attempts.setdefault(client_ip, [])
+    window[:] = [ts for ts in window if now - ts < 60]
+    if len(window) >= START_RATE_LIMIT:
+        return False
+    window.append(now)
+    return True
+
+
+def _verify_job_access(job_id):
+    """校验当前会话是否有权访问指定任务：管理员或任务创建者可访问"""
+    if session.get('is_admin'):
+        return True
+    tokens = session.get('job_tokens') or {}
+    return bool(tokens.get(job_id))
+
 
 def _cleanup_temp(path):
     """延迟清理临时文件"""
@@ -336,19 +387,9 @@ def admin_page():
 @app.route('/api/admin/login', methods=['POST'])
 def api_admin_login():
     client_ip = request.remote_addr or 'unknown'
-    now = time.time()
-    attempt = _login_attempts.get(client_ip)
-
-    # 锁定检查：过期则清理，未过期则拒绝
-    if attempt and attempt.get('locked_until', 0) > 0:
-        if now > attempt['locked_until']:
-            # 锁定已过期，清理记录
-            _login_attempts.pop(client_ip, None)
-            attempt = None
-        else:
-            # 仍在锁定中
-            remaining = int(attempt['locked_until'] - now)
-            return jsonify({'status': 'error', 'message': f'账户已锁定，请 {remaining} 秒后重试'})
+    locked, remaining = _check_login_lock(_login_attempts, client_ip)
+    if locked:
+        return jsonify({'status': 'error', 'message': f'账户已锁定，请 {remaining} 秒后重试'})
 
     data = request.get_json(silent=True) or {}
     password = (data.get('password') or '').strip()
@@ -360,16 +401,7 @@ def api_admin_login():
         return jsonify({'status': 'ok'})
 
     # 登录失败，增加计数
-    if not attempt:
-        _login_attempts[client_ip] = {'count': 1, 'locked_until': 0, 'ban_level': 0}
-    else:
-        attempt['count'] = attempt.get('count', 0) + 1
-        if attempt['count'] >= 5:
-            ban_level = attempt.get('ban_level', 0)
-            lock_seconds = min(60 * (3 ** ban_level), 3600)
-            attempt['locked_until'] = now + lock_seconds
-            attempt['count'] = 0
-            attempt['ban_level'] = ban_level + 1
+    _record_login_failure(_login_attempts, client_ip)
     return jsonify({'status': 'error', 'message': '密码错误'})
 
 @app.route('/api/admin/logout', methods=['POST', 'GET'])
@@ -500,6 +532,12 @@ def api_upload_template():
     if session.get('is_admin'):
         mode = 'long_term'
     else:
+        # 非管理员的密码校验同样受速率限制保护，防止暴力破解
+        client_ip = request.remote_addr or 'unknown'
+        locked, remaining = _check_login_lock(_upload_attempts, client_ip)
+        if locked:
+            return jsonify({'status': 'error', 'message': f'尝试次数过多，请 {remaining} 秒后重试'})
+
         # 验证模式
         if mode not in ['long_term', 'one_time']:
              return jsonify({'status': 'error', 'message': '无效的存储模式'})
@@ -513,7 +551,9 @@ def api_upload_template():
             correct_password = None
         
         if not correct_password or password != correct_password:
+            _record_login_failure(_upload_attempts, client_ip)
             return jsonify({'status': 'error', 'message': '密码错误'})
+        _upload_attempts.pop(client_ip, None)
 
     # 验证文件和名称
     if not name:
@@ -690,6 +730,9 @@ def api_admin_set_default_template():
 
 @app.route('/api/start', methods=['POST'])
 def api_start():
+    client_ip = request.remote_addr or 'unknown'
+    if not _check_start_rate_limit(client_ip):
+        return jsonify({'status': 'error', 'message': '提交过于频繁，请稍后再试'})
     data = request.get_json(silent=True) or {}
     doc_url = str(data.get('url') or '').strip()
     template = str(data.get('template') or '').strip()
@@ -715,7 +758,11 @@ def api_start():
     if document_info_error:
         return jsonify({'status': 'error', 'message': document_info_error})
     job_id = datetime.now().strftime('%Y%m%d%H%M%S') + '_' + uuid.uuid4().hex[:8]
-    client_ip = request.remote_addr
+    # 任务访问令牌：仅创建者会话与管理员可查询/下载/停止该任务，防止他人枚举 job_id
+    job_token = secrets.token_urlsafe(16)
+    session_tokens = session.setdefault('job_tokens', {})
+    session_tokens[job_id] = job_token
+    session.modified = True
     is_temp_template = template.startswith('temp_')
     with jobs_lock:
         jobs[job_id] = {'status': 'pending', 'progress': 0, 'message': '等待中', 'job_id': job_id, 'created_at': datetime.now().isoformat(timespec='seconds'), 'doc_url': doc_url, 'template': template, 'table_style': table_style, 'unordered_list_style': unordered_list_style, 'body_style': body_style, 'image_style': image_style, 'table_config': table_config, 'margin_config': margin_config, 'code_block_config': code_block_config, 'document_info': document_info, 'custom_bot_enabled': bool(bot_config), 'client_ip': client_ip, 'logs': [{'ts': datetime.now().isoformat(timespec='seconds'), 'message': '任务已创建'}]}
@@ -753,6 +800,8 @@ def api_start():
 
 @app.route('/api/status/<job_id>', methods=['GET'])
 def api_status(job_id):
+    if not _verify_job_access(job_id):
+        return jsonify({'status': 'error', 'message': '任务未找到'})
     with jobs_lock:
         job = jobs.get(job_id)
         if not job:
@@ -761,6 +810,8 @@ def api_status(job_id):
 
 @app.route('/api/download/<job_id>', methods=['GET'])
 def api_download(job_id):
+    if not _verify_job_access(job_id):
+        return jsonify({'status': 'error', 'message': '任务未找到'})
     with jobs_lock:
         job = jobs.get(job_id)
         if not job or job.get('status') != 'done':
@@ -772,6 +823,8 @@ def api_download(job_id):
 
 @app.route('/api/stop/<job_id>', methods=['POST'])
 def api_stop(job_id):
+    if not _verify_job_access(job_id):
+        return jsonify({'status': 'error', 'message': '任务未找到'})
     with jobs_lock:
         job = jobs.get(job_id)
         if not job:
@@ -792,6 +845,7 @@ def api_stop(job_id):
     return jsonify({'status': 'ok'})
 
 @app.route('/api/jobs', methods=['GET'])
+@admin_required
 def api_jobs():
     with jobs_lock:
         items = list(jobs.values())
