@@ -729,7 +729,7 @@
             </div>
             <div class="hero-input">
                 <input id="docUrl" placeholder="[/* page_placeholder */]" />
-                <button onclick="startDownload()">确认下载</button>
+                <button onclick="startDownload()">任务创建</button>
             </div>
         </div>
         <div class="layout">
@@ -2078,7 +2078,8 @@
                 name: name || "任务待开始",
                 status: "pending",
                 logs: [],
-                docx_path: ""
+                docx_path: "",
+                submitted_at: new Date()
             });
             selectedTaskId = id;
             renderTaskList();
@@ -2111,7 +2112,21 @@
             tasks.forEach(t => {
                 const div = document.createElement("div");
                 div.className = "list-item" + (t.job_id === selectedTaskId ? " active" : "");
-                div.innerText = t.name || "任务待开始";
+                let timeText = "";
+                if (t.submitted_at) {
+                    const d = t.submitted_at;
+                    const pad = n => String(n).padStart(2, "0");
+                    timeText = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+                }
+                const nameSpan = document.createElement("span");
+                nameSpan.innerText = t.name || "任务待开始";
+                if (timeText) {
+                    const timeSpan = document.createElement("span");
+                    timeSpan.innerText = timeText;
+                    timeSpan.style.cssText = "opacity:0.6; font-size:12px; margin-right:8px; white-space:nowrap;";
+                    div.appendChild(timeSpan);
+                }
+                div.appendChild(nameSpan);
                 div.onclick = () => {
                     selectedTaskId = t.job_id;
                     renderTaskList();
