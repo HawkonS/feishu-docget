@@ -1,8 +1,11 @@
 import os
 import sys
+import time
+import gzip
+import shutil
 import logging
 from logging.handlers import RotatingFileHandler
-CONFIG_META = [{'name': '飞书配置 (必填)', 'items': [{'key': 'feishu.app_id', 'default': '', 'desc': '# 飞书 App ID'}, {'key': 'feishu.app_secret', 'default': '', 'desc': '# 飞书 App Secret'}]}, {'name': '服务器配置', 'items': [{'key': 'server.port', 'default': '7800', 'desc': '# 服务器端口'}, {'key': 'server.https.enabled', 'default': 'false', 'desc': '# 是否启用 HTTPS，适用于反向代理 SSL 终结场景 (true/false)'}, {'key': 'admin.path', 'default': '/admin', 'desc': '# 管理后台路径'}, {'key': 'admin.password', 'default': 'Hawkon-FeishuDocGet', 'desc': '# 管理后台密码'}, {'key': 'template.default', 'default': 'Hawkon.docx', 'desc': '# 默认 Word 模板名称'}, {'key': 'system.sudo_password', 'default': '', 'desc': '# 系统 sudo 密码 (用于自动更新脚本，选填)'}, {'key': 'server.secret_key', 'default': '', 'desc': '# 用于 Flask session 加密的密钥，留空则自动生成'}]}, {'name': '页面显示配置', 'items': [{'key': 'page.title', 'default': '飞书文档下载工具', 'desc': '# 页面标题'}, {'key': 'page.favicon', 'default': 'src/static/favicon.ico', 'desc': '# 网站图标文件路径 (相对工作区目录，支持 ico/png/svg)'}, {'key': 'page.description', 'default': '支持将飞书文档链接下载为指定模板的 Word 文件', 'desc': '# 页面描述'}, {'key': 'page.placeholder', 'default': '输入飞书文档链接，如 https://hawkon.feishu.cn/wiki/...', 'desc': '# 输入框占位符'}, {'key': 'page.usage_link_text', 'default': '使用说明', 'desc': '# 使用说明链接文本'}, {'key': 'url.usage_doc', 'default': 'https://github.com/HawkonS/feishu-docget', 'desc': '# 使用文档 URL'}, {'key': 'usage.url', 'default': 'mailto:contact@hawkon.tech', 'desc': '# 使用文档 URL / 联系方式'}, {'key': 'copyright.text', 'default': 'Hawkon 2025 -2026', 'desc': '# 版权文本'}, {'key': 'url.404', 'default': 'https://space.hawkon.tech/', 'desc': '# 404 重定向 URL'}, {'key': 'contact.name', 'default': 'Hakwon', 'desc': '# 联系人名称'}, {'key': 'bot.name', 'default': 'Hawkon-Tool', 'desc': '# 机器人名称'}]}, {'name': '导出设置', 'items': [{'key': 'image.max_height', 'default': '23', 'desc': '# 图片最大高度 (cm)'}, {'key': 'image.max_width', 'default': '16', 'desc': '# 图片最大宽度 (cm)'}, {'key': 'download.threads', 'default': '4', 'desc': '# 图片下载并发线程数'}, {'key': 'max.concurrent.downloads', 'default': '1', 'desc': '# 最大并发下载数'}, {'key': 'download_images', 'default': True, 'desc': '# 是否下载图片'}]}, {'name': '路径与日志配置', 'items': [{'key': 'workspace.dir', 'default': '.', 'desc': '# 工作区目录'}, {'key': 'template.dir', 'default': 'template', 'desc': '# 模板目录'}, {'key': 'template.password.long_term', 'default': '', 'desc': '# 模板上传密码 - 长期存储模式'}, {'key': 'template.password.one_time', 'default': '', 'desc': '# 模板上传密码 - 仅本次使用模式'}, {'key': 'output.dir', 'default': 'output', 'desc': '# 输出资源目录'}, {'key': 'output.max_size', 'default': '10G', 'desc': '# 输出目录最大大小'}, {'key': 'log.dir', 'default': 'logs', 'desc': '# 日志目录'}, {'key': 'log.level', 'default': 'INFO', 'desc': '# 日志级别'}, {'key': 'log.max_size', 'default': '20M', 'desc': '# 最大日志大小'}]}]
+CONFIG_META = [{'name': '飞书配置 (必填)', 'items': [{'key': 'feishu.app_id', 'default': '', 'desc': '# 飞书 App ID'}, {'key': 'feishu.app_secret', 'default': '', 'desc': '# 飞书 App Secret'}]}, {'name': '服务器配置', 'items': [{'key': 'server.port', 'default': '7800', 'desc': '# 服务器端口'}, {'key': 'server.https.enabled', 'default': 'false', 'desc': '# 是否启用 HTTPS，适用于反向代理 SSL 终结场景 (true/false)'}, {'key': 'admin.path', 'default': '/admin', 'desc': '# 管理后台路径'}, {'key': 'admin.password', 'default': 'Hawkon-FeishuDocGet', 'desc': '# 管理后台密码'}, {'key': 'template.default', 'default': 'Hawkon.docx', 'desc': '# 默认 Word 模板名称'}, {'key': 'system.sudo_password', 'default': '', 'desc': '# 系统 sudo 密码 (用于自动更新脚本，选填)'}, {'key': 'server.secret_key', 'default': '', 'desc': '# 用于 Flask session 加密的密钥，留空则自动生成'}]}, {'name': '页面显示配置', 'items': [{'key': 'page.title', 'default': '飞书文档下载工具', 'desc': '# 页面标题'}, {'key': 'page.favicon', 'default': 'src/static/favicon.ico', 'desc': '# 网站图标文件路径 (相对工作区目录，支持 ico/png/svg)'}, {'key': 'page.description', 'default': '支持将飞书文档链接下载为指定模板的 Word 文件', 'desc': '# 页面描述'}, {'key': 'page.placeholder', 'default': '输入飞书文档链接，如 https://hawkon.feishu.cn/wiki/...', 'desc': '# 输入框占位符'}, {'key': 'page.usage_link_text', 'default': '使用说明', 'desc': '# 使用说明链接文本'}, {'key': 'url.usage_doc', 'default': 'https://github.com/HawkonS/feishu-docget', 'desc': '# 使用文档 URL'}, {'key': 'usage.url', 'default': 'mailto:contact@hawkon.tech', 'desc': '# 使用文档 URL / 联系方式'}, {'key': 'copyright.text', 'default': 'Hawkon 2025 -2026', 'desc': '# 版权文本'}, {'key': 'url.404', 'default': 'https://space.hawkon.tech/', 'desc': '# 404 重定向 URL'}, {'key': 'contact.name', 'default': 'Hakwon', 'desc': '# 联系人名称'}, {'key': 'bot.name', 'default': 'Hawkon-Tool', 'desc': '# 机器人名称'}]}, {'name': '导出设置', 'items': [{'key': 'image.max_height', 'default': '23', 'desc': '# 图片最大高度 (cm)'}, {'key': 'image.max_width', 'default': '16', 'desc': '# 图片最大宽度 (cm)'}, {'key': 'download.threads', 'default': '4', 'desc': '# 图片下载并发线程数'}, {'key': 'max.concurrent.downloads', 'default': '1', 'desc': '# 最大并发下载数'}, {'key': 'download_images', 'default': True, 'desc': '# 是否下载图片'}]}, {'name': '路径与日志配置', 'items': [{'key': 'workspace.dir', 'default': '.', 'desc': '# 工作区目录'}, {'key': 'template.dir', 'default': 'template', 'desc': '# 模板目录'}, {'key': 'template.password.long_term', 'default': '', 'desc': '# 模板上传密码 - 长期存储模式'}, {'key': 'template.password.one_time', 'default': '', 'desc': '# 模板上传密码 - 仅本次使用模式'}, {'key': 'output.dir', 'default': 'output', 'desc': '# 输出资源目录'}, {'key': 'output.max_size', 'default': '10G', 'desc': '# 输出目录最大大小'}, {'key': 'log.dir', 'default': 'logs', 'desc': '# 日志目录'}, {'key': 'log.level', 'default': 'INFO', 'desc': '# 日志级别'}, {'key': 'log.max_size', 'default': '20M', 'desc': '# 最大日志大小'}, {'key': 'log.backup_count', 'default': '5', 'desc': '# 日志轮转保留的历史文件数量'}, {'key': 'log.compress', 'default': 'true', 'desc': '# 轮转出的历史日志是否压缩为 .gz (true/false)'}, {'key': 'log.archive.enabled', 'default': 'true', 'desc': '# 超出保留数量的历史日志是否归档保存，false 则直接删除 (true/false)'}, {'key': 'log.archive.dir', 'default': '', 'desc': '# 日志归档目录 (留空则使用 <日志目录>/archive)'}, {'key': 'log.archive.max_days', 'default': '30', 'desc': '# 归档日志保留天数 (0 表示永久保留)'}]}]
 DEFAULT_CONFIG = {}
 for group in CONFIG_META:
     for item in group['items']:
@@ -28,6 +31,82 @@ def parse_size(size_str):
         return int(size_str[:-1]) * 1024 * 1024 * 1024
     else:
         return int(size_str)
+
+def parse_bool(value, default=False):
+    if value is None or str(value).strip() == '':
+        return default
+    return str(value).strip().lower() in ('true', '1', 'yes', 'on')
+
+class ArchivingRotatingFileHandler(RotatingFileHandler):
+    """支持压缩与归档的轮转日志 Handler。
+
+    - compress: 轮转出的历史日志压缩为 .gz
+    - archive_dir: 超出 backupCount 的最旧历史日志移动到归档目录，而不是直接删除
+    - archive_max_days: 归档文件按修改时间清理，超过天数的自动删除 (0 表示不清理)
+    """
+
+    def __init__(self, filename, maxBytes=0, backupCount=0, encoding=None,
+                 compress=True, archive_dir=None, archive_max_days=0):
+        self.compress = compress
+        self.archive_dir = archive_dir
+        self.archive_max_days = archive_max_days
+        super().__init__(filename, maxBytes=maxBytes, backupCount=backupCount, encoding=encoding)
+
+    def _log_stem(self):
+        base = os.path.basename(self.baseFilename)
+        return base[:-4] if base.endswith('.log') else base
+
+    def rotation_filename(self, default_name):
+        if not self.compress:
+            return default_name
+        return default_name + '.gz'
+
+    def rotate(self, source, dest):
+        if not self.compress:
+            super().rotate(source, dest)
+            return
+        if os.path.exists(source):
+            with open(source, 'rb') as sf, gzip.open(dest, 'wb') as df:
+                shutil.copyfileobj(sf, df)
+            os.remove(source)
+
+    def doRollover(self):
+        if self.archive_dir:
+            oldest = self.rotation_filename("%s.%d" % (self.baseFilename, self.backupCount))
+            if os.path.exists(oldest):
+                self._archive_file(oldest)
+        super().doRollover()
+        if self.archive_dir:
+            self._cleanup_old_archives()
+
+    def _archive_file(self, path):
+        try:
+            os.makedirs(self.archive_dir, exist_ok=True)
+            stem = self._log_stem()
+            suffix = '.log.gz' if path.endswith('.gz') else '.log'
+            dest = os.path.join(self.archive_dir, f'{stem}-{time.strftime("%Y%m%d-%H%M%S")}{suffix}')
+            seq = 1
+            while os.path.exists(dest):
+                dest = os.path.join(self.archive_dir, f'{stem}-{time.strftime("%Y%m%d-%H%M%S")}-{seq}{suffix}')
+                seq += 1
+            shutil.move(path, dest)
+        except Exception as e:
+            self.handleError(logging.LogRecord('', 0, '', 0, f'日志归档失败 {path}: {e}', None, None))
+
+    def _cleanup_old_archives(self):
+        if not self.archive_max_days:
+            return
+        try:
+            cutoff = time.time() - self.archive_max_days * 86400
+            prefix = self._log_stem() + '-'
+            for name in os.listdir(self.archive_dir):
+                if not name.startswith(prefix):
+                    continue
+                fp = os.path.join(self.archive_dir, name)
+                if os.path.isfile(fp) and os.path.getmtime(fp) < cutoff:
+                    os.remove(fp)
+        except Exception:
+            pass
 
 class ConfigLoader:
     _config = {}
@@ -149,12 +228,27 @@ class ConfigLoader:
             filename = f'{name}.log'
         log_file = os.path.join(log_dir, filename)
         max_bytes = parse_size(config.get('log.max_size', '20M'))
+        try:
+            backup_count = int(config.get('log.backup_count', '5'))
+        except (TypeError, ValueError):
+            backup_count = 5
+        compress = parse_bool(config.get('log.compress', 'true'), True)
+        archive_enabled = parse_bool(config.get('log.archive.enabled', 'true'), True)
+        archive_dir = config.get('log.archive.dir', '').strip() or os.path.join(log_dir, 'archive')
+        try:
+            archive_max_days = int(config.get('log.archive.max_days', '30'))
+        except (TypeError, ValueError):
+            archive_max_days = 30
         level_str = config.get('log.level', 'INFO').upper()
         level = getattr(logging, level_str, logging.INFO)
         logger = logging.getLogger(name)
         logger.setLevel(level)
         if not logger.handlers:
-            handler = RotatingFileHandler(log_file, maxBytes=max_bytes, backupCount=5, encoding='utf-8')
+            handler = ArchivingRotatingFileHandler(
+                log_file, maxBytes=max_bytes, backupCount=backup_count, encoding='utf-8',
+                compress=compress,
+                archive_dir=archive_dir if archive_enabled else None,
+                archive_max_days=archive_max_days)
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
             handler.setFormatter(formatter)
             logger.addHandler(handler)
