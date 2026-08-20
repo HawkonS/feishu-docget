@@ -8,6 +8,7 @@ if _project_root not in sys.path:
 
 import json
 import threading
+import mimetypes
 import uuid
 import shutil
 import queue
@@ -302,6 +303,20 @@ def index():
     html = html.replace('[/* image_max_height */]', str(config.get('image.max_height', '23')))
     return html
 admin_path = config.get('admin.path', '/admin')
+
+@app.route('/favicon.ico', methods=['GET'])
+def favicon():
+    # 图标路径可通过 page.favicon 配置，默认使用内置图标
+    rel = (config.get('page.favicon', 'src/static/favicon.ico') or '').strip()
+    candidates = []
+    if rel:
+        candidates.append(os.path.join(base_dir, rel))
+    candidates.append(os.path.join(CURRENT_DIR, 'static', 'favicon.ico'))
+    for path in candidates:
+        if os.path.isfile(path):
+            mimetype = mimetypes.guess_type(path)[0] or 'image/x-icon'
+            return send_file(path, mimetype=mimetype)
+    return ('', 404)
 
 @app.route(admin_path, methods=['GET'])
 def admin_page():
