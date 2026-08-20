@@ -1216,4 +1216,13 @@ if __name__ == '__main__':
         logger.info(f'服务启动于端口 {port} (HTTPS 代理模式)...')
     else:
         logger.info(f'服务启动于端口 {port}...')
-    app.run(host='0.0.0.0', port=port)
+
+    # 优先使用 waitress 生产级 WSGI 服务器，未安装时自动降级到 Flask 开发服务器
+    try:
+        from waitress import serve
+        threads = int(config.get('server.threads', '8'))
+        logger.info(f'使用 waitress 生产服务器启动 (threads={threads})')
+        serve(app, host='0.0.0.0', port=port, threads=threads)
+    except ImportError:
+        logger.warning('未安装 waitress，回退到 Flask 开发服务器（不建议用于生产环境，可执行 pip install waitress 升级）')
+        app.run(host='0.0.0.0', port=port)

@@ -95,8 +95,8 @@ fi
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR" || exit
 
-# 依赖包列表
-REQUIRED_PACKAGES="Flask requests python-docx lxml Pillow"
+# 依赖包列表（waitress 为生产级 WSGI 服务器，未安装时应用会自动降级到 Flask 开发服务器）
+REQUIRED_PACKAGES="Flask requests python-docx lxml Pillow waitress"
 
 echo "检查 Python 依赖: $REQUIRED_PACKAGES"
 
