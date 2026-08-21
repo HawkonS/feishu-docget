@@ -58,28 +58,79 @@
             text-decoration: underline;
             color: #2563eb;
         }
-        /* 登录用户信息条：默认隐藏，后端注入用户名后由 JS 显示 */
-        .hero-user {
+        /* 右上角悬浮用户卡片：默认隐藏，后端注入登录标志后由 JS 显示；
+           风格对齐页面现有语言：大圆角、柔和阴影、蓝色主色、悬浮定位同右下角版权 */
+        .user-card {
             display: none;
-            justify-content: flex-end;
+            position: fixed;
+            top: 18px;
+            right: 20px;
+            z-index: 1000;
             align-items: center;
             gap: 10px;
-            margin-bottom: 6px;
+            padding: 7px 8px 7px 7px;
+            background: rgba(255, 255, 255, 0.82);
+            -webkit-backdrop-filter: blur(12px);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(217, 228, 245, 0.9);
+            border-radius: 999px;
+            box-shadow: 0 10px 24px rgba(34, 47, 68, 0.12);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .user-card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 14px 30px rgba(34, 47, 68, 0.16);
+        }
+        .user-card-avatar {
+            width: 32px;
+            height: 32px;
+            flex-shrink: 0;
+            border-radius: 50%;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #60a5fa, #3b82f6 55%, #2563eb);
+            color: #fff;
+            font-size: 14px;
+            font-weight: 700;
+            box-shadow: 0 4px 10px rgba(59, 130, 246, 0.35);
+            user-select: none;
+        }
+        /* 真实头像：绝对定位覆盖字母层，圆形裁切；默认隐藏，加载成功由 JS 显示 */
+        .user-card-avatar img {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+            display: none;
+        }
+        .user-card-name {
             font-size: 13px;
-            color: #54607a;
-        }
-        .hero-user-name {
             font-weight: 600;
-            overflow-wrap: anywhere;
-        }
-        .hero-user-logout {
-            color: #3b82f6;
-            cursor: pointer;
-            text-decoration: none;
+            color: #1f2a44;
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
             white-space: nowrap;
         }
-        .hero-user-logout:hover {
-            text-decoration: underline;
+        .user-card-logout {
+            border: none;
+            font-family: inherit;
+            background: #f1f5f9;
+            color: #64748b;
+            font-size: 12px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+        .user-card-logout:hover {
+            background: #e3f2ff;
             color: #2563eb;
         }
         .hero-input {
@@ -310,7 +361,11 @@
             .hero > div:first-child { width: 100%; }
             .hero-title { width: 100%; white-space: normal; word-break: break-word; font-size: 22px; }
             .hero-sub { width: 100%; white-space: normal; overflow-wrap: anywhere; margin-bottom: 10px; }
-            .hero-user { width: 100%; justify-content: flex-start; margin-bottom: 8px; }
+            /* 窄屏：用户卡片简化为头像 + 退出，避免遮挡输入框 */
+            .user-card { top: 10px; right: 12px; gap: 8px; padding: 5px 6px 5px 5px; }
+            .user-card-avatar { width: 26px; height: 26px; font-size: 12px; }
+            .user-card-name { display: none; }
+            .user-card-logout { padding: 5px 10px; }
             
             .hero-input {
                 flex-direction: column;
@@ -747,11 +802,6 @@
     <div class="page">
         <div class="hero">
             <div>
-                <div class="hero-user" id="heroUser">
-                    <span class="hero-user-name" id="heroUserName">[/* user_name */]</span>
-                    <span id="heroUserOpenId" style="display: none;">[/* user_open_id */]</span>
-                    <span class="hero-user-logout" onclick="userLogout()">退出登录</span>
-                </div>
                 <div class="hero-title">[/* page_title */]</div>
                 <div class="hero-sub">
                     [/* page_description */]
@@ -2650,20 +2700,49 @@
         renderTaskList();
         renderLogs();
 
-        // 登录用户信息条：显隐由后端注入的登录标志判定，用户名仅作展示
-        (function () {
-            var userBar = document.getElementById('heroUser');
-            var nameEl = document.getElementById('heroUserName');
-            var openIdEl = document.getElementById('heroUserOpenId');
+        // 右上角悬浮用户卡片：显隐由后端注入的登录标志判定，用户名仅作展示
+        // 注意：#userCard 位于本 <script> 之后，必须延迟到 DOMContentLoaded 执行，否则取不到元素
+        document.addEventListener('DOMContentLoaded', function () {
+            var card = document.getElementById('userCard');
+            var nameEl = document.getElementById('userCardName');
+            var avatarEl = document.getElementById('userCardAvatar');
+            var openIdEl = document.getElementById('userCardOpenId');
             var loggedIn = '[/* user_logged_in */]' === 'true';
-            if (userBar && loggedIn) {
+            if (card && loggedIn) {
                 if (nameEl && !(nameEl.textContent || '').trim()) {
                     var openId = openIdEl ? (openIdEl.textContent || '').trim() : '';
                     nameEl.textContent = openId || '已登录用户';
                 }
-                userBar.style.display = 'flex';
+                if (nameEl) {
+                    nameEl.title = nameEl.textContent || '';
+                }
+                if (avatarEl && nameEl) {
+                    var displayName = (nameEl.textContent || '').trim();
+                    var letterEl = document.getElementById('userCardAvatarLetter');
+                    if (letterEl) {
+                        letterEl.textContent = displayName ? Array.from(displayName)[0].toUpperCase() : '用';
+                    }
+                    // 后端注入了头像 URL 时显示真实头像；未注入或加载失败时保留首字母回退样式
+                    var avatarUrl = '[/* user_avatar */]';
+                    var imgEl = document.getElementById('userCardAvatarImg');
+                    if (imgEl) {
+                        if (!avatarUrl) {
+                            imgEl.remove();
+                        } else if (imgEl.complete) {
+                            // DOMContentLoaded 前已加载完成（成功则显示，失败则移除）
+                            if (imgEl.naturalWidth > 0) {
+                                imgEl.style.display = 'block';
+                            } else {
+                                imgEl.remove();
+                            }
+                        } else {
+                            imgEl.onload = function () { imgEl.style.display = 'block'; };
+                        }
+                    }
+                }
+                card.style.display = 'flex';
             }
-        })();
+        });
 
         // 用户退出登录：该 API 只允许 POST
         function userLogout() {
@@ -2680,6 +2759,13 @@
                 });
         }
     </script>
+    <!-- 右上角悬浮用户卡片：仅登录时由 JS 显示 -->
+    <div class="user-card" id="userCard">
+        <div class="user-card-avatar" id="userCardAvatar"><img id="userCardAvatarImg" src="[/* user_avatar */]" alt="" onerror="this.remove()"><span id="userCardAvatarLetter">用</span></div>
+        <span class="user-card-name" id="userCardName">[/* user_name */]</span>
+        <span id="userCardOpenId" style="display: none;">[/* user_open_id */]</span>
+        <button class="user-card-logout" onclick="userLogout()" title="退出登录">退出登录</button>
+    </div>
     <div class="footer-copyright">© Hawkon 2025 | <a href="[/* usage_url */]" target="_blank" style="color: #94a3b8; text-decoration: none;">联系作者</a></div>
 </body>
 </html>
