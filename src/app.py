@@ -474,6 +474,13 @@ def index():
     if _login_enabled():
         user_open_id = (session.get('user') or {}).get('open_id', '') or ''
     html = html.replace('[/* user_open_id */]', escape(user_open_id))
+    # 登录用户头像 URL：从 user_store 读取（会话中不含头像）；未登录/无头像时注入空串，前端回退首字母样式
+    user_avatar = ''
+    if _login_enabled() and user_open_id:
+        record = user_store.get_user(user_open_id)
+        if record:
+            user_avatar = record.get('avatar', '') or ''
+    html = html.replace('[/* user_avatar */]', escape(user_avatar))
     # 登录用户名：仅作展示，HTML 转义防止注入；必须保持为最后一个替换，避免注入内容被二次替换
     user_name = ''
     if _login_enabled():
