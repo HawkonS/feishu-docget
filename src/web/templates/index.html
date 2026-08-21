@@ -58,6 +58,30 @@
             text-decoration: underline;
             color: #2563eb;
         }
+        /* 登录用户信息条：默认隐藏，后端注入用户名后由 JS 显示 */
+        .hero-user {
+            display: none;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 6px;
+            font-size: 13px;
+            color: #54607a;
+        }
+        .hero-user-name {
+            font-weight: 600;
+            overflow-wrap: anywhere;
+        }
+        .hero-user-logout {
+            color: #3b82f6;
+            cursor: pointer;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+        .hero-user-logout:hover {
+            text-decoration: underline;
+            color: #2563eb;
+        }
         .hero-input {
             display: flex;
             gap: 12px;
@@ -286,6 +310,7 @@
             .hero > div:first-child { width: 100%; }
             .hero-title { width: 100%; white-space: normal; word-break: break-word; font-size: 22px; }
             .hero-sub { width: 100%; white-space: normal; overflow-wrap: anywhere; margin-bottom: 10px; }
+            .hero-user { width: 100%; justify-content: flex-start; margin-bottom: 8px; }
             
             .hero-input {
                 flex-direction: column;
@@ -722,6 +747,11 @@
     <div class="page">
         <div class="hero">
             <div>
+                <div class="hero-user" id="heroUser">
+                    <span class="hero-user-name" id="heroUserName">[/* user_name */]</span>
+                    <span id="heroUserOpenId" style="display: none;">[/* user_open_id */]</span>
+                    <span class="hero-user-logout" onclick="userLogout()">退出登录</span>
+                </div>
                 <div class="hero-title">[/* page_title */]</div>
                 <div class="hero-sub">
                     [/* page_description */]
@@ -2619,6 +2649,36 @@
         toggleTableFontConfig();
         renderTaskList();
         renderLogs();
+
+        // 登录用户信息条：显隐由后端注入的登录标志判定，用户名仅作展示
+        (function () {
+            var userBar = document.getElementById('heroUser');
+            var nameEl = document.getElementById('heroUserName');
+            var openIdEl = document.getElementById('heroUserOpenId');
+            var loggedIn = '[/* user_logged_in */]' === 'true';
+            if (userBar && loggedIn) {
+                if (nameEl && !(nameEl.textContent || '').trim()) {
+                    var openId = openIdEl ? (openIdEl.textContent || '').trim() : '';
+                    nameEl.textContent = openId || '已登录用户';
+                }
+                userBar.style.display = 'flex';
+            }
+        })();
+
+        // 用户退出登录：该 API 只允许 POST
+        function userLogout() {
+            fetch('/api/user/logout', { method: 'POST' })
+                .then(function (res) {
+                    if (res.ok) {
+                        window.location.href = '/login';
+                    } else {
+                        alert('退出失败，请重试');
+                    }
+                })
+                .catch(function () {
+                    alert('网络异常，退出失败，请重试');
+                });
+        }
     </script>
     <div class="footer-copyright">© Hawkon 2025 | <a href="[/* usage_url */]" target="_blank" style="color: #94a3b8; text-decoration: none;">联系作者</a></div>
 </body>
