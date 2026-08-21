@@ -22,7 +22,8 @@ import zipfile
 from flask import Flask, jsonify, request, send_file, send_from_directory, session, redirect, url_for
 from src.services.doc_service import process_document
 from src.core.bot_store import normalize_bot_config
-from src.core.config_loader import config, ConfigLoader, parse_size, SENSITIVE_KEYS
+from src.core import user_store, feishu_oauth
+from src.core.config_loader import config, ConfigLoader, parse_size, parse_bool, SENSITIVE_KEYS
 from src.converters.docx.style_manager import TableStyleManager
 from src.core.stats import update_download_stat, get_download_stats
 base_dir = os.path.abspath(config.get('workspace.dir', '.'))
@@ -105,6 +106,50 @@ def _verify_job_access(job_id):
 def _cleanup_temp(path):
     """延迟清理临时文件"""
     threading.Timer(60, lambda: os.path.exists(path) and os.remove(path)).start()
+
+
+def _login_enabled():
+    """飞书登录开关，由配置 login.enabled 控制"""
+    return parse_bool(config.get('login.enabled', 'false'))
+
+
+def _get_redirect_uri():
+    """OAuth 回调地址：优先使用配置项，未配置时根据当前请求地址推导"""
+    configured = str(config.get('login.oauth.redirect_uri', '') or '').strip()
+    if configured:
+        return configured
+    return request.url_root.rstrip('/') + '/auth/feishu/callback'
+
+
+def login_required(f):
+    # 未启用登录或已是管理员时直通；页面请求重定向 /login，API 请求返回 403 JSON
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not _login_enabled() or session.get('is_admin'):
+            return f(*args, **kwargs)
+        user = session.get('user')
+        open_id = (user or {}).get('open_id', '')
+        blocked = False
+        if not open_id:
+            blocked = True
+        elif user_store.is_disabled(open_id):
+            session.pop('user', None)
+            blocked = True
+        if blocked:
+            if request.path == '/' or request.accept_mimetypes.best == 'text/html':
+                return redirect('/login')
+            return (jsonify({'status': 'error', 'message': '请先登录'}), 403)
+        return f(*args, **kwargs)
+    return decorated_function
+
+def admin_required(f):
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('is_admin'):
+            return (jsonify({'status': 'error', 'message': '未登录'}), 403)
+        return f(*args, **kwargs)
+    return decorated_function
 
 def worker_thread():
     global active_downloads
@@ -253,20 +298,24 @@ def update_job(job_id, **fields):
                 job['logs'] = logs[-200:]
         job.update(fields)
 
-def run_job(job_id, doc_url, template_name, table_style, delete_template=False, add_cover=False, client_ip='', check_stop_func=None, unordered_list_style='default', body_style=None, was_queued=False, image_style=None, ignore_mention=False, ignore_template_heading_num=False, table_config=None, margin_config=None, code_block_config=None, document_info=None, add_title=False, bot_config=None):
+def run_job(job_id, doc_url, template_name, table_style, delete_template=False, add_cover=False, client_ip='', check_stop_func=None, unordered_list_style='default', body_style=None, was_queued=False, image_style=None, ignore_mention=False, ignore_template_heading_num=False, table_config=None, margin_config=None, code_block_config=None, document_info=None, add_title=False, bot_config=None, user_open_id='', user_name=''):
     try:
         logger.info(f"开始执行任务 {job_id}: {doc_url}")
+        user_token = ''
+        if user_open_id:
+            # get_valid_access_token 内部已判断禁用状态，失败返回 None
+            user_token = user_store.get_valid_access_token(user_open_id) or ''
         if check_stop_func and check_stop_func():
             raise InterruptedError('任务已停止')
         if was_queued:
             update_job(job_id, message='已完成下载任务排队，成功创建下载任务', log_type='info')
         update_job(job_id, status='running', progress=5, message='正在准备任务...', log_type='dynamic')
-        update_download_stat(base_dir, config, job_id, '下载中', doc_url=doc_url, ip_address=client_ip)
+        update_download_stat(base_dir, config, job_id, '下载中', doc_url=doc_url, ip_address=client_ip, user_name=user_name)
         template_path = ''
         if template_name:
             template_path = os.path.join(base_dir, config['template.dir'], template_name)
         output_root = os.path.join(base_dir, config['output.dir'])
-        result = process_document(doc_url=doc_url, template_path=template_path, table_style=table_style, base_dir=base_dir, output_root=output_root, progress_cb=lambda p, m, t='info': update_job(job_id, progress=p, message=m, log_type=t), add_cover=add_cover, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, body_style=body_style, image_style=image_style, ignore_mention=ignore_mention, ignore_template_heading_num=ignore_template_heading_num, table_config=table_config, margin_config=margin_config, code_block_config=code_block_config, document_info=document_info, add_title=add_title, bot_config=bot_config)
+        result = process_document(doc_url=doc_url, template_path=template_path, table_style=table_style, base_dir=base_dir, output_root=output_root, progress_cb=lambda p, m, t='info': update_job(job_id, progress=p, message=m, log_type=t), add_cover=add_cover, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, body_style=body_style, image_style=image_style, ignore_mention=ignore_mention, ignore_template_heading_num=ignore_template_heading_num, table_config=table_config, margin_config=margin_config, code_block_config=code_block_config, document_info=document_info, add_title=add_title, bot_config=bot_config, user_access_token=user_token or None)
         if delete_template and template_path:
             if os.path.exists(template_path):
                 try:
@@ -281,18 +330,18 @@ def run_job(job_id, doc_url, template_name, table_style, delete_template=False, 
                 except Exception:
                     pass
         update_job(job_id, status='done', progress=100, message='已完成', docx_path=result['docx_path'], folder=result['folder'])
-        update_download_stat(base_dir, config, job_id, '已完成', doc_url, result['docx_path'], title=result.get('title', os.path.basename(result['docx_path'])), ip_address=client_ip)
+        update_download_stat(base_dir, config, job_id, '已完成', doc_url, result['docx_path'], title=result.get('title', os.path.basename(result['docx_path'])), ip_address=client_ip, user_name=user_name)
         threading.Thread(target=check_cleanup_output).start()
     except Exception as e:
         is_stopped = isinstance(e, InterruptedError) or (check_stop_func and check_stop_func())
         if is_stopped:
             logger.info(f'任务 {job_id} 已被用户停止')
             update_job(job_id, status='stopped', message='任务已停止', log_type='error')
-            update_download_stat(base_dir, config, job_id, '已停止', doc_url, ip_address=client_ip)
+            update_download_stat(base_dir, config, job_id, '已停止', doc_url, ip_address=client_ip, user_name=user_name)
         else:
             logger.error('任务失败: ' + str(e))
             update_job(job_id, status='error', message=str(e))
-            update_download_stat(base_dir, config, job_id, '错误', doc_url, ip_address=client_ip)
+            update_download_stat(base_dir, config, job_id, '错误', doc_url, ip_address=client_ip, user_name=user_name)
 
 @app.errorhandler(404)
 def page_not_found(e):
@@ -330,6 +379,7 @@ def _validate_document_info(document_info):
 
 
 @app.route('/', methods=['GET'])
+@login_required
 def index():
     templates = list_templates()
     template_json = json.dumps(templates, ensure_ascii=False)
@@ -353,6 +403,68 @@ def index():
     html = html.replace('[/* image_max_width */]', str(config.get('image.max_width', '16')))
     html = html.replace('[/* image_max_height */]', str(config.get('image.max_height', '23')))
     return html
+
+@app.route('/login', methods=['GET'])
+def user_login_page():
+    if not _login_enabled():
+        return redirect('/')
+    user = session.get('user')
+    if user and user.get('open_id') and not user_store.is_disabled(user.get('open_id')):
+        return redirect('/')
+    with open(os.path.join(HTML_DIR, 'user_login.html'), 'r', encoding='utf-8') as f:
+        html = f.read()
+    html = html.replace('[/* page_title */]', config.get('page.title', '飞书文档下载工具'))
+    html = html.replace('Hawkon 2025 -2026', config.get('copyright.text', 'Hawkon 2025 -2026'))
+    html = html.replace('Hawkon 2025', config.get('copyright.text', 'Hawkon 2025 -2026'))
+    return html
+
+@app.route('/auth/feishu/authorize', methods=['GET'])
+def auth_feishu_authorize():
+    if not _login_enabled():
+        return redirect('/')
+    state = secrets.token_urlsafe(16)
+    session['oauth_state'] = state
+    return redirect(feishu_oauth.build_authorize_url(config.get('feishu.app_id'), _get_redirect_uri(), state))
+
+@app.route('/auth/feishu/callback', methods=['GET'])
+def auth_feishu_callback():
+    expected_state = session.pop('oauth_state', None)
+    if not expected_state or not secrets.compare_digest(request.args.get('state') or '', expected_state):
+        return redirect('/login?error=state_invalid')
+    if request.args.get('error') or not request.args.get('code'):
+        return redirect('/login?error=auth_denied')
+    code = request.args.get('code')
+    try:
+        tokens = feishu_oauth.exchange_code(code, _get_redirect_uri())
+        info = feishu_oauth.get_oauth_user_info(tokens['access_token'])
+        open_id = info.get('open_id')
+        if not open_id:
+            return redirect('/login?error=user_info')
+        department = feishu_oauth.resolve_department_names(info.get('department_ids') or [])
+        profile = {
+            'open_id': open_id,
+            'union_id': info.get('union_id', ''),
+            'user_id': info.get('user_id', ''),
+            'name': info.get('name', ''),
+            'department': department,
+            'avatar': info.get('avatar_url', ''),
+            'access_token': tokens['access_token'],
+            'refresh_token': tokens.get('refresh_token', ''),
+            'token_expire_at': int(time.time()) + int(tokens.get('expires_in', 7200)),
+        }
+        # 仅对“已存在且被禁用”的记录拦截；is_disabled 对不存在用户返回 True，首次登录不能在此拦截
+        existing = user_store.get_user(open_id)
+        if existing and existing.get('disabled'):
+            return redirect('/login?error=disabled')
+        if not user_store.upsert_user(profile):
+            logger.warning(f'用户信息落库失败 open_id={open_id}，不阻断本次登录')
+        session['user'] = {'open_id': open_id, 'name': profile['name']}
+        session.permanent = True
+        return redirect('/')
+    except Exception as e:
+        logger.error(f'飞书 OAuth 登录失败: {e}', exc_info=True)
+        return redirect('/login?error=oauth_failed')
+
 admin_path = config.get('admin.path', '/admin')
 
 @app.route('/favicon.ico', methods=['GET'])
@@ -409,14 +521,28 @@ def api_admin_logout():
     session.pop('is_admin', None)
     return jsonify({'status': 'ok'})
 
-def admin_required(f):
+@app.route('/api/user/logout', methods=['POST'])
+def api_user_logout():
+    session.pop('user', None)
+    return jsonify({'status': 'ok'})
 
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not session.get('is_admin'):
-            return (jsonify({'status': 'error', 'message': '未登录'}), 403)
-        return f(*args, **kwargs)
-    return decorated_function
+@app.route('/api/admin/users', methods=['GET'])
+@admin_required
+def api_admin_users():
+    return jsonify({'status': 'ok', 'users': user_store.list_users()})
+
+@app.route('/api/admin/users/toggle', methods=['POST'])
+@admin_required
+def api_admin_users_toggle():
+    data = request.get_json(silent=True) or {}
+    open_id = str(data.get('open_id') or '').strip()
+    if not open_id:
+        return jsonify({'status': 'error', 'message': '缺少 open_id'})
+    if not user_store.get_user(open_id):
+        return jsonify({'status': 'error', 'message': '用户不存在'})
+    if not user_store.set_disabled(open_id, bool(data.get('disabled'))):
+        return jsonify({'status': 'error', 'message': '保存失败，请检查服务器磁盘与权限'})
+    return jsonify({'status': 'ok'})
 
 @app.route('/api/admin/projects', methods=['GET'])
 @admin_required
@@ -520,6 +646,7 @@ def api_admin_delete_file():
         return jsonify({'status': 'error', 'message': '删除文件失败，请稍后重试'})
 
 @app.route('/api/upload_template', methods=['POST'])
+@login_required
 def api_upload_template():
     # 验证请求数据
     password = request.form.get('password')
@@ -729,8 +856,12 @@ def api_admin_set_default_template():
         return jsonify({'status': 'error', 'message': '设置默认模板失败，请稍后重试'})
 
 @app.route('/api/start', methods=['POST'])
+@login_required
 def api_start():
     client_ip = request.remote_addr or 'unknown'
+    user = session.get('user') or {}
+    user_open_id = user.get('open_id', '')
+    user_name = user.get('name', '')  # 姓名快照，随任务链路传递
     if not _check_start_rate_limit(client_ip):
         return jsonify({'status': 'error', 'message': '提交过于频繁，请稍后再试'})
     data = request.get_json(silent=True) or {}
@@ -765,7 +896,7 @@ def api_start():
     session.modified = True
     is_temp_template = template.startswith('temp_')
     with jobs_lock:
-        jobs[job_id] = {'status': 'pending', 'progress': 0, 'message': '等待中', 'job_id': job_id, 'created_at': datetime.now().isoformat(timespec='seconds'), 'doc_url': doc_url, 'template': template, 'table_style': table_style, 'unordered_list_style': unordered_list_style, 'body_style': body_style, 'image_style': image_style, 'table_config': table_config, 'margin_config': margin_config, 'code_block_config': code_block_config, 'document_info': document_info, 'custom_bot_enabled': bool(bot_config), 'client_ip': client_ip, 'logs': [{'ts': datetime.now().isoformat(timespec='seconds'), 'message': '任务已创建'}]}
+        jobs[job_id] = {'status': 'pending', 'progress': 0, 'message': '等待中', 'job_id': job_id, 'created_at': datetime.now().isoformat(timespec='seconds'), 'doc_url': doc_url, 'template': template, 'table_style': table_style, 'unordered_list_style': unordered_list_style, 'body_style': body_style, 'image_style': image_style, 'table_config': table_config, 'margin_config': margin_config, 'code_block_config': code_block_config, 'document_info': document_info, 'custom_bot_enabled': bool(bot_config), 'client_ip': client_ip, 'user_name': user_name, 'logs': [{'ts': datetime.now().isoformat(timespec='seconds'), 'message': '任务已创建'}]}
 
     def check_stop():
         with jobs_lock:
@@ -792,13 +923,14 @@ def api_start():
         with jobs_lock:
             jobs[job_id]['message'] = msg
             jobs[job_id]['logs'].append({'ts': datetime.now().isoformat(timespec='seconds'), 'message': msg})
-        update_download_stat(base_dir, config, job_id, '排队中', doc_url=doc_url, ip_address=client_ip)
+        update_download_stat(base_dir, config, job_id, '排队中', doc_url=doc_url, ip_address=client_ip, user_name=user_name)
     else:
         pass
-    download_queue.put((job_id, doc_url, template, table_style, is_temp_template, add_cover, client_ip, check_stop, unordered_list_style, body_style, is_queued, image_style, ignore_mention, ignore_template_heading_num, table_config, margin_config, code_block_config, document_info, add_title, bot_config))
+    download_queue.put((job_id, doc_url, template, table_style, is_temp_template, add_cover, client_ip, check_stop, unordered_list_style, body_style, is_queued, image_style, ignore_mention, ignore_template_heading_num, table_config, margin_config, code_block_config, document_info, add_title, bot_config, user_open_id, user_name))
     return jsonify({'status': 'ok', 'job_id': job_id})
 
 @app.route('/api/status/<job_id>', methods=['GET'])
+@login_required
 def api_status(job_id):
     if not _verify_job_access(job_id):
         return jsonify({'status': 'error', 'message': '任务未找到'})
@@ -809,6 +941,7 @@ def api_status(job_id):
         return jsonify(job)
 
 @app.route('/api/download/<job_id>', methods=['GET'])
+@login_required
 def api_download(job_id):
     if not _verify_job_access(job_id):
         return jsonify({'status': 'error', 'message': '任务未找到'})
@@ -822,6 +955,7 @@ def api_download(job_id):
     return send_file(docx_path, as_attachment=True, download_name=os.path.basename(docx_path))
 
 @app.route('/api/stop/<job_id>', methods=['POST'])
+@login_required
 def api_stop(job_id):
     if not _verify_job_access(job_id):
         return jsonify({'status': 'error', 'message': '任务未找到'})

@@ -138,7 +138,7 @@ def _process_document_with_client(client, doc_url, template_path=None, table_sty
         raise
 
 
-def process_document(doc_url, template_path=None, table_style=None, base_dir='.', output_root='output', progress_cb=None, add_cover=False, check_stop_func=None, unordered_list_style='default', body_style=None, image_style=None, ignore_mention=False, ignore_template_heading_num=False, table_config=None, margin_config=None, code_block_config=None, document_info=None, add_title=False, bot_config=None):
+def process_document(doc_url, template_path=None, table_style=None, base_dir='.', output_root='output', progress_cb=None, add_cover=False, check_stop_func=None, unordered_list_style='default', body_style=None, image_style=None, ignore_mention=False, ignore_template_heading_num=False, table_config=None, margin_config=None, code_block_config=None, document_info=None, add_title=False, bot_config=None, user_access_token=None):
     logger = ConfigLoader.get_logger('service')
     _raise_if_stopped(check_stop_func)
 
@@ -161,7 +161,7 @@ def process_document(doc_url, template_path=None, table_style=None, base_dir='.'
                 progress_cb(8, '自定义机器人身份验证未通过，自动回退至系统默认机器人', 'info')
             custom_bot = None
 
-    if not custom_bot and not system_client:
+    if not custom_bot and not system_client and not user_access_token:
         if had_custom_bot:
             raise RuntimeError('自定义机器人身份验证未通过，且系统默认机器人未配置')
         raise RuntimeError('缺少飞书 App ID 或 Secret')
@@ -186,6 +186,19 @@ def process_document(doc_url, template_path=None, table_style=None, base_dir='.'
         'add_title': add_title,
     }
 
+    user_error = None
+    if user_access_token:
+        user_client = FeishuClient(app_id, app_secret, user_access_token=user_access_token)
+        try:
+            if progress_cb:
+                progress_cb(8, '正在使用您的身份下载', 'dynamic')
+            return _process_document_with_client(user_client, **process_kwargs)
+        except PermissionError as ue:
+            user_error = ue
+            logger.warning(f'用户身份权限不足，准备回退到机器人身份: {ue}')
+            if progress_cb:
+                progress_cb(10, '您的身份权限不足，正在回退到机器人身份', 'info')
+
     if custom_bot:
         custom_client = FeishuClient(custom_bot['app_id'], custom_bot['app_secret'])
         try:
@@ -202,5 +215,11 @@ def process_document(doc_url, template_path=None, table_style=None, base_dir='.'
                 return _process_document_with_client(system_client, **process_kwargs)
             except PermissionError as system_error:
                 raise PermissionError(f'自定义机器人和系统默认机器人均无权限。自定义机器人错误: {custom_error}；系统默认机器人错误: {system_error}') from system_error
+
+    if not system_client:
+        # 仅提供了用户身份但失败，且未配置系统飞书凭据，保持现有抛错语义
+        if user_error is not None:
+            raise PermissionError(f'用户身份权限不足，且系统默认机器人未配置: {user_error}') from user_error
+        raise RuntimeError('缺少飞书 App ID 或 Secret')
 
     return _process_document_with_client(system_client, **process_kwargs)

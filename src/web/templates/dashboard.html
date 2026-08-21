@@ -759,6 +759,7 @@
             <div class="nav-item active" onclick="switchTab('projects')">项目管理</div>
             <div class="nav-item" onclick="switchTab('config')">配置管理</div>
             <div class="nav-item" onclick="switchTab('stats')">下载统计</div>
+            <div class="nav-item" onclick="switchTab('users')">用户管理</div>
             <div class="nav-item" onclick="switchTab('logs')">日志检查</div>
             <div class="nav-item" onclick="switchTab('templates')">模板维护</div>
             <div class="nav-item" onclick="switchTab('system')">系统管理</div>
@@ -804,7 +805,7 @@
                     <div style="margin-bottom:20px; font-size:14px; display:flex; flex-wrap:wrap; align-items:center; gap:10px; justify-content: space-between;">
                         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
                             <span>总下载数: <span id="totalCount" style="font-weight:bold; color:#3b82f6;">0</span></span>
-                            <input type="text" id="statsSearchTitle" placeholder="搜索标题..." oninput="searchStats()" class="md-search-input" style="width:140px;">
+                            <input type="text" id="statsSearchTitle" placeholder="搜索标题/下载人..." oninput="searchStats()" class="md-search-input" style="width:150px;">
                             <input type="text" id="statsSearchUrl" placeholder="搜索 URL..." oninput="searchStats()" class="md-search-input" style="width:140px;">
                             <input type="text" id="statsSearchIp" placeholder="搜索 IP..." oninput="searchStats()" class="md-search-input" style="width:120px;">
                             <input type="date" id="statsSearchDate" onchange="searchStats()" class="md-search-input" style="width:140px;">
@@ -820,6 +821,15 @@
                         <span id="pageInfo" style="line-height:26px; font-size:13px;">1 / 1</span>
                         <button onclick="nextPage()" id="nextBtn" class="magnify-btn" style="position:static; width:80px;">下一页</button>
                     </div>
+                </div>
+
+                <!-- Tab: Users -->
+                <div id="tab-users" class="tab-pane scrollable">
+                    <div style="margin-bottom:20px; font-size:14px; display:flex; flex-wrap:wrap; align-items:center; gap:10px; justify-content: space-between;">
+                        <div style="font-size:14px; color:#64748b;">管理已通过飞书登录的用户（禁用后无法登录）</div>
+                        <button onclick="loadUsers()" class="btn-start" style="padding: 8px 16px;">刷新</button>
+                    </div>
+                    <div id="usersTableContainer"></div>
                 </div>
 
                 <!-- Tab: Logs -->
@@ -1023,7 +1033,8 @@
         function escapeHtml(s) {
             const div = document.createElement('div');
             div.textContent = s;
-            return div.innerHTML;
+            // 补引号转义，保证插值进 HTML 属性（如 data-name="..."）时安全
+            return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         function safeUrl(url) {
@@ -1095,6 +1106,7 @@
                 'projects': '项目管理',
                 'config': '配置管理',
                 'stats': '下载统计',
+                'users': '用户管理',
                 'logs': '日志检查',
                 'templates': '模板维护',
                 'system': '系统管理'
@@ -1104,6 +1116,7 @@
             if (name === 'projects') loadProjects();
             if (name === 'config') loadConfig();
             if (name === 'stats') loadStats();
+            if (name === 'users') loadUsers();
             if (name === 'logs') loadLogs();
             if (name === 'templates') loadTemplates();
             // system tab 不再自动开始，需要用户手动点开启
@@ -1115,7 +1128,7 @@
              bindUploadModalInputs();
              
              const hash = window.location.hash.substring(1);
-             const validTabs = ['projects', 'config', 'stats', 'logs', 'templates', 'system'];
+             const validTabs = ['projects', 'config', 'stats', 'users', 'logs', 'templates', 'system'];
              if (validTabs.includes(hash)) {
                  renderTab(hash);
              } else {
@@ -1125,7 +1138,7 @@
         
         window.onhashchange = () => {
              const hash = window.location.hash.substring(1);
-             const validTabs = ['projects', 'config', 'stats', 'logs', 'templates', 'system'];
+             const validTabs = ['projects', 'config', 'stats', 'users', 'logs', 'templates', 'system'];
              if (validTabs.includes(hash)) {
                  renderTab(hash);
              }
@@ -1312,9 +1325,10 @@
                 const title = (item.title || "").toLowerCase();
                 const url = (item.url || "").toLowerCase();
                 const ip = (item.ip || "").toLowerCase();
+                const user = (item.user || "").toLowerCase();
                 const time = (item.time || "").split('T')[0];
                 
-                const matchTitle = !titleQ || title.includes(titleQ);
+                const matchTitle = !titleQ || title.includes(titleQ) || user.includes(titleQ);
                 const matchUrl = !urlQ || url.includes(urlQ);
                 const matchIp = !ipQ || ip.includes(ipQ);
                 const matchDate = !dateQ || time === dateQ;
@@ -1332,10 +1346,10 @@
             const pageData = filteredStats.slice(start, end);
             
             let html = '<table class="project-table" style="width:100%; table-layout: fixed;">';
-            html += '<thead><tr><th style="width:40px; text-align:center;"><input type="checkbox" id="selectAllStats" onchange="toggleSelectAllStats()"></th><th style="width:150px">时间</th><th>标题</th><th style="width:100px">URL</th><th style="width:80px">状态</th><th style="width:120px">IP</th></tr></thead><tbody>';
+            html += '<thead><tr><th style="width:40px; text-align:center;"><input type="checkbox" id="selectAllStats" onchange="toggleSelectAllStats()"></th><th style="width:150px">时间</th><th>标题</th><th style="width:100px">URL</th><th style="width:80px">状态</th><th style="width:100px">下载人</th><th style="width:120px">IP</th></tr></thead><tbody>';
             
             if (pageData.length === 0) {
-                html += '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #94a3b8;">暂无数据</td></tr>';
+                html += '<tr><td colspan="7" style="text-align: center; padding: 20px; color: #94a3b8;">暂无数据</td></tr>';
             } else {
                 for (const item of pageData) {
                     html += `<tr>
@@ -1344,6 +1358,7 @@
                         <td style="font-weight: 500; white-space: normal; word-break: break-all; vertical-align:top;">${escapeHtml(item.title) || '-'}</td>
                         <td style="vertical-align:top; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(item.url)}"><a href="${safeUrl(item.url)}" target="_blank" style="color:#3b82f6;">链接</a></td>
                         <td style="vertical-align:top;">${escapeHtml(item.status) || '-'}</td>
+                        <td style="color: #64748b; vertical-align:top;">${item.user ? escapeHtml(item.user) : '-'}</td>
                         <td style="color: #64748b; vertical-align:top;">${escapeHtml(item.ip) || '-'}</td>
                     </tr>`;
                 }
@@ -1416,12 +1431,99 @@
             window.location.href = '/api/download_all';
         }
 
+        // ==================== 用户管理 ====================
+
+        function formatDateTime(value) {
+            if (!value) return '-';
+            const d = new Date(value);
+            if (isNaN(d.getTime())) return String(value);
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+
+        function userAvatarFallback(img) {
+            const name = img.dataset.name || '?';
+            const span = document.createElement('span');
+            span.style.cssText = 'width:32px; height:32px; border-radius:50%; background:#3b82f6; color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:14px; font-weight:600; flex-shrink:0;';
+            span.textContent = Array.from(name)[0] || '?';
+            img.replaceWith(span);
+        }
+
+        async function loadUsers() {
+            const container = document.getElementById('usersTableContainer');
+            try {
+                const res = await fetch('/api/admin/users');
+                const data = await res.json();
+                if (data.status !== 'ok') {
+                    container.innerHTML = `<div style="text-align:center; padding:40px; color:#ef4444;">${escapeHtml(data.message || '加载用户列表失败')}</div>`;
+                    return;
+                }
+                renderUsersTable(data.users || []);
+            } catch (e) {
+                console.error(e);
+                container.innerHTML = '<div style="text-align:center; padding:40px; color:#ef4444;">加载用户列表失败: ' + escapeHtml(e.message) + '</div>';
+            }
+        }
+
+        function renderUsersTable(users) {
+            let html = '<table class="project-table">';
+            html += '<thead><tr><th>姓名</th><th>部门</th><th>open_id</th><th style="width:150px">最近登录</th><th style="width:80px">状态</th><th style="width:80px">操作</th></tr></thead><tbody>';
+
+            if (users.length === 0) {
+                html += '<tr><td colspan="6" style="text-align:center; padding:20px; color:#94a3b8;">暂无登录用户</td></tr>';
+            } else {
+                for (const u of users) {
+                    const name = u.name || '-';
+                    const firstChar = Array.from(name)[0] || '?';
+                    const avatar = u.avatar
+                        ? `<img src="${escapeHtml(u.avatar)}" data-name="${escapeHtml(name)}" onerror="this.onerror=null; userAvatarFallback(this);" style="width:32px; height:32px; border-radius:50%; object-fit:cover; flex-shrink:0;" alt="">`
+                        : `<span style="width:32px; height:32px; border-radius:50%; background:#3b82f6; color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:14px; font-weight:600; flex-shrink:0;">${escapeHtml(firstChar)}</span>`;
+
+                    const statusTag = u.disabled
+                        ? '<span style="padding:2px 8px; border-radius:4px; font-size:12px; background:#fee2e2; color:#dc2626;">已禁用</span>'
+                        : '<span style="padding:2px 8px; border-radius:4px; font-size:12px; background:#dcfce7; color:#16a34a;">正常</span>';
+
+                    const toggleBtn = u.disabled
+                        ? `<button onclick="toggleUserDisabled('${escapeHtml(escapeJsString(u.open_id))}', false)" class="btn-start" style="padding:6px 12px; font-size:12px; background:#10b981;">启用</button>`
+                        : `<button onclick="toggleUserDisabled('${escapeHtml(escapeJsString(u.open_id))}', true)" class="btn-start" style="padding:6px 12px; font-size:12px; background-color:#ef4444;">禁用</button>`;
+
+                    html += `<tr>
+                        <td><div style="display:flex; align-items:center; gap:10px;">${avatar}<span style="font-weight:500;">${escapeHtml(name)}</span></div></td>
+                        <td style="color:#64748b;">${escapeHtml(u.department) || '-'}</td>
+                        <td style="color:#64748b; font-size:12px; font-family:monospace; word-break:break-all;">${escapeHtml(u.open_id) || '-'}</td>
+                        <td style="color:#64748b;">${escapeHtml(formatDateTime(u.last_login_at))}</td>
+                        <td>${statusTag}</td>
+                        <td>${toggleBtn}</td>
+                    </tr>`;
+                }
+            }
+            html += '</tbody></table>';
+            document.getElementById('usersTableContainer').innerHTML = html;
+        }
+
+        function toggleUserDisabled(openId, disabled) {
+            fetch('/api/admin/users/toggle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ open_id: openId, disabled: disabled })
+            }).then(r => r.json()).then(res => {
+                if (res.status === 'ok') {
+                    loadUsers();
+                } else {
+                    alert(res.message || '操作失败');
+                }
+            }).catch(e => {
+                alert('请求错误: ' + e.message);
+            });
+        }
+
         function refreshData() {
              loadData();
              // 根据当前激活的 tab 刷新对应的数据
              if(document.getElementById('tab-projects').classList.contains('active')) loadProjects();
              if(document.getElementById('tab-config').classList.contains('active')) loadConfig();
              if(document.getElementById('tab-stats').classList.contains('active')) loadStats();
+             if(document.getElementById('tab-users').classList.contains('active')) loadUsers();
              if(document.getElementById('tab-logs').classList.contains('active')) loadLogs();
              if(document.getElementById('tab-templates').classList.contains('active')) loadTemplates();
         }
