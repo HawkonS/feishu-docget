@@ -2182,7 +2182,13 @@
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action: action })
-            }).then(r => r.json()).then(res => {
+            }).then(r => {
+                const ct = (r.headers.get("content-type") || "").toLowerCase();
+                if (!ct.includes("application/json")) {
+                    throw new Error("服务器返回非 JSON 响应（可能 session 已过期或页面需重新登录）");
+                }
+                return r.json();
+            }).then(res => {
                 if (res.status === "ok") {
                     alert(res.message);
                     if (action === "update" || action === "restart") {
@@ -2193,6 +2199,8 @@
                 } else {
                     alert("操作失败: " + res.message);
                 }
+            }).catch(e => {
+                alert("请求失败，请检查网络或服务是否运行" + (e && e.message ? "：" + e.message : ""));
             });
         }
         

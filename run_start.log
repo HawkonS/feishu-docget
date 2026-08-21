@@ -1,0 +1,38 @@
+检查 Python 依赖: Flask requests python-docx lxml Pillow waitress
+
+Usage:   
+  pip3 install [options] <requirement specifier> [package-index-options] ...
+  pip3 install [options] -r <requirements file> [package-index-options] ...
+  pip3 install [options] [-e] <vcs project url> ...
+  pip3 install [options] [-e] <local project path> ...
+  pip3 install [options] <archive url/path> ...
+
+no such option: --break-system-packages
+Defaulting to user installation because normal site-packages is not writeable
+Requirement already satisfied: Flask in /Users/hawkon/Library/Python/3.9/lib/python/site-packages (3.1.3)
+Requirement already satisfied: requests in /Users/hawkon/Library/Python/3.9/lib/python/site-packages (2.32.5)
+Requirement already satisfied: python-docx in /Users/hawkon/Library/Python/3.9/lib/python/site-packages (1.2.0)
+Requirement already satisfied: lxml in /Users/hawkon/Library/Python/3.9/lib/python/site-packages (6.1.1)
+Requirement already satisfied: Pillow in /Users/hawkon/Library/Python/3.9/lib/python/site-packages (11.3.0)
+Requirement already satisfied: waitress in /Users/hawkon/Library/Python/3.9/lib/python/site-packages (3.0.2)
+Requirement already satisfied: itsdangerous>=2.2.0 in /Users/hawkon/Library/Python/3.9/lib/python/site-packages (from Flask) (2.2.0)
+Requirement already satisfied: werkzeug>=3.1.0 in /Users/hawkon/Library/Python/3.9/lib/python/site-packages (from Flask) (3.1.8)
+Requirement already satisfied: importlib-metadata>=3.6.0 in /Users/hawkon/Library/Python/3.9/lib/python/site-packages (from Flask) (8.7.1)
+Requirement already satisfied: blinker>=1.9.0 in /Users/hawkon/Library/Python/3.9/lib/python/site-packages (from Flask) (1.9.0)
+Requirement already satisfied: markupsafe>=2.1.1 in /Users/hawkon/Library/Python/3.9/lib/python/site-packages (from Flask) (3.0.3)
+Requirement already satisfied: jinja2>=3.1.2 in /Users/hawkon/Library/Python/3.9/lib/python/site-packages (from Flask) (3.1.6)
+Requirement already satisfied: click>=8.1.3 in /Users/hawkon/Library/Python/3.9/lib/python/site-packages (from Flask) (8.1.8)
+Requirement already satisfied: certifi>=2017.4.17 in /Users/hawkon/Library/Python/3.9/lib/python/site-packages (from requests) (2026.6.17)
+Requirement already satisfied: urllib3<3,>=1.21.1 in /Users/hawkon/Library/Python/3.9/lib/python/site-packages (from requests) (2.6.3)
+Requirement already satisfied: charset_normalizer<4,>=2 in /Users/hawkon/Library/Python/3.9/lib/python/site-packages (from requests) (3.4.7)
+Requirement already satisfied: idna<4,>=2.5 in /Users/hawkon/Library/Python/3.9/lib/python/site-packages (from requests) (3.18)
+Requirement already satisfied: typing_extensions>=4.9.0 in /Users/hawkon/Library/Python/3.9/lib/python/site-packages (from python-docx) (4.15.0)
+Requirement already satisfied: zipp>=3.20 in /Users/hawkon/Library/Python/3.9/lib/python/site-packages (from importlib-metadata>=3.6.0->Flask) (3.23.1)
+WARNING: You are using pip version 21.2.4; however, version 26.0.1 is available.
+You should consider upgrading via the '/Library/Developer/CommandLineTools/usr/bin/python3 -m pip install --upgrade pip' command.
+正在启动 feishu_docget 服务...
+/Users/hawkon/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+2026-08-21 19:47:29,968 - feishu_docget - INFO - 工作线程已启动，等待任务...
+2026-08-21 19:47:29,981 - feishu_docget - INFO - 服务启动于端口 7800...
+2026-08-21 19:47:29,988 - feishu_docget - INFO - 使用 waitress 生产服务器启动 (threads=8)

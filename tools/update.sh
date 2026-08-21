@@ -12,6 +12,25 @@ for arg in "$@"; do
     esac
 done
 
+CONFIG_FILE="$PROJECT_DIR/feishu-docget.properties"
+
+# 解析日志目录（从配置文件读取 log.dir，解析失败回退 logs）
+LOG_DIR="logs"
+if [ -f "$CONFIG_FILE" ]; then
+    CFG_LOG_DIR=$(grep "^log.dir=" "$CONFIG_FILE" | cut -d'=' -f2 | tr -d '\r')
+    if [ -n "$CFG_LOG_DIR" ]; then
+        LOG_DIR="$CFG_LOG_DIR"
+    fi
+fi
+case "$LOG_DIR" in
+    /*) UPDATE_LOG="$LOG_DIR/update.log" ;;
+    *)  UPDATE_LOG="$PROJECT_DIR/$LOG_DIR/update.log" ;;
+esac
+
+# 截断上次升级日志，仅保留最近一次升级的输出；路径无效时静默跳过
+mkdir -p "$(dirname "$UPDATE_LOG")" 2>/dev/null
+: > "$UPDATE_LOG" 2>/dev/null || true
+
 echo "=========================================="
 echo "   正在更新 feishu-docget..."
 echo "=========================================="
@@ -43,14 +62,14 @@ echo "✅ 代码已更新到最新版本"
 # 2. 尝试重启服务
 echo "[2/2] 正在尝试重启服务..."
 
-CONFIG_FILE="$PROJECT_DIR/feishu-docget.properties"
 SUDO_PASS=""
 
 if [ -f "$CONFIG_FILE" ]; then
     SUDO_PASS=$(grep "^system.sudo_password=" "$CONFIG_FILE" | cut -d'=' -f2 | tr -d '\r')
 fi
 
-if [ -z "$SUDO_PASS" ]; then
+# --yes（非交互，如管理后台后台启动）时跳过 sudo 密码询问：无 systemctl 的环境不需要 sudo
+if [ -z "$SUDO_PASS" ] && [ "$SKIP_CONFIRM" != "true" ]; then
     echo "⚠️  注意：重启服务可能需要 sudo 权限"
     read -s -p "请输入当前用户的 sudo 密码 (留空则直接尝试): " USER_INPUT_PASS
     echo ""
@@ -67,8 +86,15 @@ run_sudo() {
     fi
 }
 
-# 检查是否存在 systemd 服务
-if systemctl status feishu-docget >/dev/null 2>&1; then
+# 检查 systemd 服务单元是否存在（用 list-unit-files 区分“unit 不存在”与“unit 存在但未运行”；无 systemctl 环境兼容）
+UNIT_EXISTS=false
+if command -v systemctl >/dev/null 2>&1; then
+    if systemctl list-unit-files feishu-docget.service 2>/dev/null | grep -q "^feishu-docget\.service"; then
+        UNIT_EXISTS=true
+    fi
+fi
+
+if [ "$UNIT_EXISTS" = true ]; then
     echo "检测到 systemd 服务: feishu-docget"
     
     # 尝试重启
@@ -85,8 +111,32 @@ if systemctl status feishu-docget >/dev/null 2>&1; then
     fi
 else
     echo "⚠️  未检测到 feishu-docget 系统服务，或者当前用户无权访问。"
-    echo "✅ 代码已更新完成！"
-    echo "👉 请手动重启您的程序 (例如: ./run.sh 或 kill 掉旧进程后重新启动)"
+    echo "尝试通过 stop.sh / run.sh 重启服务..."
+
+    # 优先调用项目根目录的 stop.sh 停止旧进程
+    if [ -f "$PROJECT_DIR/stop.sh" ]; then
+        bash "$PROJECT_DIR/stop.sh"
+    else
+        echo "⚠️  未找到 stop.sh，跳过停止步骤"
+    fi
+    sleep 1
+
+    # 复核旧进程已消失，避免新旧两个版本同时运行占用同一端口
+    REMAINING=$(pgrep -if "src/app.py" 2>/dev/null)
+    if [ -n "$REMAINING" ]; then
+        echo "❌ 旧服务进程仍存活 (PID: $REMAINING)，无法安全启动新版本，请手动停止后重新执行升级"
+        exit 1
+    fi
+
+    # 应用日志已由自身 logging 文件 Handler 完整记录，run.sh 的 stdout/stderr 重定向到 /dev/null，
+    # 避免常驻服务输出导致 update.log 无界增长
+    # stdin 重定向到 /dev/null，确保 run.sh 走非交互分支
+    if [ -f "$PROJECT_DIR/run.sh" ]; then
+        nohup bash "$PROJECT_DIR/run.sh" > /dev/null 2>&1 < /dev/null &
+        echo "✅ 代码已更新完成，服务已在后台重启（升级日志见 $LOG_DIR/update.log）"
+    else
+        echo "❌ 未找到 run.sh，请手动重启您的程序"
+    fi
 fi
 
 echo "=========================================="

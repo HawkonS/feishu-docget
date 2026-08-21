@@ -1265,12 +1265,11 @@ def api_admin_delete_log(filename):
 def api_admin_system():
     data = request.get_json(silent=True) or {}
     action = data.get('action')
-    
-    # 检查 systemctl 是否可用
-    if shutil.which('systemctl') is None:
-        return jsonify({'status': 'error', 'message': '未找到 systemctl，系统管理功能不可用'})
 
     if action == 'status':
+        # 检查 systemctl 是否可用
+        if shutil.which('systemctl') is None:
+            return jsonify({'status': 'error', 'message': '未找到 systemctl，系统管理功能不可用'})
         try:
             # 使用 list-units 检查服务是否存在
             subprocess.check_call(['systemctl', 'status', 'feishu-docget'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -1292,8 +1291,14 @@ def api_admin_system():
         def run_update_bg():
             try:
                 # 使用 nohup 运行更新脚本，避免因服务重启导致脚本中断
-                # 脚本内部会处理重启逻辑
-                subprocess.Popen(['nohup', 'bash', script_path, '--yes'], cwd=base_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                # 脚本内部会处理重启逻辑，输出追加到 logs/update.log
+                log_dir = os.path.join(base_dir, config.get('log.dir', 'logs'))
+                os.makedirs(log_dir, exist_ok=True)
+                update_log_path = os.path.join(log_dir, 'update.log')
+                with open(update_log_path, 'a') as update_log:
+                    # 子进程会 dup 该文件描述符，父进程关闭句柄后后台脚本仍可继续写入
+                    # stdin 设为 DEVNULL，切断脚本的交互式输入（如 sudo 密码询问），避免后台流程卡死
+                    subprocess.Popen(['nohup', 'bash', script_path, '--yes'], cwd=base_dir, stdin=subprocess.DEVNULL, stdout=update_log, stderr=subprocess.STDOUT)
             except Exception as e:
                 logger.error(f'启动更新脚本失败: {e}')
         
@@ -1301,6 +1306,8 @@ def api_admin_system():
         return jsonify({'status': 'ok', 'message': '更新任务已在后台启动，服务稍后将自动重启'})
 
     elif action in ['restart', 'stop']:
+        if shutil.which('systemctl') is None:
+            return jsonify({'status': 'error', 'message': '未找到 systemctl，系统管理功能不可用'})
         cmd = ['sudo', 'systemctl', action, 'feishu-docget']
         try:
             sudo_pass = config.get('system.sudo_password')
