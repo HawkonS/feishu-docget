@@ -7,12 +7,14 @@ from src.core.config_loader import ConfigLoader
 
 class FeishuClient:
 
-    def __init__(self, app_id, app_secret):
+    def __init__(self, app_id, app_secret, user_access_token=''):
         self.app_id = app_id
         self.app_secret = app_secret
         self.logger = ConfigLoader.get_logger('feishu_client')
         self._token = ''
         self._expire_at = 0
+        # 用户身份的 access_token（过期刷新由 user_store 负责），非空时优先使用
+        self._user_token = user_access_token or ''
         self._lock = threading.Lock()
         self.session = requests.Session()
         adapter = requests.adapters.HTTPAdapter(max_retries=3, pool_connections=10, pool_maxsize=10)
@@ -21,6 +23,10 @@ class FeishuClient:
 
     def _is_permission_error(self, code=None, msg='', status_code=None):
         msg_lower = str(msg or '').lower()
+        # 401 与用户身份相关错误码仅在使用用户身份时识别，机器人流程保持既有行为
+        if self._user_token:
+            if status_code == 401 or code in (99991664, 99991665):
+                return True
         return (
             status_code == 403
             or code in (99991668, 99991663, 1770032)
@@ -36,6 +42,9 @@ class FeishuClient:
         return PermissionError(f'{detail}: 应用无权限，请为“{bot_name}”机器人开通相关权限，如有问题请联系 {contact_name}')
 
     def get_token(self):
+        # 用户 token 非空时直接使用，其过期刷新由 user_store 负责
+        if self._user_token:
+            return self._user_token
         now = int(time.time())
         with self._lock:
             if self._token and now < self._expire_at - 60:
@@ -164,6 +173,9 @@ class FeishuClient:
                 contact_name = config.get('contact.name', 'Hakwon')
                 error_msg = f'下载图片/文件失败(403): 应用无权限，请为“{bot_name}”机器人开通【云文档】相关权限，如有问题请联系 {contact_name}'
                 raise PermissionError(error_msg)
+            if r.status_code == 401 and self._user_token:
+                # 用户身份 401 触发权限错误以回退；机器人场景保持旧的容忍语义
+                raise self._permission_error('下载图片/文件失败(401)')
             if r.status_code == 400 and 'frequency limit' in r.text:
                 self.logger.warning('触发频率限制，稍后重试...')
             return False

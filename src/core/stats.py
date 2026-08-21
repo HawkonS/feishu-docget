@@ -28,9 +28,9 @@ def get_stats_file(base_dir, config):
     os.makedirs(log_dir, exist_ok=True)
     return os.path.join(log_dir, 'download_stats.jsonl')
 
-def update_download_stat(base_dir, config, task_id, status, doc_url='', file_path='', title='', ip_address=''):
+def update_download_stat(base_dir, config, task_id, status, doc_url='', file_path='', title='', ip_address='', user_name=''):
     stats_file = get_stats_file(base_dir, config)
-    entry = {'id': task_id, 'status': status, 'ts': int(time.time()), 'time': datetime.now().isoformat(), 'url': _mask_url(doc_url), 'path': file_path, 'title': title, 'ip': _mask_ip(ip_address)}
+    entry = {'id': task_id, 'status': status, 'ts': int(time.time()), 'time': datetime.now().isoformat(), 'url': _mask_url(doc_url), 'path': file_path, 'title': title, 'ip': _mask_ip(ip_address), 'user': user_name}
     with open(stats_file, 'a', encoding='utf-8') as f:
         f.write(json.dumps(entry, ensure_ascii=False) + '\n')
 
