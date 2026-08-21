@@ -114,11 +114,15 @@ def _login_enabled():
 
 
 def _get_redirect_uri():
-    """OAuth 回调地址：优先使用配置项，未配置时根据当前请求地址推导"""
+    """OAuth 回调地址：优先使用配置项，未配置时根据当前请求地址推导（HTTPS 模式下强制 https scheme）"""
     configured = str(config.get('login.oauth.redirect_uri', '') or '').strip()
     if configured:
         return configured
-    return request.url_root.rstrip('/') + '/auth/feishu/callback'
+    base = request.url_root.rstrip('/')
+    # nginx SSL 终结且未传 X-Forwarded-Proto 时 url_root 会是 http，需按配置纠正 scheme
+    if parse_bool(config.get('server.https.enabled', 'false')) and base.startswith('http://'):
+        base = 'https://' + base[len('http://'):]
+    return base + '/auth/feishu/callback'
 
 
 def login_required(f):

@@ -4,7 +4,7 @@ import requests
 
 from src.core.config_loader import ConfigLoader, config
 
-AUTHORIZE_URL = 'https://accounts.feishu.cn/oauth/v1/authorize'
+AUTHORIZE_URL = 'https://passport.feishu.cn/suite/passport/oauth/authorize'
 TOKEN_URL = 'https://open.feishu.cn/open-apis/authen/v2/oauth/token'
 USER_INFO_URL = 'https://open.feishu.cn/open-apis/authen/v2/user_info'
 TENANT_TOKEN_URL = 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal'
