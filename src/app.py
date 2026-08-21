@@ -26,6 +26,7 @@ from src.core import user_store, feishu_oauth
 from src.core.config_loader import config, ConfigLoader, parse_size, parse_bool, SENSITIVE_KEYS
 from src.converters.docx.style_manager import TableStyleManager
 from src.core.stats import update_download_stat, get_download_stats
+from src.core.utils import sanitize_name
 base_dir = os.path.abspath(config.get('workspace.dir', '.'))
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 HTML_DIR = os.path.join(CURRENT_DIR, 'web', 'templates')
@@ -44,6 +45,14 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB
+
+
+@app.errorhandler(500)
+def handle_500(e):
+    """记录未捕获异常的完整堆栈；下载等 URL 由浏览器直接导航访问，返回默认错误页"""
+    logger.error(f'服务器内部错误: {request.method} {request.path}', exc_info=True)
+    return e.get_response()
+
 jobs = {}
 jobs_lock = threading.Lock()
 download_queue = queue.Queue()
@@ -700,6 +709,8 @@ def api_upload_template():
     
     if not safe_name:
         safe_name = 'template'
+    # 从落盘源头清洗控制字符等（扩展名 .docx 在 final_filename 中重新拼接）
+    safe_name = sanitize_name(safe_name)
     
     # 长期存储模式下，文件名就是用户输入的名称
     if mode == 'long_term':
@@ -954,9 +965,16 @@ def api_download(job_id):
         if not job or job.get('status') != 'done':
             return jsonify({'status': 'error', 'message': '任务未完成'})
         docx_path = job.get('docx_path')
-        if not docx_path or not os.path.exists(docx_path):
+        if not docx_path or not os.path.isfile(docx_path):
             return jsonify({'status': 'error', 'message': '文件未找到'})
-    return send_file(docx_path, as_attachment=True, download_name=os.path.basename(docx_path))
+    # 下载名与磁盘文件名解耦：清洗控制字符等，避免构造响应头时抛 ValueError；磁盘路径保持原样读取，保留扩展名避免被截断丢失
+    base, ext = os.path.splitext(os.path.basename(docx_path))
+    download_name = sanitize_name(base, ext)
+    try:
+        return send_file(docx_path, as_attachment=True, download_name=download_name)
+    except Exception as e:
+        logger.error(f'文件下载失败: {docx_path}, {e}', exc_info=True)
+        return jsonify({'status': 'error', 'message': '文件下载失败'}), 500
 
 @app.route('/api/stop/<job_id>', methods=['POST'])
 @login_required
@@ -998,7 +1016,13 @@ def api_template(name):
     if not os.path.exists(path):
         return jsonify({'status': 'error', 'message': '模板未找到'})
     inline = request.args.get('inline', 'false').lower() == 'true'
-    return send_file(path, as_attachment=not inline, download_name=os.path.basename(path))
+    base, ext = os.path.splitext(os.path.basename(path))
+    download_name = sanitize_name(base, ext)
+    try:
+        return send_file(path, as_attachment=not inline, download_name=download_name)
+    except Exception as e:
+        logger.error(f'模板下载失败: {path}, {e}', exc_info=True)
+        return jsonify({'status': 'error', 'message': '模板下载失败'}), 500
 
 @app.route('/api/template_preview/<name>', methods=['GET'])
 def api_template_preview(name):
@@ -1028,7 +1052,14 @@ def api_admin_download_file():
         return jsonify({'status': 'error', 'message': '无效文件'})
     if not os.path.exists(real_path) or not os.path.isfile(real_path):
         return jsonify({'status': 'error', 'message': '无效文件'})
-    return send_file(real_path, as_attachment=True, download_name=os.path.basename(real_path))
+    # 清洗下载名中的控制字符等，保留扩展名避免被截断丢失
+    base, ext = os.path.splitext(os.path.basename(real_path))
+    download_name = sanitize_name(base, ext)
+    try:
+        return send_file(real_path, as_attachment=True, download_name=download_name)
+    except Exception as e:
+        logger.error(f'文件下载失败: {real_path}, {e}', exc_info=True)
+        return jsonify({'status': 'error', 'message': '文件下载失败'}), 500
 
 @app.route('/api/config', methods=['GET'])
 @admin_required
