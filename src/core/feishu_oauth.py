@@ -6,7 +6,7 @@ from src.core.config_loader import ConfigLoader, config
 
 AUTHORIZE_URL = 'https://passport.feishu.cn/suite/passport/oauth/authorize'
 TOKEN_URL = 'https://open.feishu.cn/open-apis/authen/v2/oauth/token'
-USER_INFO_URL = 'https://open.feishu.cn/open-apis/authen/v2/user_info'
+USER_INFO_URL = 'https://open.feishu.cn/open-apis/authen/v1/user_info'
 TENANT_TOKEN_URL = 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal'
 
 logger = ConfigLoader.get_logger('feishu_docget')
@@ -69,26 +69,71 @@ def refresh_user_token(refresh_token):
 
 
 def get_oauth_user_info(user_access_token):
-    """用用户 access_token 获取当前登录用户信息（authen/v2 可返回 department_ids），失败返回 {}"""
+    """用用户 access_token 获取当前登录用户信息（authen/v1，data 包裹），失败返回 {}
+
+    department_ids 因 v1 接口不返回，改经 tenant 身份通讯录接口补充；任何失败降级为空列表，不阻断登录
+    """
     headers = {'Authorization': 'Bearer ' + user_access_token}
     try:
-        res = _session.get(USER_INFO_URL, headers=headers, timeout=10).json()
+        resp = _session.get(USER_INFO_URL, headers=headers, timeout=10)
     except Exception as e:
         logger.error(f'获取 OAuth 用户信息请求异常: {e}')
         return {}
-    if res.get('code') != 0:
-        logger.error(f'获取 OAuth 用户信息失败: {res.get("msg", "")}')
+    content_type = resp.headers.get('Content-Type', '')
+    if resp.status_code != 200 or 'application/json' not in content_type:
+        logger.error(f'获取 OAuth 用户信息失败: status={resp.status_code}, content-type={content_type}, body={resp.text[:200]!r}')
         return {}
-    # v2 返回体字段在顶层（无 data 包裹），防御性兼容
+    try:
+        res = resp.json()
+    except Exception as e:
+        logger.error(f'获取 OAuth 用户信息 JSON 解析失败: {e}, body={resp.text[:200]!r}')
+        return {}
+    if res.get('code') != 0:
+        logger.error(f'获取 OAuth 用户信息失败: code={res.get("code")}, msg={res.get("msg", "")}')
+        return {}
+    # 防御性兼容 data 包裹/顶层字段两种结构
     data = res.get('data') if isinstance(res.get('data'), dict) else res
-    return {
+    open_id = data.get('open_id', '')
+    info = {
         'name': data.get('name', ''),
-        'open_id': data.get('open_id', ''),
+        'open_id': open_id,
         'union_id': data.get('union_id', ''),
         'user_id': data.get('user_id', ''),
         'avatar_url': data.get('avatar_url', ''),
-        'department_ids': data.get('department_ids') or [],
+        'department_ids': data.get('department_ids') or fetch_department_ids(open_id),
     }
+    return info
+
+
+def fetch_department_ids(open_id):
+    """用 tenant 身份经通讯录接口获取用户部门 ID 列表；任何失败/无权限均降级为空列表，不阻断登录"""
+    try:
+        if not open_id:
+            return []
+        app_id = config.get('feishu.app_id', '')
+        app_secret = config.get('feishu.app_secret', '')
+        if not app_id or not app_secret:
+            return []
+        token_res = _session.post(
+            TENANT_TOKEN_URL,
+            json={'app_id': app_id, 'app_secret': app_secret},
+            timeout=10).json()
+        if token_res.get('code') != 0:
+            logger.warning(f'获取部门 ID: 获取 tenant_access_token 失败: {token_res.get("msg", "")}')
+            return []
+        tenant_token = token_res.get('tenant_access_token') or ''
+        if not tenant_token:
+            return []
+        headers = {'Authorization': 'Bearer ' + tenant_token}
+        url = f'https://open.feishu.cn/open-apis/contact/v3/users/{open_id}'
+        res = _session.get(url, headers=headers, params={'user_id_type': 'open_id'}, timeout=10).json()
+        if res.get('code') != 0:
+            logger.warning(f'获取部门 ID 失败 open_id={open_id}: {res.get("msg", "")}')
+            return []
+        return (res.get('data') or {}).get('user', {}).get('department_ids') or []
+    except Exception as e:
+        logger.warning(f'获取部门 ID 异常: {e}')
+        return []
 
 
 def resolve_department_names(department_ids):
