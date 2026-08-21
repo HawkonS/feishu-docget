@@ -19,6 +19,7 @@ import subprocess
 import secrets
 import tempfile
 import zipfile
+from html import escape
 from flask import Flask, jsonify, request, send_file, send_from_directory, session, redirect, url_for
 from src.services.doc_service import process_document
 from src.core.bot_store import normalize_bot_config
@@ -196,6 +197,47 @@ def worker_thread():
             time.sleep(1)
 threading.Thread(target=worker_thread, daemon=True).start()
 
+def token_pre_refresh_thread():
+    """后台预刷新线程：定期为 access_token 即将过期的用户提前刷新，
+    通过 refresh_token 轮换实现事实性续期，避免长期不下载导致 refresh_token 30 天过期"""
+    logger.info('token 预刷新线程已启动')
+    while True:
+        try:
+            time.sleep(30 * 60)
+            if not _login_enabled():
+                continue
+            now = int(time.time())
+            for record in user_store.list_users():
+                try:
+                    if record.get('disabled'):
+                        continue
+                    open_id = record.get('open_id') or ''
+                    if not open_id:
+                        continue
+                    try:
+                        expire_at = int(record.get('token_expire_at') or 0)
+                    except (TypeError, ValueError):
+                        expire_at = 0
+                    # 仅对 access_token 距过期不足 1 小时（或已过期）的用户触发刷新
+                    if expire_at - now > 3600:
+                        continue
+                    refresh_expire_at = user_store.get_refresh_token_expiry(open_id) or 0
+                    if refresh_expire_at and refresh_expire_at <= now:
+                        logger.warning(f'用户 {open_id} 的 refresh_token 已过期，预刷新跳过，需重新登录')
+                        continue
+                    # 复用 get_valid_access_token 的按用户锁 + 双重检查，天然防并发
+                    token = user_store.get_valid_access_token(open_id)
+                    if token:
+                        logger.info(f'预刷新用户 {open_id} token 成功')
+                    else:
+                        logger.warning(f'预刷新用户 {open_id} token 失败，该用户下次任务前需重新登录')
+                except Exception as e:
+                    logger.warning(f'预刷新用户 {record.get("open_id", "")} 处理异常: {e}')
+        except Exception as e:
+            logger.error(f'token 预刷新线程循环错误: {e}')
+            time.sleep(60)
+threading.Thread(target=token_pre_refresh_thread, daemon=True).start()
+
 def check_cleanup_output():
     try:
         output_dir = os.path.join(base_dir, config['output.dir'])
@@ -318,6 +360,13 @@ def run_job(job_id, doc_url, template_name, table_style, delete_template=False, 
         if user_open_id:
             # get_valid_access_token 内部已判断禁用状态，失败返回 None
             user_token = user_store.get_valid_access_token(user_open_id) or ''
+            if not user_token:
+                # 用户身份任务不回退机器人身份，避免误导性权限报错；直接按现有失败分支标记任务失败
+                error_msg = '您的飞书登录凭证已过期，请重新登录后再试'
+                logger.error(f'任务 {job_id} 失败: 用户 {user_open_id} 凭证已过期或刷新失败')
+                update_job(job_id, status='error', message=error_msg)
+                update_download_stat(base_dir, config, job_id, '错误', doc_url, ip_address=client_ip, user_name=user_name)
+                return
         if check_stop_func and check_stop_func():
             raise InterruptedError('任务已停止')
         if was_queued:
@@ -415,6 +464,21 @@ def index():
     html = html.replace('[/* default_template */]', config.get('template.default', 'template.docx'))
     html = html.replace('[/* image_max_width */]', str(config.get('image.max_width', '16')))
     html = html.replace('[/* image_max_height */]', str(config.get('image.max_height', '23')))
+    # 登录状态标志：未开启登录或未登录（无 open_id）时注入 'false'，前端据此控制用户信息条显隐
+    user_logged_in = 'false'
+    if _login_enabled() and (session.get('user') or {}).get('open_id'):
+        user_logged_in = 'true'
+    html = html.replace('[/* user_logged_in */]', user_logged_in)
+    # 登录用户 open_id：用户名缺失时前端作为兜底展示文案；同样转义防注入
+    user_open_id = ''
+    if _login_enabled():
+        user_open_id = (session.get('user') or {}).get('open_id', '') or ''
+    html = html.replace('[/* user_open_id */]', escape(user_open_id))
+    # 登录用户名：仅作展示，HTML 转义防止注入；必须保持为最后一个替换，避免注入内容被二次替换
+    user_name = ''
+    if _login_enabled():
+        user_name = (session.get('user') or {}).get('name', '') or ''
+    html = html.replace('[/* user_name */]', escape(user_name))
     return html
 
 @app.route('/login', methods=['GET'])
@@ -464,6 +528,7 @@ def auth_feishu_callback():
             'access_token': tokens['access_token'],
             'refresh_token': tokens.get('refresh_token', ''),
             'token_expire_at': int(time.time()) + int(tokens.get('expires_in', 7200)),
+            'refresh_token_expire_at': int(time.time()) + int(tokens.get('refresh_token_expires_in') or 30 * 24 * 3600),
         }
         # 仅对“已存在且被禁用”的记录拦截；is_disabled 对不存在用户返回 True，首次登录不能在此拦截
         existing = user_store.get_user(open_id)
@@ -537,6 +602,8 @@ def api_admin_logout():
 @app.route('/api/user/logout', methods=['POST'])
 def api_user_logout():
     session.pop('user', None)
+    # 退出后不再持有任务访问令牌；正在运行的任务由工作线程继续执行，不受影响
+    session.pop('job_tokens', None)
     return jsonify({'status': 'ok'})
 
 @app.route('/api/admin/users', methods=['GET'])

@@ -12,6 +12,7 @@ _lock = threading.RLock()
 _user_locks = {}
 _cache = None
 _token_refresh_margin = 300  # token 距过期不足 5 分钟时触发刷新
+_refresh_token_default_ttl = 30 * 24 * 3600  # 飞书未返回 refresh_token 有效期时按 30 天兜底
 
 
 def get_users_file():
@@ -93,14 +94,20 @@ def upsert_user(profile):
                 'access_token': profile.get('access_token', ''),
                 'refresh_token': profile.get('refresh_token', ''),
                 'token_expire_at': profile.get('token_expire_at', 0),
+                'refresh_token_expire_at': profile.get('refresh_token_expire_at', 0),
+                'token_invalid': False,
                 'created_at': now,
                 'last_login_at': now,
             }
         else:
             for key in ('union_id', 'user_id', 'name', 'department', 'avatar',
-                        'access_token', 'refresh_token', 'token_expire_at'):
+                        'access_token', 'refresh_token', 'token_expire_at',
+                        'refresh_token_expire_at'):
                 if key in profile:
                     record[key] = profile[key]
+            # 重新登录/刷新成功会带来新凭证，清除凭证失效标记
+            if profile.get('access_token'):
+                record['token_invalid'] = False
             record['last_login_at'] = now
         users[open_id] = record
         return _save(users)
@@ -148,6 +155,32 @@ def is_disabled(open_id):
     return bool(record.get('disabled', False))
 
 
+def _mark_token_invalid(open_id):
+    """刷新失败时标记该用户凭证失效，供管理后台后续展示；落盘失败仅记日志不阻断"""
+    with _lock:
+        users = _load()
+        record = users.get(open_id)
+        if record is None or record.get('token_invalid'):
+            return
+        record['token_invalid'] = True
+        if not _save(users):
+            logger.warning(f'标记用户 {open_id} 凭证失效状态落库失败')
+
+
+def get_refresh_token_expiry(open_id):
+    """返回该用户 refresh_token 到期时间戳；未知（旧数据无字段）返回 0，不存在返回 None"""
+    if not open_id:
+        return None
+    with _lock:
+        record = _load().get(open_id)
+    if record is None:
+        return None
+    try:
+        return int(record.get('refresh_token_expire_at') or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def get_valid_access_token(open_id):
     """获取该用户有效的 access_token。
 
@@ -191,6 +224,7 @@ def get_valid_access_token(open_id):
         refresh_token = record.get('refresh_token') or ''
         if not refresh_token:
             logger.warning(f'用户 {open_id} 无 refresh_token，无法刷新 access_token')
+            _mark_token_invalid(open_id)
             return None
         try:
             # 延迟导入避免与 feishu_oauth 的潜在循环依赖
@@ -201,6 +235,7 @@ def get_valid_access_token(open_id):
             return None
         if not token_data or not token_data.get('access_token'):
             logger.warning(f'刷新用户 {open_id} token 失败')
+            _mark_token_invalid(open_id)
             return None
         with _lock:
             users = _load()
@@ -214,6 +249,15 @@ def get_valid_access_token(open_id):
             except (TypeError, ValueError):
                 expires_in = 0
             current['token_expire_at'] = int(_time.time()) + expires_in
+            try:
+                refresh_expires_in = int(token_data.get('refresh_token_expires_in') or 0)
+            except (TypeError, ValueError):
+                refresh_expires_in = 0
+            if refresh_expires_in <= 0:
+                refresh_expires_in = _refresh_token_default_ttl
+            current['refresh_token_expire_at'] = int(_time.time()) + refresh_expires_in
+            # 刷新成功即凭证恢复有效
+            current['token_invalid'] = False
             if not _save(users):
                 logger.error(f'用户 {open_id} refresh_token 已轮换但落库失败，重启后该用户需重新登录')
             return current['access_token']
