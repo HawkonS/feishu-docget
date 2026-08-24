@@ -735,7 +735,142 @@
             margin-top: 10px;
             padding-top: 10px;
         }
-        
+
+        /* ---------- Config page ---------- */
+        .cfg-search-bar { margin-bottom: 14px; }
+        .cfg-search {
+            width: 100%;
+            max-width: 320px;
+            padding: 10px 14px;
+            font-size: 14px;
+            border: 1px solid #d9e4f5;
+            border-radius: 8px;
+            background: #fff;
+            outline: none;
+        }
+        .cfg-search:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12); }
+        .cfg-card {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+            overflow: hidden;
+        }
+        .cfg-card-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            padding: 14px 18px;
+            background: #f8fafc;
+            border: none;
+            border-bottom: 1px solid #f1f5f9;
+            cursor: pointer;
+            text-align: left;
+        }
+        .cfg-card.collapsed .cfg-card-head { border-bottom: none; }
+        .cfg-card-title { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+        .cfg-count { font-size: 12px; color: #64748b; }
+        .cfg-arrow { margin-left: auto; color: #94a3b8; font-size: 12px; transition: transform 0.2s; }
+        .cfg-card.collapsed .cfg-arrow { transform: rotate(-90deg); }
+        .cfg-card-body {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 8px 24px;
+            padding: 18px;
+        }
+        .cfg-item { padding: 10px 0; border-bottom: 1px dashed #f1f5f9; }
+        .cfg-label-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+        .cfg-label { font-weight: 600; font-size: 14px; color: #1f2a44; }
+        .cfg-badge {
+            font-size: 11px;
+            color: #b45309;
+            background: #fef3c7;
+            border: 1px solid #fcd34d;
+            padding: 1px 8px;
+            border-radius: 999px;
+            white-space: nowrap;
+        }
+        .cfg-control-row { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
+        .cfg-input {
+            flex: 1;
+            min-width: 0;
+            padding: 10px;
+            font-size: 14px;
+            border: 1px solid #d9e4f5;
+            border-radius: 6px;
+            background: #fff;
+            color: #1f2a44;
+            outline: none;
+        }
+        .cfg-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12); }
+        .cfg-masked { color: #94a3b8; background: #f8fafc; }
+        .cfg-unit { color: #64748b; font-size: 13px; white-space: nowrap; }
+        .cfg-key { font-size: 12px; color: #94a3b8; font-family: monospace; }
+        .cfg-hint { font-size: 12px; color: #94a3b8; margin: 2px 0 4px; }
+        .cfg-desc { font-size: 12px; color: #a8b3c5; line-height: 1.5; margin: -4px 0 6px; }
+        .cfg-preview { font-size: 12px; color: #64748b; margin: 2px 0 4px; word-break: break-all; }
+        .cfg-error { display: none; font-size: 12px; color: #ef4444; margin-top: 4px; }
+        .cfg-item.invalid .cfg-error { display: block; }
+        .cfg-item.invalid .cfg-input { border-color: #ef4444; }
+        .cfg-item.invalid .cfg-input:focus { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12); }
+        .cfg-btn {
+            padding: 8px 12px;
+            font-size: 13px;
+            border: 1px solid #d9e4f5;
+            border-radius: 6px;
+            background: #fff;
+            color: #334155;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .cfg-btn:hover { background: #f1f5f9; }
+        .cfg-btn-primary { border-color: #3b82f6; background: #eff6ff; color: #3b82f6; }
+        .cfg-btn-primary:hover { background: #dbeafe; }
+        .cfg-hidden { display: none !important; }
+        .cfg-toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex: none; }
+        .cfg-toggle input { opacity: 0; width: 0; height: 0; }
+        .cfg-toggle-slider {
+            position: absolute;
+            inset: 0;
+            background: #cbd5e1;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .cfg-toggle-slider::before {
+            content: "";
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            left: 3px;
+            top: 3px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform 0.2s;
+        }
+        .cfg-toggle input:checked + .cfg-toggle-slider { background: #3b82f6; }
+        .cfg-toggle input:checked + .cfg-toggle-slider::before { transform: translateX(20px); }
+        #saveConfigBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .toast-stack { position: fixed; top: 20px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; }
+        .toast {
+            min-width: 260px;
+            max-width: 440px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            line-height: 1.5;
+            color: #fff;
+            background: #334155;
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.18);
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        .toast.hide { opacity: 0; transform: translateX(20px); }
+        .toast-success { background: #16a34a; }
+        .toast-error { background: #ef4444; }
+        .toast-warning { background: #d97706; }
+
         @media (max-width: 768px) {
             .app-container { flex-direction: column; height: auto; min-height: 100vh; overflow: auto; }
             .sidebar { width: 100%; border-right: none; border-bottom: 1px solid #eee; padding-top: 0; flex-direction: row; overflow-x: auto; height: 50px; align-items: center; }
@@ -749,6 +884,7 @@
             .header { padding: 0 16px; }
             .advanced-grid { grid-template-columns: 1fr; }
             .compact-grid-2 { grid-template-columns: 1fr; }
+            .cfg-search { max-width: none; }
         }
     </style>
 </head>
@@ -793,10 +929,13 @@
                 <!-- Tab: Config -->
                 <div id="tab-config" class="tab-pane">
                     <div style="flex: 1; overflow-y: auto; padding: 20px;">
-                         <div id="configForm"></div>
+                        <div class="cfg-search-bar">
+                            <input id="configSearch" class="cfg-search cfg-input" type="text" placeholder="搜索配置（label / desc / key）" oninput="filterConfigItems()">
+                        </div>
+                        <div id="configForm"></div>
                     </div>
                     <div style="padding: 20px; border-top: 1px solid #e2e8f0; text-align: right; background: #fff;">
-                        <button onclick="saveConfig()" class="btn-start" style="padding: 10px 24px;">保存配置</button>
+                        <button id="saveConfigBtn" onclick="saveConfig()" class="btn-start" style="padding: 10px 24px;">保存配置</button>
                     </div>
                 </div>
 
@@ -1149,6 +1288,8 @@
         const pageSize = 10;
         
         let configCache = [];
+        let configSnapshot = {};      // 初始值快照，用于脏检查
+        let cfgValidationErrors = new Set(); // 当前校验失败的 key 集合
         
         async function loadConfig() {
             try {
@@ -1157,148 +1298,488 @@
                 configCache = data;
                 renderConfigForm(data);
             } catch (e) {
-                alert('加载配置失败');
+                showToast('加载配置失败: ' + e.message, 'error');
             }
         }
-        
-        const SENSITIVE_KEYS = new Set(['feishu.app_secret', 'admin.password', 'system.sudo_password', 'template.password.long_term', 'template.password.one_time', 'server.secret_key']);
 
         function renderConfigForm(data) {
             const container = document.getElementById('configForm');
-            container.innerHTML = "";
-            
+            container.innerHTML = '';
+            cfgValidationErrors.clear();
+
+            // 初始值快照，用于脏检查；bool 项归一化为小写 'true'/'false'，避免存量值 true/'True' 造成幻影变更
+            configSnapshot = {};
+            data.forEach(item => { configSnapshot[item.key] = normalizeCfgValue(item, item.value); });
+
+            // 按 group 归组，保持分组在数组中首次出现的顺序
+            const groups = [];
+            const groupMap = {};
             data.forEach(item => {
-                const div = document.createElement("div");
-                div.style.marginBottom = "24px";
-                div.style.background = "#fff";
-                div.style.padding = "0";
-                
-                const label = document.createElement("div");
-                label.style.fontWeight = "600";
-                label.style.marginBottom = "8px";
-                label.style.fontSize = "14px";
-                label.style.color = "#1f2a44";
-                label.innerText = item.desc || item.key;
-                
-                const inputRow = document.createElement("div");
-                inputRow.style.display = "flex";
-                inputRow.style.gap = "8px";
-                inputRow.style.alignItems = "center";
-                inputRow.style.marginBottom = "4px";
+                const name = item.group || '其他';
+                if (!groupMap[name]) {
+                    groupMap[name] = { name: name, items: [] };
+                    groups.push(groupMap[name]);
+                }
+                groupMap[name].items.push(item);
+            });
 
-                const input = document.createElement("input");
-                input.type = "text";
-                input.className = "form-select";
-                input.style.flex = "1";
-                input.style.padding = "10px";
-                input.style.fontSize = "14px";
-                input.style.border = "1px solid #d9e4f5";
-                input.style.borderRadius = "6px";
+            groups.forEach(g => container.appendChild(buildCfgGroupCard(g)));
+            applyCfgDependents();
+            updateSaveBtnState();
+        }
+
+        function buildCfgGroupCard(group) {
+            const card = document.createElement('section');
+            card.className = 'cfg-card';
+            card.dataset.group = group.name;
+
+            const body = document.createElement('div');
+            body.className = 'cfg-card-body';
+            group.items.forEach(item => body.appendChild(buildCfgField(item)));
+
+            const head = document.createElement('button');
+            head.type = 'button';
+            head.className = 'cfg-card-head';
+            const title = document.createElement('span');
+            title.className = 'config-group-title cfg-card-title';
+            title.textContent = group.name;
+            const count = document.createElement('span');
+            count.className = 'cfg-count';
+            count.textContent = group.items.length + ' 项';
+            const arrow = document.createElement('span');
+            arrow.className = 'cfg-arrow';
+            arrow.textContent = '▾';
+            head.appendChild(title);
+            head.appendChild(count);
+            head.appendChild(arrow);
+            head.onclick = () => {
+                card.classList.toggle('collapsed');
+                body.style.display = card.classList.contains('collapsed') ? 'none' : '';
+            };
+
+            card.appendChild(head);
+            card.appendChild(body);
+            return card;
+        }
+
+        function buildCfgField(item) {
+            const wrap = document.createElement('div');
+            wrap.className = 'cfg-item';
+            wrap.dataset.key = item.key;
+            if (item.depends_on) wrap.dataset.dependsOn = item.depends_on;
+
+            const labelRow = document.createElement('div');
+            labelRow.className = 'cfg-label-row';
+            const label = document.createElement('label');
+            label.className = 'cfg-label';
+            label.textContent = item.label || item.key;
+            labelRow.appendChild(label);
+            if (item.restart_required) {
+                const badge = document.createElement('span');
+                badge.className = 'cfg-badge';
+                badge.textContent = '需重启生效';
+                labelRow.appendChild(badge);
+            }
+
+            const controlRow = document.createElement('div');
+            controlRow.className = 'cfg-control-row';
+
+            let control;
+            if (item.masked) {
+                // 敏感项：密码框 + 编辑/眼睛切换，留空=不修改
+                const input = document.createElement('input');
+                input.type = 'password';
+                input.className = 'cfg-input cfg-masked';
                 input.value = item.value;
-                input.dataset.key = item.key;
+                input.dataset.masked = 'true';
+                input.readOnly = true;
 
-                const isSensitive = SENSITIVE_KEYS.has(item.key) && item.value === '******';
-                if (isSensitive) {
-                    input.readOnly = true;
-                    input.style.color = "#94a3b8";
-                    input.dataset.masked = "true";
+                const editBtn = document.createElement('button');
+                editBtn.type = 'button';
+                editBtn.className = 'cfg-btn';
+                editBtn.textContent = '编辑';
+                editBtn.onclick = () => {
+                    input.value = '';
+                    input.readOnly = false;
+                    input.dataset.masked = 'false';
+                    input.classList.remove('cfg-masked');
+                    input.placeholder = '输入新值以覆盖，留空则不修改';
+                    editBtn.classList.add('cfg-hidden');
+                    updateSaveBtnState();
+                };
 
-                    const toggleBtn = document.createElement("button");
-                    toggleBtn.type = "button";
-                    toggleBtn.innerText = "显示";
-                    toggleBtn.style.padding = "8px 12px";
-                    toggleBtn.style.fontSize = "13px";
-                    toggleBtn.style.border = "1px solid #d9e4f5";
-                    toggleBtn.style.borderRadius = "6px";
-                    toggleBtn.style.cursor = "pointer";
-                    toggleBtn.style.whiteSpace = "nowrap";
-                    toggleBtn.onclick = function() {
-                        if (input.dataset.masked === "true") {
-                            input.value = "";
-                            input.readOnly = false;
-                            input.style.color = "#1f2a44";
-                            input.dataset.masked = "false";
-                            input.placeholder = "输入新值以覆盖，留空则不修改";
-                            toggleBtn.innerText = "隐藏";
-                        } else {
-                            input.value = "******";
-                            input.readOnly = true;
-                            input.style.color = "#94a3b8";
-                            input.dataset.masked = "true";
-                            input.placeholder = "";
-                            toggleBtn.innerText = "显示";
-                        }
-                    };
-                    inputRow.appendChild(input);
-                    inputRow.appendChild(toggleBtn);
+                const eyeBtn = document.createElement('button');
+                eyeBtn.type = 'button';
+                eyeBtn.className = 'cfg-btn';
+                eyeBtn.textContent = '显示';
+                eyeBtn.onclick = () => {
+                    const shown = input.type === 'text';
+                    input.type = shown ? 'password' : 'text';
+                    eyeBtn.textContent = shown ? '显示' : '隐藏';
+                };
+
+                controlRow.appendChild(input);
+                controlRow.appendChild(editBtn);
+                if (item.gen) {
+                    const genBtn = buildGeneratorBtn(item.gen, input);
+                    if (genBtn) controlRow.appendChild(genBtn);
+                }
+                controlRow.appendChild(eyeBtn);
+                control = input;
+            } else if (item.type === 'bool') {
+                const toggle = document.createElement('label');
+                toggle.className = 'cfg-toggle';
+                const input = document.createElement('input');
+                input.type = 'checkbox';
+                input.className = 'cfg-input';
+                input.checked = String(item.value).toLowerCase() === 'true';
+                // bool 切换时追加联动刷新依赖项显隐（保留原有脏检查刷新）
+                input.addEventListener('change', () => { updateSaveBtnState(); applyCfgDependents(); });
+                const slider = document.createElement('span');
+                slider.className = 'cfg-toggle-slider';
+                toggle.appendChild(input);
+                toggle.appendChild(slider);
+                controlRow.appendChild(toggle);
+                control = input;
+            } else if (item.type === 'int' || item.type === 'float') {
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.className = 'cfg-input';
+                input.value = item.value;
+                if (item.min !== null && item.min !== undefined) input.min = item.min;
+                if (item.max !== null && item.max !== undefined) input.max = item.max;
+                // int 步长 1；float 步长 0.1，避免浏览器原生 step 校验判定非法
+                if (item.type === 'int') input.step = '1';
+                else input.step = '0.1';
+                input.addEventListener('input', () => { clearCfgFieldError(item.key); updateSaveBtnState(); });
+                input.addEventListener('blur', () => validateCfgField(item));
+                controlRow.appendChild(input);
+                if (item.unit) {
+                    const unit = document.createElement('span');
+                    unit.className = 'cfg-unit';
+                    unit.textContent = item.unit;
+                    controlRow.appendChild(unit);
+                }
+                control = input;
+            } else if (item.type === 'enum') {
+                const select = document.createElement('select');
+                select.className = 'cfg-input';
+                (item.options || []).forEach(opt => {
+                    const o = document.createElement('option');
+                    o.value = opt;
+                    o.textContent = opt;
+                    select.appendChild(o);
+                });
+                // 当前值不在选项内时补充一个占位选项，避免脏检查误判
+                if (item.value && !(item.options || []).includes(item.value)) {
+                    const o = document.createElement('option');
+                    o.value = item.value;
+                    o.textContent = item.value + '（当前值）';
+                    select.insertBefore(o, select.firstChild);
+                }
+                select.value = item.value;
+                select.addEventListener('change', () => { clearCfgFieldError(item.key); updateSaveBtnState(); });
+                select.addEventListener('blur', () => validateCfgField(item));
+                controlRow.appendChild(select);
+                control = select;
+            } else {
+                // str / size / url / path → 文本输入框
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'cfg-input';
+                input.value = item.value;
+                if (item.placeholder) input.placeholder = item.placeholder;
+                input.addEventListener('input', () => { clearCfgFieldError(item.key); updateSaveBtnState(); });
+                input.addEventListener('blur', () => validateCfgField(item));
+                controlRow.appendChild(input);
+                control = input;
+            }
+
+            control.dataset.key = item.key;
+            control.dataset.type = item.type;
+
+            const keyEl = document.createElement('div');
+            keyEl.className = 'cfg-key';
+            keyEl.textContent = item.key;
+            const errorEl = document.createElement('div');
+            errorEl.className = 'cfg-error';
+
+            wrap.appendChild(labelRow);
+            // desc 说明文案：与 label 相同时不渲染，避免冗余
+            if (item.desc && item.desc.trim() !== (item.label || '').trim()) {
+                const descEl = document.createElement('div');
+                descEl.className = 'cfg-desc';
+                descEl.textContent = item.desc;
+                wrap.appendChild(descEl);
+            }
+            wrap.appendChild(controlRow);
+            if (item.hint) {
+                const hint = document.createElement('div');
+                hint.className = 'cfg-hint';
+                hint.textContent = item.hint;
+                wrap.appendChild(hint);
+            }
+            if (item.preview) {
+                const preview = document.createElement('div');
+                preview.className = 'cfg-preview';
+                preview.textContent = '留空时将使用：' + item.preview + '（按当前访问地址推导）';
+                wrap.appendChild(preview);
+            }
+            wrap.appendChild(keyEl);
+            wrap.appendChild(errorEl);
+            return wrap;
+        }
+
+        // 生成器注册表：gen 名称 → 按钮文案与生成函数
+        const CFG_GENERATORS = {
+            'secret-hex-64': {
+                label: '生成密钥',
+                generate: () => {
+                    const arr = new Uint8Array(32);
+                    crypto.getRandomValues(arr);
+                    return Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+                }
+            }
+        };
+
+        function buildGeneratorBtn(gen, input) {
+            const spec = CFG_GENERATORS[gen];
+            if (!spec) return null;
+            const genBtn = document.createElement('button');
+            genBtn.type = 'button';
+            genBtn.className = 'cfg-btn cfg-btn-primary';
+            genBtn.textContent = spec.label;
+            genBtn.onclick = () => {
+                input.value = spec.generate();
+                input.readOnly = false;
+                input.dataset.masked = 'false';
+                input.classList.remove('cfg-masked');
+                const editBtn = Array.from(input.parentElement.querySelectorAll('button')).find(b => b.textContent === '编辑');
+                if (editBtn) editBtn.classList.add('cfg-hidden');
+                updateSaveBtnState();
+            };
+            return genBtn;
+        }
+
+        // ---------------- 配置表单：校验 / 脏检查 / 保存 ----------------
+
+        function getCfgControl(key) {
+            return document.querySelector('#configForm .cfg-input[data-key="' + key + '"]');
+        }
+
+        function getCfgItemByKey(key) {
+            return configCache.find(i => i.key === key);
+        }
+
+        function getCfgCurrentValue(item, control) {
+            if (!control) return normalizeCfgValue(item, item.value);
+            // 仍处于脱敏状态的敏感项视为未修改
+            if (item.masked && control.dataset.masked === 'true') return normalizeCfgValue(item, item.value);
+            if (item.type === 'bool') return control.checked ? 'true' : 'false';
+            return control.value;
+        }
+
+        // bool 值归一化（兼容 JSON 布尔 true / 字符串 'True' 等存量形态），其他类型原样返回
+        function normalizeCfgValue(item, v) {
+            if (item.type === 'bool') {
+                return (String(v).toLowerCase() === 'true') ? 'true' : 'false';
+            }
+            return v;
+        }
+
+        function validateCfgField(item, control) {
+            control = control || getCfgControl(item.key);
+            if (!control) return true;
+            if (item.masked && control.dataset.masked === 'true') {
+                clearCfgFieldError(item.key);
+                return true;
+            }
+            const v = (item.type === 'bool') ? (control.checked ? 'true' : 'false') : control.value;
+            const msg = checkCfgValue(item, v);
+            if (msg) { setCfgFieldError(item.key, msg); return false; }
+            clearCfgFieldError(item.key);
+            return true;
+        }
+
+        // 镜像后端校验规则；空字符串一律放行
+        function checkCfgValue(item, v) {
+            if (v === '' || v === null || v === undefined) return '';
+            // 后端下发的格式正则（size/url/int 等）
+            if (item.pattern) {
+                try {
+                    const re = new RegExp(item.pattern, item.pattern_ignorecase ? 'i' : '');
+                    if (!re.test(String(v))) return '格式不正确';
+                } catch (e) { /* 非法 pattern 时跳过格式校验 */ }
+            }
+            if (item.type === 'int' || item.type === 'float') {
+                const n = Number(v);
+                if (String(v).trim() === '' || !isFinite(n)) return '请输入有效数字';
+                if (item.min !== null && item.min !== undefined && n < item.min) return '不能小于 ' + item.min;
+                if (item.max !== null && item.max !== undefined && n > item.max) return '不能大于 ' + item.max;
+            } else if (item.type === 'bool') {
+                if (v !== 'true' && v !== 'false') return '仅允许 true / false';
+            } else if (item.type === 'enum') {
+                // 与后端一致：大小写不敏感比较
+                if (item.options && !item.options.some(o => String(o).toLowerCase() === String(v).toLowerCase())) return '请选择有效的选项';
+            }
+            return '';
+        }
+
+        function setCfgFieldError(key, msg) {
+            cfgValidationErrors.add(key);
+            const wrap = document.querySelector('.cfg-item[data-key="' + key + '"]');
+            if (wrap) {
+                wrap.classList.add('invalid');
+                const err = wrap.querySelector('.cfg-error');
+                if (err) err.textContent = msg;
+            }
+            updateSaveBtnState();
+        }
+
+        function clearCfgFieldError(key) {
+            cfgValidationErrors.delete(key);
+            const wrap = document.querySelector('.cfg-item[data-key="' + key + '"]');
+            if (wrap) wrap.classList.remove('invalid');
+            updateSaveBtnState();
+        }
+
+        function updateSaveBtnState() {
+            const btn = document.getElementById('saveConfigBtn');
+            if (btn) btn.disabled = cfgValidationErrors.size > 0;
+        }
+
+        // depends_on 联动：依赖项当前值非 'true' 时隐藏本项（保留已输入内容）
+        function applyCfgDependents() {
+            document.querySelectorAll('#configForm .cfg-item[data-depends-on]').forEach(wrap => {
+                const depKey = wrap.dataset.dependsOn;
+                const depItem = getCfgItemByKey(depKey);
+                const depControl = depKey ? getCfgControl(depKey) : null;
+                if (!depItem || !depControl) return;
+                const depValue = getCfgCurrentValue(depItem, depControl);
+                if (String(depValue).toLowerCase() === 'true') {
+                    wrap.classList.remove('cfg-hidden');
                 } else {
-                    inputRow.appendChild(input);
+                    wrap.classList.add('cfg-hidden');
+                    clearCfgFieldError(wrap.dataset.key);
                 }
-
-                if (item.key === 'server.secret_key') {
-                    const genBtn = document.createElement("button");
-                    genBtn.type = "button";
-                    genBtn.innerText = "生成密钥";
-                    genBtn.style.padding = "8px 12px";
-                    genBtn.style.fontSize = "13px";
-                    genBtn.style.border = "1px solid #3b82f6";
-                    genBtn.style.borderRadius = "6px";
-                    genBtn.style.cursor = "pointer";
-                    genBtn.style.whiteSpace = "nowrap";
-                    genBtn.style.background = "#eff6ff";
-                    genBtn.style.color = "#3b82f6";
-                    genBtn.onclick = function() {
-                        const arr = new Uint8Array(32);
-                        crypto.getRandomValues(arr);
-                        const hex = Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
-                        input.value = hex;
-                        input.readOnly = false;
-                        input.style.color = "#1f2a44";
-                        input.dataset.masked = "false";
-                    };
-                    inputRow.appendChild(genBtn);
-                }
-                
-                const keyLabel = document.createElement("div");
-                keyLabel.style.fontSize = "12px";
-                keyLabel.style.color = "#94a3b8";
-                keyLabel.style.fontFamily = "monospace";
-                keyLabel.innerText = item.key;
-                
-                div.appendChild(label);
-                div.appendChild(inputRow);
-                div.appendChild(keyLabel);
-                container.appendChild(div);
             });
         }
-        
+
+        function filterConfigItems() {
+            const input = document.getElementById('configSearch');
+            if (!input) return;
+            const q = input.value.trim().toLowerCase();
+            document.querySelectorAll('#configForm .cfg-item').forEach(wrap => {
+                const item = getCfgItemByKey(wrap.dataset.key);
+                if (!item) return;
+                const text = ((item.label || '') + ' ' + (item.desc || '') + ' ' + item.key).toLowerCase();
+                wrap.style.display = (!q || text.includes(q)) ? '' : 'none';
+            });
+            // 无匹配项的分组卡片整体隐藏；搜索时自动展开含匹配项的分组
+            document.querySelectorAll('#configForm .cfg-card').forEach(card => {
+                const hasVisible = Array.from(card.querySelectorAll('.cfg-item')).some(w => w.style.display !== 'none');
+                card.style.display = hasVisible ? '' : 'none';
+                if (q && hasVisible && card.classList.contains('collapsed')) {
+                    card.classList.remove('collapsed');
+                    const body = card.querySelector('.cfg-card-body');
+                    if (body) body.style.display = '';
+                }
+            });
+        }
+
+        function collectChangedConfig() {
+            const changes = [];
+            configCache.forEach(item => {
+                const control = getCfgControl(item.key);
+                if (!control) return;
+                // depends_on 不满足（当前被隐藏）的项跳过提交，保留已输入内容
+                const wrapEl = document.querySelector('.cfg-item[data-key="' + item.key + '"]');
+                if (wrapEl && wrapEl.classList.contains('cfg-hidden')) return;
+                // 脱敏项未编辑时不提交占位值 '******'
+                if (item.masked && control.dataset.masked === 'true') return;
+                const v = getCfgCurrentValue(item, control);
+                // 敏感项编辑后留空 = 不修改，不提交（避免清空密钥）
+                if ((item.masked || item.sensitive) && v === '') return;
+                if (v !== configSnapshot[item.key]) changes.push({ key: item.key, value: v });
+            });
+            return changes;
+        }
+
         async function saveConfig() {
+            if (cfgValidationErrors.size > 0) {
+                showToast('存在校验错误，请先修正标红字段', 'error');
+                return;
+            }
+            let allValid = true;
+            configCache.forEach(item => {
+                // 被依赖隐藏的项不参与校验（避免隐藏字段标红阻断保存）
+                const wrapEl = document.querySelector('.cfg-item[data-key="' + item.key + '"]');
+                if (wrapEl && wrapEl.classList.contains('cfg-hidden')) {
+                    clearCfgFieldError(item.key);
+                    return;
+                }
+                if (!validateCfgField(item)) allValid = false;
+            });
+            if (!allValid) {
+                showToast('配置校验未通过，请检查标红字段', 'error');
+                return;
+            }
+            const changes = collectChangedConfig();
+            if (!changes.length) {
+                showToast('没有需要保存的变更', 'info');
+                return;
+            }
             try {
-                const inputs = document.querySelectorAll('#configForm input');
-                const newData = [];
-                inputs.forEach(input => {
-                    // 跳过仍然处于脱敏状态的敏感字段
-                    if (input.dataset.masked === 'true') return;
-                    newData.push({
-                        key: input.dataset.key,
-                        value: input.value
-                    });
-                });
-                
                 const res = await fetch('/api/config', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(newData)
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(changes)
                 });
                 const result = await res.json();
-                if (result.status === "ok") {
-                    alert('保存成功，部分配置可能需要重启生效');
+                if (result.status === 'ok') {
+                    changes.forEach(c => { configSnapshot[c.key] = c.value; });
+                    const restartKeys = result.restart_required || [];
+                    if (restartKeys.length) {
+                        // 键名映射为中文 label 展示
+                        const restartLabels = restartKeys.map(k => {
+                            const it = getCfgItemByKey(k);
+                            return (it && it.label) ? it.label : k;
+                        });
+                        showToast('保存成功，以下配置需重启服务后生效：' + restartLabels.join('、'), 'warning', 8000);
+                    } else {
+                        showToast('保存成功', 'success');
+                    }
                 } else {
-                    alert('保存失败: ' + result.message);
+                    if (Array.isArray(result.errors) && result.errors.length) {
+                        result.errors.forEach(err => setCfgFieldError(err.key, err.message));
+                        const first = getCfgControl(result.errors[0].key);
+                        if (first && first.scrollIntoView) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                    }
+                    showToast(result.message || '保存失败', 'error', 6000);
                 }
             } catch (e) {
-                alert('保存错误: ' + e.message);
+                showToast('保存错误: ' + e.message, 'error');
             }
+        }
+
+        function showToast(msg, type, duration) {
+            type = type || 'info';
+            duration = duration || 3000;
+            let stack = document.getElementById('toastStack');
+            if (!stack) {
+                stack = document.createElement('div');
+                stack.id = 'toastStack';
+                stack.className = 'toast-stack';
+                document.body.appendChild(stack);
+            }
+            const t = document.createElement('div');
+            t.className = 'toast toast-' + type;
+            t.textContent = msg;
+            stack.appendChild(t);
+            setTimeout(() => {
+                t.classList.add('hide');
+                setTimeout(() => t.remove(), 300);
+            }, duration);
         }
         
         async function loadStats() {

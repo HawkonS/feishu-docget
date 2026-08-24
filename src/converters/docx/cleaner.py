@@ -386,23 +386,9 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
     heading_style_ids = _get_heading_style_ids(doc, ns)
     template_heading_numbering_indents = _get_template_heading_numbering_indents(template_path, heading_style_ids, ns)
 
-    default_max_h = 23.0
-    try:
-        val = config.get('image.max_height', 23)
-        if isinstance(val, str) and (not val.strip()):
-            val = 23
-        default_max_h = float(val)
-    except (ValueError, TypeError):
-        pass
+    default_max_h = ConfigLoader.get_float('image.max_height', 23.0)
         
-    default_max_w = 16.0
-    try:
-        val_w = config.get('image.max_width', 16)
-        if isinstance(val_w, str) and (not val_w.strip()):
-            val_w = 16
-        default_max_w = float(val_w)
-    except (ValueError, TypeError):
-        pass
+    default_max_w = ConfigLoader.get_float('image.max_width', 16.0)
 
     target_max_w, target_max_h, target_align = _resolve_image_style(image_style, default_max_w, default_max_h, 1)
     table_image_style = image_style.get('tableImageStyle') if isinstance(image_style, dict) else None
