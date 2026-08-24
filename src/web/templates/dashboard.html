@@ -1948,10 +1948,10 @@
 
         function renderUsersTable(users) {
             let html = '<table class="project-table">';
-            html += '<thead><tr><th>姓名</th><th>部门</th><th>open_id</th><th style="width:150px">最近登录</th><th style="width:80px">状态</th><th style="width:80px">操作</th></tr></thead><tbody>';
+            html += '<thead><tr><th>姓名</th><th>open_id</th><th style="width:150px">最近登录</th><th style="width:80px">状态</th><th style="width:80px">操作</th></tr></thead><tbody>';
 
             if (users.length === 0) {
-                html += '<tr><td colspan="6" style="text-align:center; padding:20px; color:#94a3b8;">暂无登录用户</td></tr>';
+                html += '<tr><td colspan="5" style="text-align:center; padding:20px; color:#94a3b8;">暂无登录用户</td></tr>';
             } else {
                 for (const u of users) {
                     const name = u.name || '-';
@@ -1970,7 +1970,6 @@
 
                     html += `<tr>
                         <td><div style="display:flex; align-items:center; gap:10px;">${avatar}<span style="font-weight:500;">${escapeHtml(name)}</span></div></td>
-                        <td style="color:#64748b;">${escapeHtml(u.department) || '-'}</td>
                         <td style="color:#64748b; font-size:12px; font-family:monospace; word-break:break-all;">${escapeHtml(u.open_id) || '-'}</td>
                         <td style="color:#64748b;">${escapeHtml(formatDateTime(u.last_login_at))}</td>
                         <td>${statusTag}</td>

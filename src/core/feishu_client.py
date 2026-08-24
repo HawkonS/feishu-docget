@@ -24,8 +24,9 @@ class FeishuClient:
     def _is_permission_error(self, code=None, msg='', status_code=None):
         msg_lower = str(msg or '').lower()
         # 401 与用户身份相关错误码仅在使用用户身份时识别，机器人流程保持既有行为
+        # 99991679: 用户 token 缺少 scope 授权，同样视为可回退的权限错误
         if self._user_token:
-            if status_code == 401 or code in (99991664, 99991665):
+            if status_code == 401 or code in (99991664, 99991665, 99991679):
                 return True
         return (
             status_code == 403
@@ -94,12 +95,11 @@ class FeishuClient:
             msg = res.get('msg', '')
             code = res.get('code')
             self.logger.error('获取文档元数据失败: ' + str(msg))
-            if code == 99991668 or code == 99991663 or 'No permission' in msg or ('permission denied' in msg.lower()) or (code == 1770032):
-                from src.core.config_loader import config
-                bot_name = config.get('bot.name', 'Hawkon-Tool')
-                contact_name = config.get('contact.name', 'Hakwon')
-                error_msg = f'应用无权限，请为“{bot_name}”机器人开通管理权限，如有问题请联系 {contact_name}'
-                raise PermissionError(error_msg)
+            # 权限错误统一用 _is_permission_error 识别并抛 PermissionError，
+            # 与 get_blocks 等方法保持一致，触发 doc_service 的身份回退链；
+            # 其他错误仍静默返回 {}，上层标题退化为 doc_id
+            if self._is_permission_error(code, msg):
+                raise self._permission_error('获取文档元数据失败')
             return {}
         return res.get('data', {}).get('document', {}) or {}
 
@@ -282,7 +282,7 @@ class FeishuClient:
         token = self.get_token()
         if not token:
             return {}
-        url = f'https://open.feishu.cn/open-apis/contact/v3/users/{user_id}'
+        url = f'https://open.feishu.cn/open-apis/contact/v3/users/{user_id}?user_id_type=open_id'
         headers = {'Authorization': 'Bearer ' + token, 'Connection': 'keep-alive'}
         res = None
         for attempt in range(3):

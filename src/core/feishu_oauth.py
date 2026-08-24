@@ -1,13 +1,35 @@
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import requests
 
 from src.core.config_loader import ConfigLoader, config
 
-AUTHORIZE_URL = 'https://passport.feishu.cn/suite/passport/oauth/authorize'
+AUTHORIZE_URL = 'https://accounts.feishu.cn/open-apis/authen/v1/authorize'
 TOKEN_URL = 'https://open.feishu.cn/open-apis/authen/v2/oauth/token'
 USER_INFO_URL = 'https://open.feishu.cn/open-apis/authen/v1/user_info'
-TENANT_TOKEN_URL = 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal'
+
+# 用户 token 需携带的权限点位（旧 passport 端点不支持 scope 参数，已切换到 accounts 端点）
+OAUTH_SCOPES = [
+    'offline_access',                    # 获取 refresh_token 必需
+    'docx:document',                     # 创建及编辑新版文档（官方声明包含 docx:document:readonly）
+    'docx:document:create',              # 创建新版文档
+    'docx:document.block:convert',       # 转换文本为云文档块
+    'docs:document:copy',                # 复制云文档
+    'docs:document.comment:create',      # 添加、回复云文档中的评论
+    'docs:document.comment:read',        # 获取云文档中的评论
+    'docs:document.media:download',      # 下载云文档中的图片和附件
+    'docs:permission.member:create',     # 添加云文档协作者
+    'drive:drive',                       # 查看、评论、编辑和管理云空间中所有文件（官方声明包含 drive:drive:readonly）
+    'drive:file:download',               # 下载云空间下的文件
+    'space:document:retrieve',           # 获取云空间文件夹下的云文档清单
+    'wiki:node:read',                    # 查看知识空间节点信息
+    'wiki:node:retrieve',                # 查看知识空间节点列表
+    'wiki:space:read',                   # 查看知识空间信息
+    'contact:contact.base:readonly',   # 获取通讯录基本信息（调用 contact/v3/users 接口必需）
+    'contact:user.base:readonly',      # 获取用户基本信息（返回 name 字段必需，用于@提及人名解析）
+    'sheets:spreadsheet:readonly',       # 电子表格只读（保留）
+    'board:whiteboard:node:read',        # 画板节点读取（保留）
+]
 
 logger = ConfigLoader.get_logger('feishu_docget')
 
@@ -18,12 +40,15 @@ _session.mount('https://', _adapter)
 
 
 def build_authorize_url(app_id, redirect_uri, state):
-    """构造飞书 OAuth v2 授权页跳转 URL"""
+    """构造飞书 OAuth v2 授权页跳转 URL（accounts 端点，支持 scope 参数）"""
+    # quote_via=quote 使 scope 中空格编码为 %20（符合 RFC 3986），而非默认的 +
     query = urlencode({
-        'app_id': app_id,
+        'client_id': app_id,
+        'response_type': 'code',
         'redirect_uri': redirect_uri,
         'state': state,
-    })
+        'scope': ' '.join(OAUTH_SCOPES),
+    }, quote_via=quote)
     return f'{AUTHORIZE_URL}?{query}'
 
 
@@ -69,10 +94,7 @@ def refresh_user_token(refresh_token):
 
 
 def get_oauth_user_info(user_access_token):
-    """用用户 access_token 获取当前登录用户信息（authen/v1，data 包裹），失败返回 {}
-
-    department_ids 因 v1 接口不返回，改经 tenant 身份通讯录接口补充；任何失败降级为空列表，不阻断登录
-    """
+    """用用户 access_token 获取当前登录用户信息（authen/v1，data 包裹），失败返回 {}"""
     headers = {'Authorization': 'Bearer ' + user_access_token}
     try:
         resp = _session.get(USER_INFO_URL, headers=headers, timeout=10)
@@ -93,82 +115,11 @@ def get_oauth_user_info(user_access_token):
         return {}
     # 防御性兼容 data 包裹/顶层字段两种结构
     data = res.get('data') if isinstance(res.get('data'), dict) else res
-    open_id = data.get('open_id', '')
     info = {
         'name': data.get('name', ''),
-        'open_id': open_id,
+        'open_id': data.get('open_id', ''),
         'union_id': data.get('union_id', ''),
         'user_id': data.get('user_id', ''),
         'avatar_url': data.get('avatar_url', ''),
-        'department_ids': data.get('department_ids') or fetch_department_ids(open_id),
     }
     return info
-
-
-def fetch_department_ids(open_id):
-    """用 tenant 身份经通讯录接口获取用户部门 ID 列表；任何失败/无权限均降级为空列表，不阻断登录"""
-    try:
-        if not open_id:
-            return []
-        app_id = config.get('feishu.app_id', '')
-        app_secret = config.get('feishu.app_secret', '')
-        if not app_id or not app_secret:
-            return []
-        token_res = _session.post(
-            TENANT_TOKEN_URL,
-            json={'app_id': app_id, 'app_secret': app_secret},
-            timeout=10).json()
-        if token_res.get('code') != 0:
-            logger.warning(f'获取部门 ID: 获取 tenant_access_token 失败: {token_res.get("msg", "")}')
-            return []
-        tenant_token = token_res.get('tenant_access_token') or ''
-        if not tenant_token:
-            return []
-        headers = {'Authorization': 'Bearer ' + tenant_token}
-        url = f'https://open.feishu.cn/open-apis/contact/v3/users/{open_id}'
-        res = _session.get(url, headers=headers, params={'user_id_type': 'open_id'}, timeout=10).json()
-        if res.get('code') != 0:
-            logger.warning(f'获取部门 ID 失败 open_id={open_id}: {res.get("msg", "")}')
-            return []
-        return (res.get('data') or {}).get('user', {}).get('department_ids') or []
-    except Exception as e:
-        logger.warning(f'获取部门 ID 异常: {e}')
-        return []
-
-
-def resolve_department_names(department_ids):
-    """用 tenant 身份把部门 ID 列表解析为部门名称，"、" 拼接；任何异常均返回 ''"""
-    try:
-        if not department_ids:
-            return ''
-        app_id = config.get('feishu.app_id', '')
-        app_secret = config.get('feishu.app_secret', '')
-        if not app_id or not app_secret:
-            return ''
-        token_res = _session.post(
-            TENANT_TOKEN_URL,
-            json={'app_id': app_id, 'app_secret': app_secret},
-            timeout=10).json()
-        if token_res.get('code') != 0:
-            logger.warning(f'解析部门名称: 获取 tenant_access_token 失败: {token_res.get("msg", "")}')
-            return ''
-        tenant_token = token_res.get('tenant_access_token') or ''
-        if not tenant_token:
-            return ''
-        headers = {'Authorization': 'Bearer ' + tenant_token}
-        names = []
-        for dept_id in department_ids:
-            if not dept_id:
-                continue
-            url = f'https://open.feishu.cn/open-apis/contact/v3/departments/{dept_id}'
-            res = _session.get(url, headers=headers, params={'user_id_type': 'open_id'}, timeout=10).json()
-            if res.get('code') != 0:
-                logger.warning(f'解析部门名称失败 dept_id={dept_id}: {res.get("msg", "")}')
-                continue
-            name = (res.get('data') or {}).get('department', {}).get('name') or ''
-            if name:
-                names.append(name)
-        return '、'.join(names)
-    except Exception as e:
-        logger.warning(f'解析部门名称异常: {e}')
-        return ''
