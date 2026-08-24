@@ -88,21 +88,23 @@ def upsert_user(profile):
                 'union_id': profile.get('union_id', ''),
                 'user_id': profile.get('user_id', ''),
                 'name': profile.get('name', ''),
-                'department': profile.get('department', ''),
                 'avatar': profile.get('avatar', ''),
                 'disabled': False,
                 'access_token': profile.get('access_token', ''),
                 'refresh_token': profile.get('refresh_token', ''),
                 'token_expire_at': profile.get('token_expire_at', 0),
                 'refresh_token_expire_at': profile.get('refresh_token_expire_at', 0),
+                'scope': profile.get('scope', ''),
                 'token_invalid': False,
                 'created_at': now,
                 'last_login_at': now,
             }
         else:
-            for key in ('union_id', 'user_id', 'name', 'department', 'avatar',
+            # 清理旧版本残留的 department 字段（部门代码已移除，顺带迁移存量数据）
+            record.pop('department', None)
+            for key in ('union_id', 'user_id', 'name', 'avatar',
                         'access_token', 'refresh_token', 'token_expire_at',
-                        'refresh_token_expire_at'):
+                        'refresh_token_expire_at', 'scope'):
                 if key in profile:
                     record[key] = profile[key]
             # 重新登录/刷新成功会带来新凭证，清除凭证失效标记
@@ -198,6 +200,12 @@ def get_valid_access_token(open_id):
         return None
     if record.get('disabled'):
         return None
+    # 升级前登录的旧记录无 scope 字段，其 token 不含新权限且刷新无法增量获取，
+    # 视为凭证失效（与 token_invalid 相同的处理路径），引导用户重新登录
+    if not (record.get('scope') or '').strip():
+        logger.warning(f'用户 {open_id} 凭证缺少 scope（升级前登录），视为失效，需重新登录')
+        _mark_token_invalid(open_id)
+        return None
     now = int(_time.time())
     access_token = record.get('access_token') or ''
     try:
@@ -244,6 +252,9 @@ def get_valid_access_token(open_id):
                 return None
             current['access_token'] = token_data.get('access_token') or ''
             current['refresh_token'] = token_data.get('refresh_token') or refresh_token
+            # 刷新响应携带 scope 时更新；未携带则保留记录中原有值
+            if token_data.get('scope'):
+                current['scope'] = token_data['scope']
             try:
                 expires_in = int(token_data.get('expires_in') or 0)
             except (TypeError, ValueError):

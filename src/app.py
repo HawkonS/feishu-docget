@@ -216,6 +216,10 @@ def token_pre_refresh_thread():
                     open_id = record.get('open_id') or ''
                     if not open_id:
                         continue
+                    # 升级前的旧记录无 scope，预刷新无法获得新权限，跳过并引导重新登录
+                    if not (record.get('scope') or '').strip():
+                        logger.warning(f'用户 {open_id} 凭证缺少 scope（升级前登录），预刷新跳过，需重新登录')
+                        continue
                     try:
                         expire_at = int(record.get('token_expire_at') or 0)
                     except (TypeError, ValueError):
@@ -526,18 +530,17 @@ def auth_feishu_callback():
         open_id = info.get('open_id')
         if not open_id:
             return redirect('/login?error=user_info')
-        department = feishu_oauth.resolve_department_names(info.get('department_ids') or [])
         profile = {
             'open_id': open_id,
             'union_id': info.get('union_id', ''),
             'user_id': info.get('user_id', ''),
             'name': info.get('name', ''),
-            'department': department,
             'avatar': info.get('avatar_url', ''),
             'access_token': tokens['access_token'],
             'refresh_token': tokens.get('refresh_token', ''),
             'token_expire_at': int(time.time()) + int(tokens.get('expires_in', 7200)),
             'refresh_token_expire_at': int(time.time()) + int(tokens.get('refresh_token_expires_in') or 30 * 24 * 3600),
+            'scope': tokens.get('scope', ''),
         }
         # 仅对“已存在且被禁用”的记录拦截；is_disabled 对不存在用户返回 True，首次登录不能在此拦截
         existing = user_store.get_user(open_id)
