@@ -343,14 +343,7 @@ class FeishuDocxConverter:
             self._update_progress(message=f'正在并行下载 {total} 个图片及画板资源...', log_type='dynamic')
         if self.check_stop_func and self.check_stop_func():
             raise InterruptedError('任务已停止')
-        max_workers = 10
-        try:
-            val = ConfigLoader.load_config().get('download.threads', 10)
-            if isinstance(val, str) and (not val.strip()):
-                val = 10
-            max_workers = int(val)
-        except (ValueError, TypeError):
-            max_workers = 10
+        max_workers = ConfigLoader.get_int('download.threads', 10)
         failed_count = 0
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_token = {executor.submit(self._download_task, task): task for task in media_tasks}
@@ -761,13 +754,7 @@ class FeishuDocxConverter:
         if os.path.exists(file_path):
             is_svg = _is_svg_file(file_path)
             try:
-                try:
-                    val_w = ConfigLoader.load_config().get('image.max_width', 16)
-                    if isinstance(val_w, str) and (not val_w.strip()):
-                        val_w = 16
-                    max_w_cm = float(val_w)
-                except (ValueError, TypeError):
-                    max_w_cm = 16.0
+                max_w_cm = ConfigLoader.get_float('image.max_width', 16)
                 p = container.add_paragraph()
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 run = p.add_run()

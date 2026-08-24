@@ -24,11 +24,13 @@ from flask import Flask, jsonify, request, send_file, send_from_directory, sessi
 from src.services.doc_service import process_document
 from src.core.bot_store import normalize_bot_config
 from src.core import user_store, feishu_oauth
-from src.core.config_loader import config, ConfigLoader, parse_size, parse_bool, SENSITIVE_KEYS
+from src.core.config_loader import config, ConfigLoader, parse_size, SENSITIVE_KEYS, ALLOWED_CONFIG_KEYS, validate_config
 from src.converters.docx.style_manager import TableStyleManager
 from src.core.stats import update_download_stat, get_download_stats
 from src.core.utils import sanitize_name
 base_dir = os.path.abspath(config.get('workspace.dir', '.'))
+# 飞书 OAuth 回调路径（redirect_uri 推导与回调路由共用单源）
+OAUTH_CALLBACK_PATH = '/auth/feishu/callback'
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 HTML_DIR = os.path.join(CURRENT_DIR, 'web', 'templates')
 logger = ConfigLoader.get_logger('feishu_docget')
@@ -120,7 +122,7 @@ def _cleanup_temp(path):
 
 def _login_enabled():
     """飞书登录开关，由配置 login.enabled 控制"""
-    return parse_bool(config.get('login.enabled', 'false'))
+    return ConfigLoader.get_bool('login.enabled', False)
 
 
 def _get_redirect_uri():
@@ -130,9 +132,9 @@ def _get_redirect_uri():
         return configured
     base = request.url_root.rstrip('/')
     # nginx SSL 终结且未传 X-Forwarded-Proto 时 url_root 会是 http，需按配置纠正 scheme
-    if parse_bool(config.get('server.https.enabled', 'false')) and base.startswith('http://'):
+    if ConfigLoader.get_bool('server.https.enabled', False) and base.startswith('http://'):
         base = 'https://' + base[len('http://'):]
-    return base + '/auth/feishu/callback'
+    return base + OAUTH_CALLBACK_PATH
 
 
 def login_required(f):
@@ -170,7 +172,7 @@ def worker_thread():
     logger.info("工作线程已启动，等待任务...")
     while True:
         try:
-            max_concurrent = int(config.get('max.concurrent.downloads', 1))
+            max_concurrent = ConfigLoader.get_int('max.concurrent.downloads', 1)
             with active_downloads_lock:
                 if active_downloads >= max_concurrent:
                     time.sleep(1)
@@ -256,7 +258,7 @@ def check_cleanup_output():
                             size += os.path.getsize(fp)
                 items.append({'path': path, 'size': size, 'ctime': os.path.getctime(path)})
                 total_size += size
-        limit = parse_size(config.get('output.max_size', '10G'))
+        limit = ConfigLoader.get_size('output.max_size', parse_size('10G'))
         if total_size > limit:
             items.sort(key=lambda x: x['ctime'])
             for item in items:
@@ -510,7 +512,7 @@ def auth_feishu_authorize():
     session['oauth_state'] = state
     return redirect(feishu_oauth.build_authorize_url(config.get('feishu.app_id'), _get_redirect_uri(), state))
 
-@app.route('/auth/feishu/callback', methods=['GET'])
+@app.route(f'{OAUTH_CALLBACK_PATH}', methods=['GET'])
 def auth_feishu_callback():
     expected_state = session.pop('oauth_state', None)
     if not expected_state or not secrets.compare_digest(request.args.get('state') or '', expected_state):
@@ -993,7 +995,7 @@ def api_start():
             if job and job.get('status') == 'stopped':
                 return True
         return False
-    max_concurrent = int(config.get('max.concurrent.downloads', 1))
+    max_concurrent = ConfigLoader.get_int('max.concurrent.downloads', 1)
     current_active = 0
     current_pending = 0
     with jobs_lock:
@@ -1138,7 +1140,13 @@ def api_admin_download_file():
 @app.route('/api/config', methods=['GET'])
 @admin_required
 def get_config_api():
-    return jsonify(ConfigLoader.get_all_config_items())
+    items = ConfigLoader.get_all_config_items()
+    # 回调地址留空时下发按当前访问域名推导的预览值，供前端展示
+    for item in items:
+        if item['key'] == 'login.oauth.redirect_uri' and str(item.get('value') or '') == '':
+            item['preview'] = _get_redirect_uri()
+            break
+    return jsonify(items)
 
 @app.route('/api/config', methods=['POST'])
 @admin_required
@@ -1148,13 +1156,23 @@ def save_config_api():
     for item in data:
         key = item.get('key', '')
         value = item.get('value', '')
-        # 仅对敏感字段跳过脱敏值，避免将 ****** 写入配置
-        if key in SENSITIVE_KEYS and value == '******':
+        # 仅对敏感字段跳过脱敏值与空值，避免将 ****** 写入配置或清空密钥/密码
+        if key in SENSITIVE_KEYS and (value == '******' or str(value).strip() == ''):
+            continue
+        # 未知键静默丢弃，对齐旧的白名单过滤行为
+        if key not in ALLOWED_CONFIG_KEYS:
             continue
         new_config[key] = value
+    # 保存前按 Schema 校验本次变更
+    errors = validate_config(new_config)
+    if errors:
+        return jsonify({'status': 'error', 'message': '配置校验失败', 'errors': errors}), 422
+    meta_map = ConfigLoader.get_meta_map()
+    restart_required = [k for k in new_config if meta_map.get(k, {}).get('restart_required')]
     try:
-        ConfigLoader.save_config_from_admin(new_config)
-        return jsonify({'status': 'ok'})
+        if not ConfigLoader.save_config_from_admin(new_config):
+            return jsonify({'status': 'error', 'message': '写入配置文件失败，请检查文件权限或磁盘空间'})
+        return jsonify({'status': 'ok', 'restart_required': restart_required})
     except Exception as e:
         logger.error(f'保存配置失败: {e}', exc_info=True)
         return jsonify({'status': 'error', 'message': '保存配置失败，请稍后重试'})
@@ -1456,8 +1474,8 @@ def set_security_headers(response):
     return response
 
 if __name__ == '__main__':
-    port = int(config.get('server.port', '7800'))
-    https_enabled = config.get('server.https.enabled', 'false').lower() == 'true'
+    port = ConfigLoader.get_int('server.port', 7800)
+    https_enabled = ConfigLoader.get_bool('server.https.enabled', False)
     if https_enabled:
         from werkzeug.middleware.proxy_fix import ProxyFix
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
@@ -1470,7 +1488,7 @@ if __name__ == '__main__':
     # 优先使用 waitress 生产级 WSGI 服务器，未安装时自动降级到 Flask 开发服务器
     try:
         from waitress import serve
-        threads = int(config.get('server.threads', '8'))
+        threads = ConfigLoader.get_int('server.threads', 8)
         logger.info(f'使用 waitress 生产服务器启动 (threads={threads})')
         serve(app, host='0.0.0.0', port=port, threads=threads)
     except ImportError:
