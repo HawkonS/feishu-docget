@@ -24,6 +24,50 @@ class SecurityRegressionTests(unittest.TestCase):
         mode = stat.S_IMODE(os.stat('feishu-docget.properties').st_mode)
         self.assertEqual(mode, 0o600)
 
+    def test_sensitive_config_reveal_requires_explicit_admin_request(self):
+        with self.client.session_transaction() as session:
+            session['is_admin'] = True
+            session['_csrf_token'] = 'test-csrf-token'
+
+        config_response = self.client.get('/api/config')
+        self.assertEqual(config_response.status_code, 200)
+        app_secret = next(item for item in config_response.get_json() if item['key'] == 'feishu.app_secret')
+        self.assertTrue(app_secret['masked'])
+        self.assertEqual(app_secret['value'], '******')
+
+        self.assertEqual(
+            self.client.post('/api/config/reveal', json={'key': 'feishu.app_secret'}).status_code,
+            403,
+        )
+        response = self.client.post(
+            '/api/config/reveal',
+            json={'key': 'feishu.app_secret'},
+            headers={'X-CSRF-Token': 'test-csrf-token'},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()['value'], config.get('feishu.app_secret'))
+        self.assertEqual(response.headers.get('Cache-Control'), 'no-store')
+
+        invalid = self.client.post(
+            '/api/config/reveal',
+            json={'key': 'page.title'},
+            headers={'X-CSRF-Token': 'test-csrf-token'},
+        )
+        self.assertEqual(invalid.status_code, 400)
+
+        with self.client.session_transaction() as session:
+            session.pop('is_admin', None)
+            session['user'] = {'open_id': 'ou_feishu_admin', 'name': '飞书管理员'}
+        self.assertEqual(self.client.get('/api/config').status_code, 403)
+        self.assertEqual(
+            self.client.post(
+                '/api/config/reveal',
+                json={'key': 'feishu.app_secret'},
+                headers={'X-CSRF-Token': 'test-csrf-token'},
+            ).status_code,
+            403,
+        )
+
     def test_csrf_required_for_state_changes(self):
         self.client.get('/admin')
         self.assertEqual(

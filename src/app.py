@@ -325,6 +325,16 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+
+def system_admin_required(f):
+    """仅允许密码登录的固定系统管理员访问系统级配置。"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not _is_system_admin_session():
+            return (jsonify({'status': 'error', 'message': '仅系统管理员可访问配置管理'}), 403)
+        return f(*args, **kwargs)
+    return decorated_function
+
 def _download_scope(user_open_id=''):
     """返回任务的并发作用域。
 
@@ -993,6 +1003,7 @@ def admin_page():
         html = html.replace('[/* usage_url */]', escape(_safe_http_url(config.get('usage.url', 'https://github.com/HawkonS/feishu-docget'))))
         html = html.replace('[/* image_max_width */]', str(config.get('image.max_width', '16')))
         html = html.replace('[/* image_max_height */]', str(config.get('image.max_height', '23')))
+        html = html.replace('[/* is_system_admin */]', 'true' if _is_system_admin_session() else 'false')
         html = html.replace('/* [style_css] */', TableStyleManager.get_frontend_css())
         html = _inject_csrf(html)
         return html
@@ -1628,7 +1639,7 @@ def api_admin_download_file():
         return jsonify({'status': 'error', 'message': '文件下载失败'}), 500
 
 @app.route('/api/config', methods=['GET'])
-@admin_required
+@system_admin_required
 def get_config_api():
     items = ConfigLoader.get_all_config_items()
     # 回调地址留空时下发按当前访问域名推导的预览值，供前端展示
@@ -1638,8 +1649,24 @@ def get_config_api():
             break
     return jsonify(items)
 
+
+@app.route('/api/config/reveal', methods=['POST'])
+@system_admin_required
+def reveal_config_api():
+    """Return one sensitive config value after an explicit admin reveal request."""
+    data = request.get_json(silent=True) or {}
+    key = data.get('key')
+    if not isinstance(key, str) or key not in SENSITIVE_KEYS:
+        return jsonify({'status': 'error', 'message': '无效或非敏感配置项'}), 400
+    value = ConfigLoader.load_config().get(key, '')
+    response = jsonify({'status': 'ok', 'key': key, 'value': '' if value is None else str(value)})
+    # Passwords must not be retained by an intermediary or browser cache.
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
 @app.route('/api/config', methods=['POST'])
-@admin_required
+@system_admin_required
 def save_config_api():
     data = request.get_json(silent=True) or {}
     new_config = {}
