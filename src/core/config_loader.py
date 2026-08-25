@@ -536,6 +536,12 @@ class ConfigLoader:
         changed = False
         config_path = os.path.join(os.getcwd(), CONFIG_FILE)
         if os.path.exists(config_path):
+            # 配置文件包含 App Secret、后台密码和 Session 密钥，始终限制为
+            # 仅文件所有者可读写。旧版本可能创建为 0644，需要在读取时立即收紧。
+            try:
+                os.chmod(os.path.realpath(config_path), stat.S_IRUSR | stat.S_IWUSR)
+            except OSError as e:
+                _get_logger().warning(f'无法收紧配置文件权限 {config_path}: {e}')
             cls._config = cls._read_config(config_path)
         else:
             print(f'配置文件 {CONFIG_FILE} 未找到。正在创建默认配置...')
@@ -572,6 +578,21 @@ class ConfigLoader:
         os.makedirs(log_dir, exist_ok=True)
         os.makedirs(output_dir, exist_ok=True)
         os.makedirs(template_dir, exist_ok=True)
+        # 日志及用户库可能包含文档 URL、用户标识和 OAuth token。旧版本通常
+        # 受 umask 影响创建为 0644；加载时统一迁移为服务账号私有权限。
+        try:
+            os.chmod(os.path.realpath(log_dir), stat.S_IRWXU)
+            for root, dirs, files in os.walk(log_dir, followlinks=False):
+                for dirname in dirs:
+                    directory_path = os.path.join(root, dirname)
+                    if not os.path.islink(directory_path):
+                        os.chmod(directory_path, stat.S_IRWXU)
+                for filename in files:
+                    file_path = os.path.join(root, filename)
+                    if not os.path.islink(file_path):
+                        os.chmod(file_path, stat.S_IRUSR | stat.S_IWUSR)
+        except OSError as e:
+            _get_logger().warning(f'无法收紧日志目录权限 {log_dir}: {e}')
         cls._initialized = True
         return cls._config
 
@@ -604,7 +625,7 @@ class ConfigLoader:
         """原子写配置文件：先写同目录临时文件，成功后 os.replace 替换。
 
         成功返回 True，失败返回 False；若目标为 symlink 则透过链接写真实文件，
-        并在替换后尽力恢复原文件的权限与属主。
+        并在替换后保留原属主、将权限固定为 0600。
         """
         with _config_write_lock:
             # 若目标是 symlink，解析到真实文件，避免 replace 把链接替换成普通文件
@@ -637,9 +658,10 @@ class ConfigLoader:
                     os.fsync(f.fileno())
                 os.replace(tmp_path, real_path)
                 tmp_path = None
-                # mkstemp 固定 0600 且 replace 换 inode，需恢复原文件权限与属主
+                # 配置包含多个高敏感值，禁止继承旧的 0644/0660 权限。
+                # 保留属主，权限固定为 0600；这样原子替换后仍不会泄露密钥。
+                os.chmod(real_path, stat.S_IRUSR | stat.S_IWUSR)
                 if old_stat is not None:
-                    os.chmod(real_path, stat.S_IMODE(old_stat.st_mode))
                     try:
                         os.chown(real_path, old_stat.st_uid, old_stat.st_gid)
                     except (PermissionError, OSError):
@@ -785,5 +807,11 @@ class ConfigLoader:
             console = logging.StreamHandler()
             console.setFormatter(formatter)
             logger.addHandler(console)
+        # 日志可能包含文档 URL、用户标识及异常上下文，限制为服务用户可读。
+        try:
+            if os.path.exists(log_file):
+                os.chmod(os.path.realpath(log_file), stat.S_IRUSR | stat.S_IWUSR)
+        except OSError:
+            pass
         return logger
 config = ConfigLoader.load_config()

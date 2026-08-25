@@ -36,6 +36,8 @@ def _load():
     data = {}
     if os.path.exists(path):
         try:
+            # 用户库包含飞书 access/refresh token，旧版本文件可能为 0644。
+            os.chmod(os.path.realpath(path), 0o600)
             with open(path, 'r', encoding='utf-8') as f:
                 loaded = json.load(f)
                 if isinstance(loaded, dict):
@@ -90,6 +92,7 @@ def upsert_user(profile):
                 'name': profile.get('name', ''),
                 'avatar': profile.get('avatar', ''),
                 'disabled': False,
+                'is_admin': False,
                 'access_token': profile.get('access_token', ''),
                 'refresh_token': profile.get('refresh_token', ''),
                 'token_expire_at': profile.get('token_expire_at', 0),
@@ -131,6 +134,10 @@ def list_users():
     for record in records:
         record.pop('access_token', None)
         record.pop('refresh_token', None)
+        # 兼容旧版本用户记录：管理员字段默认关闭；没有创建时间时用最早可用的登录时间兜底展示。
+        record.setdefault('is_admin', False)
+        if not record.get('created_at') and record.get('last_login_at'):
+            record['created_at'] = record['last_login_at']
     records.sort(key=lambda r: r.get('last_login_at') or '', reverse=True)
     return records
 
@@ -144,6 +151,26 @@ def set_disabled(open_id, disabled):
             return False
         record['disabled'] = bool(disabled)
         return _save(users)
+
+
+def set_admin(open_id, is_admin):
+    """设置用户的后台管理员权限；用户不存在或落盘失败时返回 False"""
+    with _lock:
+        users = _load()
+        record = users.get(open_id)
+        if record is None:
+            return False
+        record['is_admin'] = bool(is_admin)
+        return _save(users)
+
+
+def is_admin(open_id):
+    """返回用户是否拥有后台管理员权限。"""
+    if not open_id:
+        return False
+    with _lock:
+        record = _load().get(open_id)
+    return bool(record and record.get('is_admin', False) and not record.get('disabled', False))
 
 
 def is_disabled(open_id):

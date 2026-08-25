@@ -133,6 +133,23 @@
             background: #e3f2ff;
             color: #2563eb;
         }
+        .user-card-admin {
+            display: none;
+            align-items: center;
+            border: 1px solid #bfdbfe;
+            background: #eff6ff;
+            color: #2563eb;
+            font-size: 12px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+        .user-card-admin:hover {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
         .hero-input {
             display: flex;
             gap: 12px;
@@ -1614,7 +1631,7 @@
             const tSelect = document.getElementById("templateSelectMobile");
             
             // 将默认模板排序到第一位
-            const defaultTemplate = "[/* default_template */]";
+            const defaultTemplate = [/* default_template_json */];
             templates.sort((a, b) => {
                 if (a.name === defaultTemplate) return -1;
                 if (b.name === defaultTemplate) return 1;
@@ -2702,6 +2719,7 @@
 
         // 右上角悬浮用户卡片：显隐由后端注入的登录标志判定，用户名仅作展示
         // 注意：#userCard 位于本 <script> 之后，必须延迟到 DOMContentLoaded 执行，否则取不到元素
+        var homepageIsAdmin = '[/* user_is_admin */]' === 'true';
         document.addEventListener('DOMContentLoaded', function () {
             var card = document.getElementById('userCard');
             var nameEl = document.getElementById('userCardName');
@@ -2723,7 +2741,7 @@
                         letterEl.textContent = displayName ? Array.from(displayName)[0].toUpperCase() : '用';
                     }
                     // 后端注入了头像 URL 时显示真实头像；未注入或加载失败时保留首字母回退样式
-                    var avatarUrl = '[/* user_avatar */]';
+                    var avatarUrl = [/* user_avatar_js */];
                     var imgEl = document.getElementById('userCardAvatarImg');
                     if (imgEl) {
                         if (!avatarUrl) {
@@ -2740,16 +2758,21 @@
                         }
                     }
                 }
+                var adminLink = document.getElementById('userCardAdmin');
+                if (adminLink && homepageIsAdmin) {
+                    adminLink.style.display = 'inline-flex';
+                }
                 card.style.display = 'flex';
             }
         });
 
-        // 用户退出登录：该 API 只允许 POST
+        // 用户退出登录：根据当前身份调用对应的 session 清理接口。
         function userLogout() {
-            fetch('/api/user/logout', { method: 'POST' })
+            var logoutUrl = homepageIsAdmin ? '/api/admin/logout' : '/api/user/logout';
+            fetch(logoutUrl, { method: 'POST' })
                 .then(function (res) {
                     if (res.ok) {
-                        window.location.href = '/login';
+                        window.location.href = homepageIsAdmin ? '/' : '/login';
                     } else {
                         alert('退出失败，请重试');
                     }
@@ -2764,6 +2787,7 @@
         <div class="user-card-avatar" id="userCardAvatar"><img id="userCardAvatarImg" src="[/* user_avatar */]" alt="" onerror="this.remove()"><span id="userCardAvatarLetter">用</span></div>
         <span class="user-card-name" id="userCardName">[/* user_name */]</span>
         <span id="userCardOpenId" style="display: none;">[/* user_open_id */]</span>
+        <a class="user-card-admin" id="userCardAdmin" href="[/* admin_url */]" title="进入管理后台">进入后台</a>
         <button class="user-card-logout" onclick="userLogout()" title="退出登录">退出登录</button>
     </div>
     <div class="footer-copyright">© Hawkon 2025 | <a href="[/* usage_url */]" target="_blank" style="color: #94a3b8; text-decoration: none;">联系作者</a></div>
