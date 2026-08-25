@@ -13,6 +13,7 @@ import uuid
 import shutil
 import queue
 import time
+from collections import deque
 from functools import wraps
 from datetime import datetime, timedelta
 import subprocess
@@ -60,7 +61,12 @@ jobs = {}
 jobs_lock = threading.Lock()
 download_queue = queue.Queue()
 active_downloads_lock = threading.Lock()
+# active_downloads 仍表示整个进程中正在执行的任务总数，便于日志和管理端查看。
+# 个人登录任务另按 open_id 计数；机器人任务共享 active_bot_downloads 计数。
 active_downloads = 0
+active_downloads_by_account = {}
+active_bot_downloads = 0
+download_dispatch_condition = threading.Condition(active_downloads_lock)
 
 _login_attempts = {}  # {ip: {'count': N, 'locked_until': timestamp, 'ban_level': N}}
 _upload_attempts = {}  # {ip: {'count': N, 'locked_until': timestamp, 'ban_level': N}} 模板上传密码尝试记录
@@ -167,37 +173,156 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-def worker_thread():
+def _download_scope(user_open_id=''):
+    """返回任务的并发作用域。
+
+    user_open_id 只会在个人登录任务中传入；空值表示机器人/未登录任务，
+    这些任务继续共享一个并发池，以保留原有的机器人请求限流行为。
+    """
+    user_open_id = str(user_open_id or '').strip()
+    if user_open_id:
+        return 'account', user_open_id
+    return 'bot', '__bot__'
+
+
+def _scope_limit(scope_type):
+    """读取并发上限。配置项保持兼容，但登录任务按账号分别计算。"""
+    return max(1, ConfigLoader.get_int('max.concurrent.downloads', 1))
+
+
+def _scope_active_count_locked(scope_type, scope_id):
+    if scope_type == 'account':
+        return active_downloads_by_account.get(scope_id, 0)
+    return active_bot_downloads
+
+
+def _scope_has_slot_locked(scope_type, scope_id):
+    return _scope_active_count_locked(scope_type, scope_id) < _scope_limit(scope_type)
+
+
+def _scope_job_counts(user_open_id=''):
+    """统计当前作用域中已运行/等待的任务，用于提交接口展示排队信息。"""
+    scope_type, scope_id = _download_scope(user_open_id)
+    active = 0
+    pending = 0
+    with jobs_lock:
+        for job in jobs.values():
+            job_scope_type, job_scope_id = _download_scope(job.get('user_open_id', ''))
+            if (job_scope_type, job_scope_id) != (scope_type, scope_id):
+                continue
+            if job.get('status') == 'running':
+                active += 1
+            elif job.get('status') == 'pending':
+                pending += 1
+    return scope_type, scope_id, active, pending
+
+
+def _mark_download_started(user_open_id=''):
+    """在调度锁内占用一个并发槽位。"""
+    global active_downloads, active_bot_downloads
+    scope_type, scope_id = _download_scope(user_open_id)
+    active_downloads += 1
+    if scope_type == 'account':
+        active_downloads_by_account[scope_id] = active_downloads_by_account.get(scope_id, 0) + 1
+    else:
+        active_bot_downloads += 1
+    return scope_type, scope_id
+
+
+def _mark_download_finished(scope_type, scope_id):
+    """释放并发槽位并唤醒调度器。调用方必须持有 active_downloads_lock。"""
+    global active_downloads, active_bot_downloads
+    active_downloads = max(0, active_downloads - 1)
+    if scope_type == 'account':
+        count = active_downloads_by_account.get(scope_id, 1) - 1
+        if count > 0:
+            active_downloads_by_account[scope_id] = count
+        else:
+            active_downloads_by_account.pop(scope_id, None)
+    else:
+        active_bot_downloads = max(0, active_bot_downloads - 1)
+
+
+def _run_download_job(job_args, scope_type, scope_id):
+    """执行单个任务，并在结束后释放对应账号/机器人并发槽位。"""
     global active_downloads
-    logger.info("工作线程已启动，等待任务...")
+    try:
+        run_job(*job_args)
+    except Exception as e:
+        logger.error(f'工作线程任务错误: {e}')
+    finally:
+        with download_dispatch_condition:
+            _mark_download_finished(scope_type, scope_id)
+            download_dispatch_condition.notify_all()
+            current_active = active_downloads
+        download_queue.task_done()
+        logger.info(f"任务完成，当前活动任务数: {current_active}")
+
+
+def worker_thread():
+    """调度下载队列。
+
+    调度器只在对应作用域有空闲槽位时才取出任务执行，避免某个账号的排队任务
+    占满工作线程后把其他账号也饿死。每个已获准的任务使用独立守护线程执行，
+    因此不同个人账号可以同时下载，而同一账号仍受 max.concurrent.downloads 限制。
+    """
+    pending = deque()
+    logger.info("下载任务调度线程已启动，等待任务...")
     while True:
         try:
-            max_concurrent = ConfigLoader.get_int('max.concurrent.downloads', 1)
-            with active_downloads_lock:
-                if active_downloads >= max_concurrent:
-                    time.sleep(1)
+            # 至少接收一个任务，随后尽可能批量收取，减少队列高峰时的调度延迟。
+            if not pending:
+                try:
+                    pending.append(download_queue.get(timeout=0.5))
+                except queue.Empty:
+                    pass
+            while True:
+                try:
+                    pending.append(download_queue.get_nowait())
+                except queue.Empty:
+                    break
+
+            with download_dispatch_condition:
+                selected_index = None
+                selected_scope = None
+                for index, job_args in enumerate(pending):
+                    user_open_id = job_args[20] if len(job_args) > 20 else ''
+                    scope_type, scope_id = _download_scope(user_open_id)
+                    if _scope_has_slot_locked(scope_type, scope_id):
+                        selected_index = index
+                        selected_scope = (scope_type, scope_id)
+                        break
+                if selected_index is None:
+                    if pending:
+                        # 当前所有任务都在等待各自账号的槽位释放。
+                        download_dispatch_condition.wait(timeout=0.5)
                     continue
+                job_args = pending[selected_index]
+                del pending[selected_index]
+                _mark_download_started(job_args[20] if len(job_args) > 20 else '')
+                scope_type, scope_id = selected_scope
+                logger.info(f"调度任务，作用域={scope_type}:{scope_id}，当前活动任务数={active_downloads}")
+
             try:
-                job_args = download_queue.get(timeout=1)
-            except queue.Empty:
-                continue
-            
-            logger.info(f"工作线程获取到任务，当前活动任务数: {active_downloads}")
-            with active_downloads_lock:
-                active_downloads += 1
-            try:
-                run_job(*job_args)
-            except Exception as e:
-                logger.error(f'工作线程任务错误: {e}')
-            finally:
-                with active_downloads_lock:
-                    active_downloads -= 1
+                threading.Thread(
+                    target=_run_download_job,
+                    args=(job_args, scope_type, scope_id),
+                    daemon=True,
+                    name=f'download-{job_args[0]}',
+                ).start()
+            except Exception:
+                # 极少见的线程创建失败也必须归还槽位并结束队列任务，避免永久卡死。
+                with download_dispatch_condition:
+                    _mark_download_finished(scope_type, scope_id)
+                    download_dispatch_condition.notify_all()
                 download_queue.task_done()
-                logger.info(f"任务完成，当前活动任务数: {active_downloads}")
+                raise
         except Exception as e:
-            logger.error(f'工作线程循环错误: {e}')
+            logger.error(f'下载任务调度循环错误: {e}', exc_info=True)
             time.sleep(1)
-threading.Thread(target=worker_thread, daemon=True).start()
+
+
+threading.Thread(target=worker_thread, daemon=True, name='download-dispatcher').start()
 
 def token_pre_refresh_thread():
     """后台预刷新线程：定期为 access_token 即将过期的用户提前刷新，
@@ -990,7 +1115,7 @@ def api_start():
     session.modified = True
     is_temp_template = template.startswith('temp_')
     with jobs_lock:
-        jobs[job_id] = {'status': 'pending', 'progress': 0, 'message': '等待中', 'job_id': job_id, 'created_at': datetime.now().isoformat(timespec='seconds'), 'doc_url': doc_url, 'template': template, 'table_style': table_style, 'unordered_list_style': unordered_list_style, 'body_style': body_style, 'image_style': image_style, 'table_config': table_config, 'margin_config': margin_config, 'code_block_config': code_block_config, 'document_info': document_info, 'custom_bot_enabled': bool(bot_config), 'client_ip': client_ip, 'user_name': user_name, 'logs': [{'ts': datetime.now().isoformat(timespec='seconds'), 'message': '任务已创建'}]}
+        jobs[job_id] = {'status': 'pending', 'progress': 0, 'message': '等待中', 'job_id': job_id, 'created_at': datetime.now().isoformat(timespec='seconds'), 'doc_url': doc_url, 'template': template, 'table_style': table_style, 'unordered_list_style': unordered_list_style, 'body_style': body_style, 'image_style': image_style, 'table_config': table_config, 'margin_config': margin_config, 'code_block_config': code_block_config, 'document_info': document_info, 'custom_bot_enabled': bool(bot_config), 'client_ip': client_ip, 'user_open_id': user_open_id, 'user_name': user_name, 'logs': [{'ts': datetime.now().isoformat(timespec='seconds'), 'message': '任务已创建'}]}
 
     def check_stop():
         with jobs_lock:
@@ -998,22 +1123,16 @@ def api_start():
             if job and job.get('status') == 'stopped':
                 return True
         return False
-    max_concurrent = ConfigLoader.get_int('max.concurrent.downloads', 1)
-    current_active = 0
-    current_pending = 0
-    with jobs_lock:
-        for j in jobs.values():
-            if j['status'] == 'running':
-                current_active += 1
-            elif j['status'] == 'pending':
-                current_pending += 1
-    is_queued = False
+    scope_type, scope_id, current_active, current_pending = _scope_job_counts(user_open_id)
+    # 个人登录任务按 open_id 各自限流；机器人/未登录任务仍共用一个全局槽位。
     with active_downloads_lock:
-        if active_downloads >= max_concurrent:
-            is_queued = True
+        active_scope_count = _scope_active_count_locked(scope_type, scope_id)
+        is_queued = active_scope_count >= _scope_limit(scope_type)
     if is_queued:
-        wait_count = current_active + max(0, current_pending - 1)
-        msg = f'因并发限制，创建下载任务排队中，您还需等待 {wait_count} 份文档下载完成'
+        # 调度线程占槽位早于 run_job 更新状态，取两者较大值避免显示“还需等待 0 份”。
+        wait_count = max(current_active, active_scope_count) + max(0, current_pending - 1)
+        scope_label = '账号' if scope_type == 'account' else '机器人'
+        msg = f'因{scope_label}并发限制，创建下载任务排队中，您还需等待 {wait_count} 份文档下载完成'
         with jobs_lock:
             jobs[job_id]['message'] = msg
             jobs[job_id]['logs'].append({'ts': datetime.now().isoformat(timespec='seconds'), 'message': msg})
