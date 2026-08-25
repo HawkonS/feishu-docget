@@ -1671,7 +1671,7 @@
                 <div class="sidebar-brand"><span class="sidebar-brand-mark">F</span><span>文档工作台<small>FEISHU DOCGET</small></span></div>
                 <nav class="nav flex-column gap-1 px-2" aria-label="后台模块">
                     <button type="button" class="nav-item active" onclick="switchTab('projects')"><span class="nav-icon">▦</span><span>项目管理</span></button>
-                    <button type="button" class="nav-item" onclick="switchTab('config')"><span class="nav-icon">⚙</span><span>配置管理</span></button>
+                    <button type="button" class="nav-item" data-system-admin-only="true" onclick="switchTab('config')"><span class="nav-icon">⚙</span><span>配置管理</span></button>
                     <button type="button" class="nav-item" onclick="switchTab('stats')"><span class="nav-icon">↗</span><span>下载统计</span></button>
                     <button type="button" class="nav-item" onclick="switchTab('users')"><span class="nav-icon">◎</span><span>用户管理</span></button>
                     <button type="button" class="nav-item" onclick="switchTab('logs')"><span class="nav-icon">≡</span><span>日志检查</span></button>
@@ -2021,6 +2021,7 @@
                 .replace(/\r/g, '\\r');
         }
 
+        const isSystemAdmin = '[/* is_system_admin */]' === 'true';
         let adminData = null;
         let selectedTemplate = "";
         let selectedStyle = "1";
@@ -2044,6 +2045,7 @@
         let statusTimer = null;
 
         function switchTab(name) {
+            if (name === 'config' && !isSystemAdmin) name = 'projects';
             if (window.location.hash.substring(1) === name) {
                 renderTab(name);
             } else {
@@ -2054,6 +2056,10 @@
         let isMonitoring = false;
 
         function renderTab(name) {
+            if (name === 'config' && !isSystemAdmin) {
+                name = 'projects';
+                if (window.location.hash !== '#projects') window.location.hash = 'projects';
+            }
             // 切换 Tab 时，如果是离开 system，则暂停监控
             if (name !== 'system' && isMonitoring) {
                 toggleSystemMonitor(); // 关闭
@@ -2102,6 +2108,9 @@
         // 初始化只渲染当前 Tab；各 Tab 在切换时独立请求自己的数据。
         document.addEventListener('DOMContentLoaded', () => {
              bindUploadModalInputs();
+             if (!isSystemAdmin) {
+                 document.querySelectorAll('[data-system-admin-only="true"]').forEach(el => el.remove());
+             }
              
              const hash = window.location.hash.substring(1);
              const validTabs = ['projects', 'config', 'stats', 'users', 'logs', 'templates', 'system'];
@@ -2258,10 +2267,38 @@
                 eyeBtn.type = 'button';
                 eyeBtn.className = 'cfg-btn btn btn-outline-secondary btn-sm';
                 eyeBtn.textContent = '显示';
-                eyeBtn.onclick = () => {
+                eyeBtn.onclick = async () => {
                     const shown = input.type === 'text';
-                    input.type = shown ? 'password' : 'text';
-                    eyeBtn.textContent = shown ? '显示' : '隐藏';
+                    if (shown) {
+                        input.type = 'password';
+                        eyeBtn.textContent = '显示';
+                        return;
+                    }
+                    if (input.dataset.revealed === 'true') {
+                        input.type = 'text';
+                        eyeBtn.textContent = '隐藏';
+                        return;
+                    }
+                    eyeBtn.disabled = true;
+                    try {
+                        const res = await fetch('/api/config/reveal', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ key: item.key })
+                        });
+                        const result = await res.json();
+                        if (!res.ok || result.status !== 'ok') {
+                            throw new Error(result.message || '读取配置失败');
+                        }
+                        input.value = result.value || '';
+                        input.dataset.revealed = 'true';
+                        input.type = 'text';
+                        eyeBtn.textContent = '隐藏';
+                    } catch (e) {
+                        showToast('显示配置失败: ' + e.message, 'error');
+                    } finally {
+                        eyeBtn.disabled = false;
+                    }
                 };
 
                 controlRow.appendChild(input);
