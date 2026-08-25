@@ -125,7 +125,7 @@ def get_user(open_id):
 
 
 def list_users(page=None, page_size=None, query=''):
-    """按 last_login_at 倒序返回用户；传分页参数时由 SQLite 直接分页。"""
+    """管理员置顶后按最近登录时间返回用户；传分页参数时由 SQLite 直接分页。"""
     with _lock:
         result = sqlite_store.list_users(_base_dir(), config, page=page, page_size=page_size, query=query)
     for record in result['items']:

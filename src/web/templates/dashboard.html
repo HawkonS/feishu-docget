@@ -1756,7 +1756,7 @@
                             <input type="date" id="statsSearchDate" onchange="searchStats()" class="md-search-input form-control form-control-sm" style="width:140px;">
                         </div>
                         <div class="toolbar-actions">
-                            <button onclick="deleteSelectedStats()" class="btn btn-outline-danger btn-sm btn-start" style="padding: 8px 16px;">批量删除</button>
+                            <button data-system-admin-only="true" onclick="deleteSelectedStats()" class="btn btn-outline-danger btn-sm btn-start" style="padding: 8px 16px;">批量删除</button>
                             <button onclick="downloadAll()" class="btn btn-primary btn-sm btn-start" style="padding: 8px 16px;">下载全部文件</button>
                         </div>
                     </div>
@@ -1823,7 +1823,7 @@
                             <div style="font-size: 14px; color: #64748b;">管理用于文档生成的 Word 模板文件</div>
                             <div style="display:flex; align-items:center; gap:10px;">
                                 <input type="search" id="templatesSearch" placeholder="搜索模板" oninput="searchTemplates()" class="md-search-input form-control form-control-sm" style="width:180px;">
-                                <button onclick="openUploadModal()" class="btn btn-primary btn-sm btn-start" style="padding: 8px 16px;">+ 上传模板</button>
+                                <button data-system-admin-only="true" onclick="openUploadModal()" class="btn btn-primary btn-sm btn-start" style="padding: 8px 16px;">+ 上传模板</button>
                             </div>
                         </div>
                         <!-- Grid -->
@@ -3315,6 +3315,9 @@
         function renderFileRow(f, displayName) {
             const name = displayName || f.rel_path;
             const download = `/api/admin/download_file?path=${encodeURIComponent(f.path)}`;
+            const deleteAction = isSystemAdmin
+                ? `<button class="danger" onclick="deleteFile('${escapeHtml(escapeJsString(f.path))}')">删除</button>`
+                : '';
             return `
                 <div class="tree-file-row">
                     <span class="tree-file-icon">•</span>
@@ -3322,7 +3325,7 @@
                     <span class="tree-file-date">${escapeHtml(f.ctime || '-')}</span>
                     <span class="tree-row-actions">
                         <a href="${download}">下载</a>
-                        <button class="danger" onclick="deleteFile('${escapeHtml(escapeJsString(f.path))}')">删除</button>
+                        ${deleteAction}
                     </span>
                 </div>
             `;
@@ -3353,6 +3356,9 @@
                 const child = node.folders[folder];
                 const folderPath = basePath.replace(/\\/g, '/') + '/' + folder;
                 const subId = encodeKey(folderPath);
+                const deleteAction = isSystemAdmin
+                    ? `<button class="danger" onclick="deleteProject('${escapeHtml(escapeJsString(folderPath))}')">删除</button>`
+                    : '';
                 html += `
                     <div class="tree-folder-row">
                         <button class="tree-toggle" onclick="toggleSubfolder('${escapeHtml(escapeJsString(subId))}', this)">
@@ -3361,7 +3367,7 @@
                         </button>
                         <span class="tree-row-actions">
                             <a href="/api/admin/download_folder?path=${encodeURIComponent(folderPath)}">打包下载</a>
-                            <button class="danger" onclick="deleteProject('${escapeHtml(escapeJsString(folderPath))}')">删除</button>
+                            ${deleteAction}
                         </span>
                     </div>
                     <div id="sub-${escapeHtml(subId)}" class="tree-folder-children">${renderFileTree(child, folderPath)}</div>
@@ -3425,6 +3431,9 @@
                 }
                 projectCache.forEach(p => {
                     const folderId = encodeKey(p.path);
+                    const deleteAction = isSystemAdmin
+                        ? `<button class="danger" onclick="deleteProject('${escapeHtml(escapeJsString(p.path))}')">删除</button>`
+                        : '';
                     const tr = document.createElement("tr");
                     tr.innerHTML = `
                         <td>
@@ -3437,7 +3446,7 @@
                         <td style="color:#64748b; font-size:13px;">${escapeHtml(p.ctime)}</td>
                         <td style="color:#64748b; font-size:13px;">${escapeHtml(formatSize(p.size || 0))}</td>
                         <td>
-                            <span class="tree-row-actions"><a href="/api/admin/download_project?path=${encodeURIComponent(p.path)}">下载项目</a><button class="danger" onclick="deleteProject('${escapeHtml(escapeJsString(p.path))}')">删除</button></span>
+                            <span class="tree-row-actions"><a href="/api/admin/download_project?path=${encodeURIComponent(p.path)}">下载项目</a>${deleteAction}</span>
                         </td>
                     `;
                     const trDetail = document.createElement("tr");
@@ -3742,37 +3751,39 @@
                 actions.style.gap = "12px";
                 actions.style.alignItems = "center";
                 
-                // Edit Dropdown
-                const editDropdown = document.createElement("div");
-                editDropdown.className = "dropdown";
-                const editTrigger = document.createElement("span");
-                editTrigger.className = "action-link blue";
-                editTrigger.style.cssText = "cursor:pointer; display:flex; align-items:center; font-size:13px;";
-                editTrigger.textContent = "编辑 ▼";
-                const dropdownContent = document.createElement("div");
-                dropdownContent.className = "dropdown-content";
-                [
-                    ['重命名', () => openRenameModal(t.name)],
-                    ['更换文件', () => openUploadModal('file', t.name)],
-                    ['更换图片', () => openUploadModal('image', t.name)]
-                ].forEach(([label, handler]) => {
-                    const item = document.createElement("div");
-                    item.className = "dropdown-item";
-                    item.textContent = label;
-                    item.addEventListener('click', handler);
-                    dropdownContent.appendChild(item);
-                });
-                editDropdown.appendChild(editTrigger);
-                editDropdown.appendChild(dropdownContent);
-                actions.appendChild(editDropdown);
+                if (isSystemAdmin) {
+                    // Template maintenance is reserved for the system administrator.
+                    const editDropdown = document.createElement("div");
+                    editDropdown.className = "dropdown";
+                    const editTrigger = document.createElement("span");
+                    editTrigger.className = "action-link blue";
+                    editTrigger.style.cssText = "cursor:pointer; display:flex; align-items:center; font-size:13px;";
+                    editTrigger.textContent = "编辑 ▼";
+                    const dropdownContent = document.createElement("div");
+                    dropdownContent.className = "dropdown-content";
+                    [
+                        ['重命名', () => openRenameModal(t.name)],
+                        ['更换文件', () => openUploadModal('file', t.name)],
+                        ['更换图片', () => openUploadModal('image', t.name)]
+                    ].forEach(([label, handler]) => {
+                        const item = document.createElement("div");
+                        item.className = "dropdown-item";
+                        item.textContent = label;
+                        item.addEventListener('click', handler);
+                        dropdownContent.appendChild(item);
+                    });
+                    editDropdown.appendChild(editTrigger);
+                    editDropdown.appendChild(dropdownContent);
+                    actions.appendChild(editDropdown);
 
-                if (!t.is_default) {
-                    const setDefBtn = document.createElement("span");
-                    setDefBtn.className = "action-link blue";
-                    setDefBtn.innerText = "设为默认";
-                    setDefBtn.style.fontSize = "13px";
-                    setDefBtn.onclick = () => setDefaultTemplate(t.name);
-                    actions.appendChild(setDefBtn);
+                    if (!t.is_default) {
+                        const setDefBtn = document.createElement("span");
+                        setDefBtn.className = "action-link blue";
+                        setDefBtn.innerText = "设为默认";
+                        setDefBtn.style.fontSize = "13px";
+                        setDefBtn.onclick = () => setDefaultTemplate(t.name);
+                        actions.appendChild(setDefBtn);
+                    }
                 }
                 
                 const downloadBtn = document.createElement("a");
@@ -3783,7 +3794,7 @@
                 downloadBtn.style.textDecoration = "none";
                 actions.appendChild(downloadBtn);
                 
-                if (!t.is_default) {
+                if (isSystemAdmin && !t.is_default) {
                     const delBtn = document.createElement("span");
                     delBtn.className = "action-link red";
                     delBtn.innerText = "删除";

@@ -278,7 +278,9 @@ def list_users(base_dir, config, page=None, page_size=None, query=''):
         page_items_sql = (
             'SELECT open_id, union_id, user_id, name, avatar, disabled, is_admin, '
             'token_expire_at, refresh_token_expire_at, scope, token_invalid, created_at, last_login_at '
-            f'FROM users{where_sql} ORDER BY last_login_at DESC, open_id ASC'
+            f'FROM users{where_sql} '
+            'ORDER BY CASE WHEN open_id = \'__system_admin__\' THEN 0 '
+            'WHEN is_admin = 1 THEN 1 ELSE 2 END, last_login_at DESC, open_id ASC'
         )
         page_params = list(params)
         if page is None and page_size is None:

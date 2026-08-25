@@ -335,6 +335,23 @@ def system_admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+
+def system_admin_mutation_required(f):
+    """仅允许系统管理员执行后台数据/模板维护操作。"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not _is_system_admin_session():
+            return (jsonify({'status': 'error', 'message': '仅系统管理员可执行此操作'}), 403)
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def non_system_admin_mutation_blocked(message):
+    """Return a response when a Feishu administrator attempts a system-only mutation."""
+    if _is_admin_session() and not _is_system_admin_session():
+        return jsonify({'status': 'error', 'message': message}), 403
+    return None
+
 def _download_scope(user_open_id=''):
     """返回任务的并发作用域。
 
@@ -1148,7 +1165,7 @@ def api_admin_download_project():
         return jsonify({'status': 'error', 'message': '打包下载失败，请稍后重试'})
 
 @app.route('/api/admin/delete_project', methods=['POST'])
-@admin_required
+@system_admin_mutation_required
 def api_admin_delete_project():
     data = request.get_json(silent=True) or {}
     path = data.get('path')
@@ -1197,7 +1214,7 @@ def api_admin_download_folder():
         return jsonify({'status': 'error', 'message': '打包下载失败，请稍后重试'})
 
 @app.route('/api/admin/delete_file', methods=['POST'])
-@admin_required
+@system_admin_mutation_required
 def api_admin_delete_file():
     data = request.get_json(silent=True) or {}
     path = data.get('path')
@@ -1218,6 +1235,9 @@ def api_admin_delete_file():
 @app.route('/api/upload_template', methods=['POST'])
 @login_required
 def api_upload_template():
+    blocked = non_system_admin_mutation_blocked('仅系统管理员可维护模板')
+    if blocked:
+        return blocked
     # 验证请求数据
     password = request.form.get('password')
     mode = request.form.get('mode')
@@ -1310,7 +1330,7 @@ def api_upload_template():
     return jsonify({'status': 'ok', 'filename': final_filename})
 
 @app.route('/api/admin/rename_template', methods=['POST'])
-@admin_required
+@system_admin_mutation_required
 def api_admin_rename_template():
     data = request.get_json(silent=True) or {}
     old_name = data.get('old_name')
@@ -1374,7 +1394,7 @@ def api_admin_rename_template():
         return jsonify({'status': 'error', 'message': '重命名模板失败，请稍后重试'})
 
 @app.route('/api/admin/delete_template', methods=['POST'])
-@admin_required
+@system_admin_mutation_required
 def api_admin_delete_template():
     data = request.get_json(silent=True) or {}
     name = data.get('name')
@@ -1406,7 +1426,7 @@ def api_admin_delete_template():
         return jsonify({'status': 'error', 'message': '删除模板失败，请稍后重试'})
 
 @app.route('/api/admin/set_default_template', methods=['POST'])
-@admin_required
+@system_admin_mutation_required
 def api_admin_set_default_template():
     data = request.get_json(silent=True) or {}
     name = data.get('name')
@@ -1709,7 +1729,7 @@ def get_stats_api():
     return jsonify(stats)
 
 @app.route('/api/admin/stats/delete', methods=['POST'])
-@admin_required
+@system_admin_mutation_required
 def api_admin_stats_delete():
     data = request.get_json(silent=True) or {}
     ts_list = data.get('ts_list') or []
