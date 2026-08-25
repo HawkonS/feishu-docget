@@ -1,11 +1,122 @@
+import logging
+
+from docx.enum.style import WD_STYLE_TYPE
 from docx.shared import RGBColor
 from docx.oxml.ns import nsdecls, qn
 from docx.oxml import parse_xml
 
+
+logger = logging.getLogger('doc_download')
+
 class TableStyleManager:
     BORDER_1PX = 6
     BORDER_2PX = 12
+    # These are paragraph styles, rather than Word table styles.  Keeping the
+    # two names separate lets a user update all table text or all table headers
+    # from Word's Styles pane after an export.
+    TABLE_BODY_STYLE_NAME = '表格正文'
+    TABLE_HEADER_STYLE_NAME = '表格表头'
     STYLES = {1: '样式 1: 深蓝表头 + 白字加粗', 2: '样式 2: 浅蓝表头 + 网格边框', 3: '样式 3: 浅灰表头 + 细网格边框', 4: '样式 4: 全黑实线 (2px)', 5: '样式 5: 上下黑边 + 中间灰竖线', 6: '样式 6: 黑表头 + 斑马纹'}
+
+    @staticmethod
+    def ensure_table_paragraph_styles(doc):
+        """Return the paragraph styles used by generated table content.
+
+        A template can already contain a style named ``表格正文`` or
+        ``表格表头``.  Reusing an existing *paragraph* style is intentional:
+        it allows the template author to define the appearance once and have
+        every exported table inherit it.  A style with the same display name
+        but another type (for example a table style) cannot be assigned to a
+        paragraph, so a deterministic ``（导出）`` suffix is used in that case
+        instead of replacing the template style.
+        """
+        styles = getattr(doc, 'styles', None)
+        if styles is None:
+            raise ValueError('文档不包含样式集合')
+
+        body_style = TableStyleManager._get_or_create_paragraph_style(
+            styles, TableStyleManager.TABLE_BODY_STYLE_NAME
+        )
+        header_style = TableStyleManager._get_or_create_paragraph_style(
+            styles, TableStyleManager.TABLE_HEADER_STYLE_NAME
+        )
+        return body_style, header_style
+
+    @staticmethod
+    def _get_or_create_paragraph_style(styles, base_name):
+        """Find a usable style by name or create one without name collisions."""
+        existing = TableStyleManager._find_style_by_name(styles, base_name)
+        if existing is not None:
+            if existing.type == WD_STYLE_TYPE.PARAGRAPH:
+                return existing
+            logger.info(
+                '模板中的样式 %s 不是段落样式，将创建独立的导出样式',
+                base_name,
+            )
+
+        candidate = base_name if existing is None else f'{base_name}（导出）'
+        suffix = 2
+        while True:
+            candidate_style = TableStyleManager._find_style_by_name(styles, candidate)
+            if candidate_style is None:
+                break
+            # This commonly occurs when the converter has already created the
+            # suffixed style and the later cleaner pass resolves the same
+            # template again.  Reuse that paragraph style rather than creating
+            # a second suffix on every pass.
+            if candidate_style.type == WD_STYLE_TYPE.PARAGRAPH:
+                return candidate_style
+            candidate = f'{base_name}（导出 {suffix}）'
+            suffix += 1
+
+        style = styles.add_style(candidate, WD_STYLE_TYPE.PARAGRAPH)
+        # Inherit the document's Normal style so a newly-created style keeps
+        # the template's ordinary font until the user customizes it.
+        try:
+            style.base_style = styles['Normal']
+        except (KeyError, ValueError):
+            pass
+        try:
+            # Put the new presets in Word's styles gallery as well as the
+            # full Styles pane, making them easy to discover and edit.
+            style.quick_style = True
+        except (AttributeError, ValueError):
+            pass
+        logger.info('已创建表格段落样式: %s', candidate)
+        return style
+
+    @staticmethod
+    def _find_style_by_name(styles, name):
+        # Iterating is more reliable than styles[name] because python-docx
+        # resolves both UI names and style IDs, while templates may contain
+        # localized aliases or a non-paragraph style with the same display
+        # name.
+        wanted = str(name).casefold()
+        for style in styles:
+            try:
+                if str(style.name or '').casefold() == wanted:
+                    return style
+            except Exception:
+                continue
+        return None
+
+    @staticmethod
+    def apply_table_paragraph_styles(table, body_style, header_style):
+        """Assign body/header paragraph styles to one generated table."""
+        for row_index, row in enumerate(table.rows):
+            paragraph_style = header_style if row_index == 0 else body_style
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    try:
+                        paragraph.style = paragraph_style
+                    except (TypeError, ValueError):
+                        # A malformed template style should not make an export
+                        # fail.  The generated paragraph remains usable with
+                        # its direct formatting in that rare case.
+                        logger.warning(
+                            '设置表格段落样式失败，保留原段落样式: %s',
+                            getattr(paragraph_style, 'name', paragraph_style),
+                        )
 
     @staticmethod
     def list_styles():
