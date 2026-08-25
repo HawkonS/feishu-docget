@@ -3,10 +3,12 @@ import stat
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from src.app import app, config, _resolve_template_path, _script_json, paginate_items
 from src.core.stats import _mask_url
 from src.core.sqlite_store import migrate_legacy_data, list_download_stats, list_users
+from src.core.user_store import SYSTEM_ADMIN_NAME, SYSTEM_ADMIN_OPEN_ID
 
 
 class SecurityRegressionTests(unittest.TestCase):
@@ -125,6 +127,36 @@ class SecurityRegressionTests(unittest.TestCase):
                 list_users(workspace, migration_config, page=1, page_size=10, query='迁移')['total'],
                 1,
             )
+
+    def test_system_admin_is_fixed_and_separate_from_feishu_identity(self):
+        from src.core import user_store
+
+        self.assertTrue(user_store.ensure_system_admin())
+        system = user_store.get_user(SYSTEM_ADMIN_OPEN_ID)
+        self.assertEqual(system['name'], SYSTEM_ADMIN_NAME)
+        self.assertTrue(system['is_admin'])
+        self.assertFalse(system['disabled'])
+        self.assertTrue(system['is_system'])
+        self.assertFalse(user_store.set_disabled(SYSTEM_ADMIN_OPEN_ID, True))
+        self.assertFalse(user_store.set_admin(SYSTEM_ADMIN_OPEN_ID, False))
+        system = user_store.get_user(SYSTEM_ADMIN_OPEN_ID)
+        self.assertFalse(system['disabled'])
+        self.assertTrue(system['is_admin'])
+
+    def test_feishu_admin_keeps_real_name_on_homepage(self):
+        previous_login_enabled = config.get('login.enabled')
+        config['login.enabled'] = 'true'
+        try:
+            with self.client.session_transaction() as session:
+                session['user'] = {'open_id': 'ou_real_name', 'name': '真实姓名'}
+            with patch('src.app.user_store.is_admin', return_value=True):
+                response = self.client.get('/')
+            self.assertEqual(response.status_code, 200)
+            html = response.get_data(as_text=True)
+            self.assertIn('真实姓名', html)
+            self.assertNotIn('user-card-name" id="userCardName">管理员</span>', html)
+        finally:
+            config['login.enabled'] = previous_login_enabled
 
 
 if __name__ == '__main__':
