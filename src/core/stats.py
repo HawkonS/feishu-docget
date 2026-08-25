@@ -1,8 +1,9 @@
 import os
-import json
 import time
 from datetime import datetime
 from urllib.parse import urlsplit
+
+from src.core import sqlite_store
 
 def _mask_ip(ip):
     """IP 地址脱敏：保留前两段，后两段用 * 替换"""
@@ -44,47 +45,17 @@ def get_stats_file(base_dir, config):
     return path
 
 def update_download_stat(base_dir, config, task_id, status, doc_url='', file_path='', title='', ip_address='', user_name=''):
-    stats_file = get_stats_file(base_dir, config)
     entry = {'id': task_id, 'status': status, 'ts': int(time.time()), 'time': datetime.now().isoformat(), 'url': _mask_url(doc_url), 'path': file_path, 'title': title, 'ip': _mask_ip(ip_address), 'user': user_name}
-    with open(stats_file, 'a', encoding='utf-8') as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+    sqlite_store.upsert_download_stat(base_dir, config, entry)
 
-def get_download_stats(base_dir, config, limit=None):
-    stats_file = get_stats_file(base_dir, config)
-    if not os.path.exists(stats_file):
-        return {'total': 0, 'items': []}
-    items = []
-    try:
-        with open(stats_file, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    try:
-                        item = json.loads(line)
-                        # 旧版本可能已经写入非 HTTPS/非飞书协议的恶意值；读取时
-                        # 再净化一遍，避免修复部署后仍显示存量 XSS 载荷。
-                        if isinstance(item, dict):
-                            item['url'] = _mask_url(item.get('url', ''))
-                            items.append(item)
-                    except json.JSONDecodeError:
-                        pass
-    except Exception:
-        return {'total': 0, 'items': []}
-    stats_map = {}
-    for item in items:
-        tid = item.get('id')
-        if tid:
-            if tid not in stats_map or item.get('ts', 0) >= stats_map[tid].get('ts', 0):
-                if tid in stats_map:
-                    old = stats_map[tid]
-                    for k, v in old.items():
-                        if k not in item or not item[k]:
-                            item[k] = v
-                stats_map[tid] = item
-        else:
-            stats_map[f"legacy_{item.get('ts')}"] = item
-    final_items = list(stats_map.values())
-    final_items.sort(key=lambda x: x.get('ts', 0), reverse=True)
-    if limit:
-        final_items = final_items[:limit]
-    return {'total': len(final_items), 'items': final_items}
+def get_download_stats(base_dir, config, limit=None, page=None, page_size=None,
+                       title='', url='', ip='', date=''):
+    """读取下载统计，并可在服务端完成筛选和分页。
+
+    ``limit`` 保留给旧调用方使用；管理后台使用 ``page``/``page_size``，
+    避免把整个统计文件发送到浏览器后再做筛选和分页。
+    """
+    return sqlite_store.list_download_stats(
+        base_dir, config, limit=limit, page=page, page_size=page_size,
+        title=title, url=url, ip=ip, date=date,
+    )

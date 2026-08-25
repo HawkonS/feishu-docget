@@ -1,16 +1,15 @@
 import os
-import json
 import threading
 from datetime import datetime
 
 from src.core.config_loader import ConfigLoader, config
+from src.core import sqlite_store
 
 logger = ConfigLoader.get_logger('feishu_docget')
 
-# 全局可重入锁保护内存缓存与文件写入；每个 open_id 另有独立锁用于串行刷新 token
+# 全局可重入锁保护用户读写；每个 open_id 另有独立锁用于串行刷新 token
 _lock = threading.RLock()
 _user_locks = {}
-_cache = None
 _token_refresh_margin = 300  # token 距过期不足 5 分钟时触发刷新
 _refresh_token_default_ttl = 30 * 24 * 3600  # 飞书未返回 refresh_token 有效期时按 30 天兜底
 
@@ -23,48 +22,12 @@ def get_users_file():
     return os.path.join(log_dir, 'users.json')
 
 
+def _base_dir():
+    return os.path.abspath(config.get('workspace.dir', '.'))
+
+
 def _now_iso():
     return datetime.now().isoformat()
-
-
-def _load():
-    """懒加载：首次访问时全量读入内存缓存"""
-    global _cache
-    if _cache is not None:
-        return _cache
-    path = get_users_file()
-    data = {}
-    if os.path.exists(path):
-        try:
-            # 用户库包含飞书 access/refresh token，旧版本文件可能为 0644。
-            os.chmod(os.path.realpath(path), 0o600)
-            with open(path, 'r', encoding='utf-8') as f:
-                loaded = json.load(f)
-                if isinstance(loaded, dict):
-                    data = loaded
-        except Exception as e:
-            logger.error(f'读取用户库失败 {path}: {e}')
-    _cache = data
-    return _cache
-
-
-def _save(users):
-    """写临时文件后 os.replace() 原子替换，替换前先 chmod 0600 收紧权限；返回是否落盘成功"""
-    path = get_users_file()
-    tmp_path = path + '.tmp'
-    try:
-        with open(tmp_path, 'w', encoding='utf-8') as f:
-            json.dump(users, f, ensure_ascii=False, indent=2)
-        os.chmod(tmp_path, 0o600)
-        os.replace(tmp_path, path)
-        try:
-            os.chmod(path, 0o600)
-        except Exception:
-            pass
-        return True
-    except Exception as e:
-        logger.error(f'写入用户库失败 {path}: {e}')
-        return False
 
 
 def _get_user_lock(open_id):
@@ -82,8 +45,7 @@ def upsert_user(profile):
         return False
     now = _now_iso()
     with _lock:
-        users = _load()
-        record = users.get(open_id)
+        record = sqlite_store.get_user(_base_dir(), config, open_id)
         if record is None:
             record = {
                 'open_id': open_id,
@@ -114,8 +76,7 @@ def upsert_user(profile):
             if profile.get('access_token'):
                 record['token_invalid'] = False
             record['last_login_at'] = now
-        users[open_id] = record
-        return _save(users)
+        return sqlite_store.upsert_user(_base_dir(), config, record)
 
 
 def get_user(open_id):
@@ -123,45 +84,28 @@ def get_user(open_id):
     if not open_id:
         return None
     with _lock:
-        record = _load().get(open_id)
-        return dict(record) if record else None
+        return sqlite_store.get_user(_base_dir(), config, open_id)
 
 
-def list_users():
-    """按 last_login_at 倒序返回用户列表，剥离 access_token/refresh_token 敏感字段"""
+def list_users(page=None, page_size=None, query=''):
+    """按 last_login_at 倒序返回用户；传分页参数时由 SQLite 直接分页。"""
     with _lock:
-        records = [dict(r) for r in _load().values()]
-    for record in records:
-        record.pop('access_token', None)
-        record.pop('refresh_token', None)
-        # 兼容旧版本用户记录：管理员字段默认关闭；没有创建时间时用最早可用的登录时间兜底展示。
-        record.setdefault('is_admin', False)
-        if not record.get('created_at') and record.get('last_login_at'):
-            record['created_at'] = record['last_login_at']
-    records.sort(key=lambda r: r.get('last_login_at') or '', reverse=True)
-    return records
+        result = sqlite_store.list_users(_base_dir(), config, page=page, page_size=page_size, query=query)
+    if page is None and page_size is None:
+        return result['items']
+    return result
 
 
 def set_disabled(open_id, disabled):
     """设置用户禁用状态，用户不存在或落盘失败时返回 False"""
     with _lock:
-        users = _load()
-        record = users.get(open_id)
-        if record is None:
-            return False
-        record['disabled'] = bool(disabled)
-        return _save(users)
+        return sqlite_store.update_user_fields(_base_dir(), config, open_id, disabled=disabled)
 
 
 def set_admin(open_id, is_admin):
     """设置用户的后台管理员权限；用户不存在或落盘失败时返回 False"""
     with _lock:
-        users = _load()
-        record = users.get(open_id)
-        if record is None:
-            return False
-        record['is_admin'] = bool(is_admin)
-        return _save(users)
+        return sqlite_store.update_user_fields(_base_dir(), config, open_id, is_admin=is_admin)
 
 
 def is_admin(open_id):
@@ -169,7 +113,7 @@ def is_admin(open_id):
     if not open_id:
         return False
     with _lock:
-        record = _load().get(open_id)
+        record = sqlite_store.get_user(_base_dir(), config, open_id)
     return bool(record and record.get('is_admin', False) and not record.get('disabled', False))
 
 
@@ -178,7 +122,7 @@ def is_disabled(open_id):
     if not open_id:
         return True
     with _lock:
-        record = _load().get(open_id)
+        record = sqlite_store.get_user(_base_dir(), config, open_id)
     if record is None:
         return True
     return bool(record.get('disabled', False))
@@ -187,12 +131,10 @@ def is_disabled(open_id):
 def _mark_token_invalid(open_id):
     """刷新失败时标记该用户凭证失效，供管理后台后续展示；落盘失败仅记日志不阻断"""
     with _lock:
-        users = _load()
-        record = users.get(open_id)
+        record = sqlite_store.get_user(_base_dir(), config, open_id)
         if record is None or record.get('token_invalid'):
             return
-        record['token_invalid'] = True
-        if not _save(users):
+        if not sqlite_store.update_user_fields(_base_dir(), config, open_id, token_invalid=True):
             logger.warning(f'标记用户 {open_id} 凭证失效状态落库失败')
 
 
@@ -201,7 +143,7 @@ def get_refresh_token_expiry(open_id):
     if not open_id:
         return None
     with _lock:
-        record = _load().get(open_id)
+        record = sqlite_store.get_user(_base_dir(), config, open_id)
     if record is None:
         return None
     try:
@@ -222,7 +164,7 @@ def get_valid_access_token(open_id):
     if not open_id:
         return None
     with _lock:
-        record = _load().get(open_id)
+        record = sqlite_store.get_user(_base_dir(), config, open_id)
     if record is None:
         return None
     if record.get('disabled'):
@@ -246,7 +188,7 @@ def get_valid_access_token(open_id):
     with user_lock:
         # 双检：可能已被其他线程刷新
         with _lock:
-            record = _load().get(open_id)
+            record = sqlite_store.get_user(_base_dir(), config, open_id)
         if record is None or record.get('disabled'):
             return None
         access_token = record.get('access_token') or ''
@@ -273,8 +215,7 @@ def get_valid_access_token(open_id):
             _mark_token_invalid(open_id)
             return None
         with _lock:
-            users = _load()
-            current = users.get(open_id)
+            current = sqlite_store.get_user(_base_dir(), config, open_id)
             if current is None:
                 return None
             current['access_token'] = token_data.get('access_token') or ''
@@ -296,6 +237,6 @@ def get_valid_access_token(open_id):
             current['refresh_token_expire_at'] = int(_time.time()) + refresh_expires_in
             # 刷新成功即凭证恢复有效
             current['token_invalid'] = False
-            if not _save(users):
+            if not sqlite_store.upsert_user(_base_dir(), config, current):
                 logger.error(f'用户 {open_id} refresh_token 已轮换但落库失败，重启后该用户需重新登录')
             return current['access_token']

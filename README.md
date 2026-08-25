@@ -54,7 +54,8 @@ feishu-docget/
 │   │   ├── config_loader.py     # 配置加载、默认配置补全、日志初始化
 │   │   ├── feishu_client.py     # 飞书 Token、文档块、媒体/画板下载
 │   │   ├── image_processor.py   # 图片裁剪
-│   │   ├── stats.py             # 下载统计
+│   │   ├── sqlite_store.py      # 用户与下载统计 SQLite 存储、旧数据迁移
+│   │   ├── stats.py             # 下载统计兼容接口
 │   │   └── utils.py             # 通用工具
 │   ├── services/doc_service.py  # 单文档处理编排
 │   ├── converters/docx/
@@ -68,7 +69,8 @@ feishu-docget/
 │       └── login.html           # 管理后台登录页
 ├── tools/
 │   ├── feishu2word.bat          # Windows CLI 入口
-│   └── feishu2word.sh           # Linux/macOS CLI 入口
+│   ├── feishu2word.sh           # Linux/macOS CLI 入口
+│   └── migrate_json_to_sqlite.py # 旧 JSON/JSONL 数据迁移到 SQLite
 ├── template/                    # Word 模板和同名预览图片
 ├── output/                      # 导出结果
 └── logs/                        # 运行日志和下载统计等本地运行数据
@@ -239,11 +241,23 @@ template.password.one_time=
 - 项目管理：查看、下载、删除已导出的项目。
 - 配置管理：在线编辑 `feishu-docget.properties` 中的配置项。
 - 下载统计：查看任务记录，支持批量删除统计记录。
+- 数据存储：下载统计和用户数据使用 SQLite，旧版本的 `logs/download_stats.jsonl` 与 `logs/users.json` 可通过迁移脚本导入。
 - 日志检查：查看、刷新、删除日志文件。
 - 模板维护：上传、预览、重命名、设为默认、删除模板。
 - 系统管理：封装部分系统脚本操作。
 
 后台登录密码由 `admin.password` 控制。
+
+### 旧数据迁移到 SQLite
+
+从旧版本升级时，应用启动会自动导入 `logs/download_stats.jsonl` 和 `logs/users.json`，原文件不会删除。也可以在停服后手动执行：
+
+```bash
+python3 tools/migrate_json_to_sqlite.py --dry-run
+python3 tools/migrate_json_to_sqlite.py
+```
+
+脚本默认将数据库写入 `logs/feishu_docget.sqlite3`，成功迁移后会保留带时间戳的 `.migrated.*.bak` 备份。重复执行是安全的；只有明确需要覆盖时才使用 `--force`。
 
 ## 表格样式
 
