@@ -298,6 +298,7 @@ template.password.one_time=
 image.max_width=16
 image.max_height=23
 download.threads=4
+# 个人登录任务按账号分别限制；机器人/未登录任务共享此上限
 max.concurrent.downloads=1
 download_images=True
 
@@ -311,6 +312,9 @@ log.max_size=20M
 ```
 
 `ConfigLoader` 会在启动时补齐缺失配置项，并创建日志、输出和模板目录。
+
+启用 `login.enabled=true` 后，使用个人飞书账号提交的任务会按 `open_id` 分组，
+每个账号分别受 `max.concurrent.downloads` 限制；机器人或未登录任务仍共享该配置的并发上限。
 
 ## 常见问题
 

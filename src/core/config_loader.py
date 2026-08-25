@@ -209,7 +209,7 @@ CONFIG_SCHEMA = [
                 'key': 'max.concurrent.downloads', 'label': '最大并发下载数', 'type': 'int',
                 'default': '1', 'min': 1,
                 'pattern': r'^[+-]?\d+$',
-                'desc': '最大并发下载数',
+                'desc': '最大并发下载数；个人登录任务按飞书账号分别限制，机器人/未登录任务共享此上限',
                 'sensitive': False, 'restart_required': False,
             },
             {
