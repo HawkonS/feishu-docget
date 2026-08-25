@@ -1771,7 +1771,7 @@
                 <!-- Tab: Users -->
                 <div id="tab-users" class="tab-pane scrollable">
                     <div class="data-toolbar">
-                        <div style="font-size:14px; color:#64748b;">管理已通过飞书登录的用户（可禁用或设置后台管理员）</div>
+                        <div style="font-size:14px; color:#64748b;">管理已通过飞书登录的用户；系统管理员为固定账号，不可禁用或修改</div>
                         <div class="toolbar-fields">
                             <input type="search" id="usersSearch" placeholder="搜索姓名 / open_id" oninput="searchUsers()" class="md-search-input form-control form-control-sm" style="width:180px;">
                             <button onclick="loadUsers()" class="btn btn-primary btn-sm btn-start" style="padding: 8px 16px;">刷新</button>
@@ -2815,12 +2815,16 @@
                             ? '<span class="status-pill success">管理员</span>'
                             : '<span class="status-pill success">正常</span>');
 
-                    const toggleBtn = u.disabled
-                        ? `<button onclick="toggleUserDisabled('${escapeHtml(escapeJsString(u.open_id))}', false)" class="btn btn-sm table-action">启用</button>`
-                        : `<button onclick="toggleUserDisabled('${escapeHtml(escapeJsString(u.open_id))}', true)" class="btn btn-sm table-action danger">禁用</button>`;
-                    const adminBtn = u.is_admin
-                        ? `<button onclick="toggleUserAdmin('${escapeHtml(escapeJsString(u.open_id))}', false)" class="btn btn-sm table-action">取消管理员</button>`
-                        : `<button onclick="toggleUserAdmin('${escapeHtml(escapeJsString(u.open_id))}', true)" class="btn btn-sm table-action">设为管理员</button>`;
+                    const toggleBtn = u.is_system
+                        ? '<span class="status-pill success">系统账号</span>'
+                        : (u.disabled
+                            ? `<button onclick="toggleUserDisabled('${escapeHtml(escapeJsString(u.open_id))}', false)" class="btn btn-sm table-action">启用</button>`
+                            : `<button onclick="toggleUserDisabled('${escapeHtml(escapeJsString(u.open_id))}', true)" class="btn btn-sm table-action danger">禁用</button>`);
+                    const adminBtn = u.is_system
+                        ? '<span class="status-pill success">不可变更</span>'
+                        : (u.is_admin
+                            ? `<button onclick="toggleUserAdmin('${escapeHtml(escapeJsString(u.open_id))}', false)" class="btn btn-sm table-action">取消管理员</button>`
+                            : `<button onclick="toggleUserAdmin('${escapeHtml(escapeJsString(u.open_id))}', true)" class="btn btn-sm table-action">设为管理员</button>`);
 
                     html += `<tr>
                         <td><div class="user-cell">${avatar}<span class="user-name">${escapeHtml(name)}</span></div></td>

@@ -13,6 +13,10 @@ _user_locks = {}
 _token_refresh_margin = 300  # token 距过期不足 5 分钟时触发刷新
 _refresh_token_default_ttl = 30 * 24 * 3600  # 飞书未返回 refresh_token 有效期时按 30 天兜底
 
+# 密码登录对应的固定系统账号。它不代表任何飞书用户，因此不会覆盖飞书用户的真实姓名。
+SYSTEM_ADMIN_OPEN_ID = '__system_admin__'
+SYSTEM_ADMIN_NAME = '管理员'
+
 
 def get_users_file():
     """用户库文件路径：<workspace>/<log.dir>/users.json（拼法参照 stats.get_stats_file）"""
@@ -30,6 +34,33 @@ def _now_iso():
     return datetime.now().isoformat()
 
 
+def is_system_admin(open_id):
+    """返回 open_id 是否为固定的系统管理员账号。"""
+    return str(open_id or '').strip() == SYSTEM_ADMIN_OPEN_ID
+
+
+def ensure_system_admin():
+    """确保固定系统管理员存在，且始终保持启用和管理员权限。"""
+    now = _now_iso()
+    with _lock:
+        record = sqlite_store.get_user(_base_dir(), config, SYSTEM_ADMIN_OPEN_ID)
+        if record is None:
+            record = {
+                'open_id': SYSTEM_ADMIN_OPEN_ID,
+                'name': SYSTEM_ADMIN_NAME,
+                'disabled': False,
+                'is_admin': True,
+                'created_at': now,
+                'last_login_at': now,
+            }
+        else:
+            record['name'] = SYSTEM_ADMIN_NAME
+            record['disabled'] = False
+            record['is_admin'] = True
+            record.setdefault('created_at', now)
+        return sqlite_store.upsert_user(_base_dir(), config, record)
+
+
 def _get_user_lock(open_id):
     with _lock:
         if open_id not in _user_locks:
@@ -42,6 +73,9 @@ def upsert_user(profile):
     profile = profile or {}
     open_id = profile.get('open_id') or ''
     if not open_id:
+        return False
+    if is_system_admin(open_id):
+        # OAuth 不能占用固定系统账号，也不能覆盖其保护属性。
         return False
     now = _now_iso()
     with _lock:
@@ -84,13 +118,18 @@ def get_user(open_id):
     if not open_id:
         return None
     with _lock:
-        return sqlite_store.get_user(_base_dir(), config, open_id)
+        record = sqlite_store.get_user(_base_dir(), config, open_id)
+    if record is not None:
+        record['is_system'] = is_system_admin(record.get('open_id'))
+    return record
 
 
 def list_users(page=None, page_size=None, query=''):
     """按 last_login_at 倒序返回用户；传分页参数时由 SQLite 直接分页。"""
     with _lock:
         result = sqlite_store.list_users(_base_dir(), config, page=page, page_size=page_size, query=query)
+    for record in result['items']:
+        record['is_system'] = is_system_admin(record.get('open_id'))
     if page is None and page_size is None:
         return result['items']
     return result
@@ -98,12 +137,16 @@ def list_users(page=None, page_size=None, query=''):
 
 def set_disabled(open_id, disabled):
     """设置用户禁用状态，用户不存在或落盘失败时返回 False"""
+    if is_system_admin(open_id):
+        return False
     with _lock:
         return sqlite_store.update_user_fields(_base_dir(), config, open_id, disabled=disabled)
 
 
 def set_admin(open_id, is_admin):
     """设置用户的后台管理员权限；用户不存在或落盘失败时返回 False"""
+    if is_system_admin(open_id):
+        return bool(is_admin)
     with _lock:
         return sqlite_store.update_user_fields(_base_dir(), config, open_id, is_admin=is_admin)
 
