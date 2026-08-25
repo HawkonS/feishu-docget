@@ -4,6 +4,7 @@ import unittest
 
 from docx import Document
 from docx.enum.style import WD_STYLE_TYPE
+from PIL import Image
 
 from src.converters.docx.cleaner import clean_document
 
@@ -79,6 +80,64 @@ class TableParagraphStyleTests(unittest.TestCase):
                 document.tables[0].cell(0, 0).paragraphs[0].style.name,
                 '表格表头（导出）',
             )
+
+    def test_image_paragraph_uses_independent_preset(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            image_path = os.path.join(workspace, 'image.png')
+            output_path = os.path.join(workspace, 'output.docx')
+            Image.new('RGB', (12, 12), color='red').save(image_path)
+
+            document = Document()
+            image_paragraph = document.add_paragraph()
+            image_paragraph.add_run().add_picture(image_path)
+            document.add_paragraph('caption')
+            document.save(output_path)
+
+            clean_document(
+                output_path,
+                body_style={
+                    'fontSize': 30,
+                    'lineSpacing': 2,
+                    'spaceBefore': 4,
+                    'spaceBeforeUnit': 'lines',
+                },
+            )
+
+            document = Document(output_path)
+            self.assertEqual(document.paragraphs[0].style.name, '图片')
+            self.assertEqual(document.paragraphs[1].style.name, 'Normal')
+            self.assertEqual(
+                document.paragraphs[0]._element.pPr.find(
+                    '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}spacing'
+                ),
+                None,
+            )
+            self.assertEqual(
+                document.styles['图片'].type,
+                WD_STYLE_TYPE.PARAGRAPH,
+            )
+
+    def test_existing_image_paragraph_preset_is_reused(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            image_path = os.path.join(workspace, 'image.png')
+            template_path = os.path.join(workspace, 'template.docx')
+            output_path = os.path.join(workspace, 'output.docx')
+            Image.new('RGB', (12, 12), color='blue').save(image_path)
+
+            template = Document()
+            template.styles.add_style('图片', WD_STYLE_TYPE.PARAGRAPH)
+            template.save(template_path)
+            document = Document(template_path)
+            document.add_paragraph().add_run().add_picture(image_path)
+            document.save(output_path)
+
+            clean_document(output_path, template_path=template_path)
+
+            document = Document(output_path)
+            names = [style.name for style in document.styles]
+            self.assertEqual(names.count('图片'), 1)
+            self.assertNotIn('图片（导出）', names)
+            self.assertEqual(document.paragraphs[0].style.name, '图片')
 
 
 if __name__ == '__main__':

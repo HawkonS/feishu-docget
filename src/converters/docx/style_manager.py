@@ -16,6 +16,7 @@ class TableStyleManager:
     # from Word's Styles pane after an export.
     TABLE_BODY_STYLE_NAME = '表格正文'
     TABLE_HEADER_STYLE_NAME = '表格表头'
+    IMAGE_STYLE_NAME = '图片'
     STYLES = {1: '样式 1: 深蓝表头 + 白字加粗', 2: '样式 2: 浅蓝表头 + 网格边框', 3: '样式 3: 浅灰表头 + 细网格边框', 4: '样式 4: 全黑实线 (2px)', 5: '样式 5: 上下黑边 + 中间灰竖线', 6: '样式 6: 黑表头 + 斑马纹'}
 
     @staticmethod
@@ -41,6 +42,39 @@ class TableStyleManager:
             styles, TableStyleManager.TABLE_HEADER_STYLE_NAME
         )
         return body_style, header_style
+
+    @staticmethod
+    def ensure_image_paragraph_style(doc):
+        """Return the paragraph style used by paragraphs containing images."""
+        styles = getattr(doc, 'styles', None)
+        if styles is None:
+            raise ValueError('文档不包含样式集合')
+        return TableStyleManager._get_or_create_paragraph_style(
+            styles, TableStyleManager.IMAGE_STYLE_NAME
+        )
+
+    @staticmethod
+    def is_image_paragraph(paragraph):
+        """Whether a paragraph contains a DrawingML or legacy image."""
+        try:
+            xml = paragraph._element.xml
+            return 'w:drawing' in xml or 'w:pict' in xml
+        except Exception:
+            return False
+
+    @staticmethod
+    def apply_image_paragraph_style(paragraph, image_style):
+        """Assign the independent image paragraph style when applicable."""
+        if TableStyleManager.is_image_paragraph(paragraph):
+            try:
+                paragraph.style = image_style
+            except (TypeError, ValueError):
+                logger.warning(
+                    '设置图片段落样式失败，保留原段落样式: %s',
+                    getattr(image_style, 'name', image_style),
+                )
+            return True
+        return False
 
     @staticmethod
     def _get_or_create_paragraph_style(styles, base_name):
