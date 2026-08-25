@@ -391,6 +391,7 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
     # styles are created even when a document has no tables so the exported
     # document always exposes the same two presets in Word's Styles pane.
     table_body_style, table_header_style = TableStyleManager.ensure_table_paragraph_styles(doc)
+    image_paragraph_style = TableStyleManager.ensure_image_paragraph_style(doc)
 
     default_max_h = ConfigLoader.get_float('image.max_height', 23.0)
         
@@ -482,6 +483,12 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
         TableStyleManager.apply_table_paragraph_styles(
             table, table_body_style, table_header_style
         )
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    TableStyleManager.apply_image_paragraph_style(
+                        paragraph, image_paragraph_style
+                    )
 
     # First, handle indentation clearance for ALL tables 
     # to avoid interference from nested table processing later.
@@ -611,7 +618,8 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
                     
                     # Only apply body style to text paragraphs, not to image paragraphs
                     # if we are meant to clear their spacing
-                    if body_style:
+                    is_image_paragraph = TableStyleManager.is_image_paragraph(p)
+                    if body_style and not is_image_paragraph:
                         if aligned > 0 and force_clear_tbl_image_space:
                             # Create a copy of body_style without spaceBefore
                             modified_body_style = body_style.copy()
@@ -773,6 +781,7 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
     for i, p in enumerate(doc.paragraphs):
         if i < cover_para_count:
             continue
+        TableStyleManager.apply_image_paragraph_style(p, image_paragraph_style)
         resized, aligned = _apply_image_style_to_paragraph(p, ns, ns_wp, max_height, max_width, target_align)
         count_resized += resized
         count_centered += aligned
@@ -886,7 +895,8 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
             _clean_text_indent(p, ns)
         
         # 应用正文样式
-        if body_style:
+        is_image_paragraph = TableStyleManager.is_image_paragraph(p)
+        if body_style and not is_image_paragraph:
             # 排除标题样式 (Heading 1-9, Title, Subtitle)
             # is_heading is computed from the complete paragraph style chain above.
             # 排除列表 (可选，这里暂时不排除列表，让列表也应用字体大小，但缩进可能受影响，需谨慎)

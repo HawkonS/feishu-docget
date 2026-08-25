@@ -447,6 +447,7 @@ class FeishuDocxConverter:
         # produced directly by the converter (without the cleaner) still has
         # the same table body/header styles as the normal service pipeline.
         self.table_body_style, self.table_header_style = TableStyleManager.ensure_table_paragraph_styles(self.doc)
+        self.image_paragraph_style = TableStyleManager.ensure_image_paragraph_style(self.doc)
         try:
             self.injector = NumberingInjector(self.doc)
         except Exception as e:
@@ -457,6 +458,7 @@ class FeishuDocxConverter:
                 raise InterruptedError('任务已停止')
             self._render_block(root, self.doc, level=0)
         self._apply_table_paragraph_styles()
+        self._apply_image_paragraph_styles()
         self.processed_count = self.total_blocks
         self._update_progress(percentage=90, message=f'已组织 {self.total_blocks} / {self.total_blocks} 个文件块（已完成 {self.fallback_download_count} 张补充图片下载）', log_type='success')
         self.doc.save(output_path)
@@ -479,6 +481,26 @@ class FeishuDocxConverter:
             )
             for row in table.rows:
                 for cell in row.cells:
+                    for nested_table in cell.tables:
+                        visit(nested_table)
+
+        for table in self.doc.tables:
+            visit(table)
+
+    def _apply_image_paragraph_styles(self):
+        """Keep image paragraphs independent from the document body style."""
+        for paragraph in self.doc.paragraphs:
+            TableStyleManager.apply_image_paragraph_style(
+                paragraph, self.image_paragraph_style
+            )
+
+        def visit(table):
+            for row in table.rows:
+                for cell in row.cells:
+                    for paragraph in cell.paragraphs:
+                        TableStyleManager.apply_image_paragraph_style(
+                            paragraph, self.image_paragraph_style
+                        )
                     for nested_table in cell.tables:
                         visit(nested_table)
 
