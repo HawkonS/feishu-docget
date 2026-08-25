@@ -1703,7 +1703,10 @@
                 <div id="tab-projects" class="tab-pane active">
                     <div class="data-toolbar">
                         <div class="toolbar-meta">已生成项目 <strong id="projectCount">0</strong></div>
-                        <div class="toolbar-meta" style="font-size:12px;">点击项目名称展开文件树</div>
+                        <div class="toolbar-fields">
+                            <input type="search" id="projectSearch" placeholder="搜索项目名称" oninput="searchProjects()" class="md-search-input form-control form-control-sm" style="width:180px;">
+                            <span class="toolbar-meta" style="font-size:12px;">点击项目名称展开文件树</span>
+                        </div>
                     </div>
                     <div class="table-shell" style="overflow:auto; flex:1;">
                         <table class="project-table table table-hover align-middle mb-0">
@@ -1712,6 +1715,11 @@
                             </thead>
                             <tbody id="projectTableBody"></tbody>
                         </table>
+                    </div>
+                    <div class="pagination" style="margin-top:12px; display:flex; gap:10px; justify-content:center;">
+                        <button onclick="prevProjectPage()" id="projectPrevBtn" class="magnify-btn" style="position:static; width:80px;">上一页</button>
+                        <span id="projectPageInfo" style="line-height:26px; font-size:13px;">1 / 1</span>
+                        <button onclick="nextProjectPage()" id="projectNextBtn" class="magnify-btn" style="position:static; width:80px;">下一页</button>
                     </div>
                 </div>
 
@@ -1764,9 +1772,17 @@
                 <div id="tab-users" class="tab-pane scrollable">
                     <div class="data-toolbar">
                         <div style="font-size:14px; color:#64748b;">管理已通过飞书登录的用户（可禁用或设置后台管理员）</div>
-                        <button onclick="loadUsers()" class="btn btn-primary btn-sm btn-start" style="padding: 8px 16px;">刷新</button>
+                        <div class="toolbar-fields">
+                            <input type="search" id="usersSearch" placeholder="搜索姓名 / open_id" oninput="searchUsers()" class="md-search-input form-control form-control-sm" style="width:180px;">
+                            <button onclick="loadUsers()" class="btn btn-primary btn-sm btn-start" style="padding: 8px 16px;">刷新</button>
+                        </div>
                     </div>
                     <div id="usersTableContainer" class="table-shell"></div>
+                    <div class="pagination" style="margin-top:12px; display:flex; gap:10px; justify-content:center;">
+                        <button onclick="prevUsersPage()" id="usersPrevBtn" class="magnify-btn" style="position:static; width:80px;">上一页</button>
+                        <span id="usersPageInfo" style="line-height:26px; font-size:13px;">1 / 1</span>
+                        <button onclick="nextUsersPage()" id="usersNextBtn" class="magnify-btn" style="position:static; width:80px;">下一页</button>
+                    </div>
                 </div>
 
                 <!-- Tab: Logs -->
@@ -1805,12 +1821,18 @@
                         <!-- Toolbar -->
                         <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
                             <div style="font-size: 14px; color: #64748b;">管理用于文档生成的 Word 模板文件</div>
-                            <div>
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <input type="search" id="templatesSearch" placeholder="搜索模板" oninput="searchTemplates()" class="md-search-input form-control form-control-sm" style="width:180px;">
                                 <button onclick="openUploadModal()" class="btn btn-primary btn-sm btn-start" style="padding: 8px 16px;">+ 上传模板</button>
                             </div>
                         </div>
                         <!-- Grid -->
                         <div id="templateGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px; overflow-y: auto; padding-bottom: 20px; flex: 1; align-content: start; min-height: 0;"></div>
+                        <div class="pagination" style="margin-top:12px; display:flex; gap:10px; justify-content:center; flex-shrink:0;">
+                            <button onclick="prevTemplatesPage()" id="templatesPrevBtn" class="magnify-btn" style="position:static; width:80px;">上一页</button>
+                            <span id="templatesPageInfo" style="line-height:26px; font-size:13px;">1 / 1</span>
+                            <button onclick="nextTemplatesPage()" id="templatesNextBtn" class="magnify-btn" style="position:static; width:80px;">下一页</button>
+                        </div>
                     </div>
                 </div>
 
@@ -2003,6 +2025,10 @@
         let selectedTemplate = "";
         let selectedStyle = "1";
         let projectCache = [];
+        const projectPageSize = 20;
+        let projectPage = 1;
+        let projectTotalPages = 1;
+        let projectSearchTimer = null;
         // let selectedMd = "";
 
         function encodeKey(value) {
@@ -2073,9 +2099,8 @@
             // system tab 不再自动开始，需要用户手动点开启
         }
 
-        // 初始化加载
+        // 初始化只渲染当前 Tab；各 Tab 在切换时独立请求自己的数据。
         document.addEventListener('DOMContentLoaded', () => {
-             loadData(); // 加载基础数据 (templates, styles)
              bindUploadModalInputs();
              
              const hash = window.location.hash.substring(1);
@@ -2095,9 +2120,18 @@
              }
         };
         let statsData = [];
-        let filteredStats = [];
         let currentPage = 1;
+        let statsTotalPages = 1;
         const pageSize = 10;
+        let statsSearchTimer = null;
+        let usersPage = 1;
+        let usersTotalPages = 1;
+        const usersPageSize = 20;
+        let usersSearchTimer = null;
+        let templatesPage = 1;
+        let templatesTotalPages = 1;
+        const templatesPageSize = 12;
+        let templatesSearchTimer = null;
         
         let configCache = [];
         let configSnapshot = {};      // 初始值快照，用于脏检查
@@ -2596,12 +2630,20 @@
         
         async function loadStats() {
             try {
-                const res = await fetch('/api/stats');
+                const params = new URLSearchParams({
+                    page: currentPage,
+                    page_size: pageSize,
+                    title: document.getElementById('statsSearchTitle').value || '',
+                    url: document.getElementById('statsSearchUrl').value || '',
+                    ip: document.getElementById('statsSearchIp').value || '',
+                    date: document.getElementById('statsSearchDate').value || ''
+                });
+                const res = await fetch('/api/stats?' + params.toString());
                 const data = await res.json();
                 statsData = data.items;
-                filteredStats = statsData;
                 document.getElementById('totalCount').innerText = data.total;
-                currentPage = 1;
+                currentPage = data.page || currentPage;
+                statsTotalPages = data.total_pages || 1;
                 renderStatsTable();
             } catch (e) {
                 console.error(e);
@@ -2609,34 +2651,13 @@
         }
 
         function searchStats() {
-            const titleQ = (document.getElementById('statsSearchTitle').value || "").toLowerCase();
-            const urlQ = (document.getElementById('statsSearchUrl').value || "").toLowerCase();
-            const ipQ = (document.getElementById('statsSearchIp').value || "").toLowerCase();
-            const dateQ = document.getElementById('statsSearchDate').value;
-            
-            filteredStats = statsData.filter(item => {
-                const title = (item.title || "").toLowerCase();
-                const url = (item.url || "").toLowerCase();
-                const ip = (item.ip || "").toLowerCase();
-                const user = (item.user || "").toLowerCase();
-                const time = (item.time || "").split('T')[0];
-                
-                const matchTitle = !titleQ || title.includes(titleQ) || user.includes(titleQ);
-                const matchUrl = !urlQ || url.includes(urlQ);
-                const matchIp = !ipQ || ip.includes(ipQ);
-                const matchDate = !dateQ || time === dateQ;
-                
-                return matchTitle && matchUrl && matchIp && matchDate;
-            });
-            
             currentPage = 1;
-            renderStatsTable();
+            clearTimeout(statsSearchTimer);
+            statsSearchTimer = setTimeout(loadStats, 250);
         }
         
         function renderStatsTable() {
-            const start = (currentPage - 1) * pageSize;
-            const end = start + pageSize;
-            const pageData = filteredStats.slice(start, end);
+            const pageData = statsData || [];
             
             let html = '<table class="project-table table table-hover align-middle mb-0 stats-table" style="width:100%; table-layout: fixed;">';
             html += '<thead><tr><th style="width:40px; text-align:center;"><input type="checkbox" id="selectAllStats" onchange="toggleSelectAllStats()"></th><th style="width:150px">时间</th><th>标题</th><th style="width:100px">URL</th><th style="width:80px">状态</th><th style="width:100px">下载人</th><th style="width:120px">IP</th></tr></thead><tbody>';
@@ -2662,10 +2683,9 @@
             html += '</tbody></table>';
             document.getElementById('tableContainer').innerHTML = html;
             
-            const totalPages = Math.ceil(filteredStats.length / pageSize) || 1;
-            document.getElementById('pageInfo').innerText = `${currentPage} / ${totalPages}`;
+            document.getElementById('pageInfo').innerText = `${currentPage} / ${statsTotalPages}`;
             document.getElementById('prevBtn').disabled = currentPage <= 1;
-            document.getElementById('nextBtn').disabled = currentPage >= totalPages;
+            document.getElementById('nextBtn').disabled = currentPage >= statsTotalPages;
         }
         
         function toggleSelectAllStats() {
@@ -2711,15 +2731,14 @@
         function prevPage() {
             if (currentPage > 1) {
                 currentPage--;
-                renderStatsTable();
+                loadStats();
             }
         }
         
         function nextPage() {
-            const totalPages = Math.ceil(filteredStats.length / pageSize) || 1;
-            if (currentPage < totalPages) {
+            if (currentPage < statsTotalPages) {
                 currentPage++;
-                renderStatsTable();
+                loadStats();
             }
         }
         
@@ -2748,18 +2767,33 @@
         async function loadUsers() {
             const container = document.getElementById('usersTableContainer');
             try {
-                const res = await fetch('/api/admin/users');
+                const query = encodeURIComponent(document.getElementById('usersSearch').value || '');
+                const res = await fetch(`/api/admin/users?page=${usersPage}&page_size=${usersPageSize}&q=${query}`);
                 const data = await res.json();
                 if (data.status !== 'ok') {
                     container.innerHTML = `<div style="text-align:center; padding:40px; color:#ef4444;">${escapeHtml(data.message || '加载用户列表失败')}</div>`;
                     return;
                 }
+                usersPage = data.page || usersPage;
+                usersTotalPages = data.total_pages || 1;
                 renderUsersTable(data.users || []);
+                document.getElementById('usersPageInfo').innerText = `${usersPage} / ${usersTotalPages}`;
+                document.getElementById('usersPrevBtn').disabled = usersPage <= 1;
+                document.getElementById('usersNextBtn').disabled = usersPage >= usersTotalPages;
             } catch (e) {
                 console.error(e);
                 container.innerHTML = '<div style="text-align:center; padding:40px; color:#ef4444;">加载用户列表失败: ' + escapeHtml(e.message) + '</div>';
             }
         }
+
+        function searchUsers() {
+            usersPage = 1;
+            clearTimeout(usersSearchTimer);
+            usersSearchTimer = setTimeout(loadUsers, 250);
+        }
+
+        function prevUsersPage() { if (usersPage > 1) { usersPage--; loadUsers(); } }
+        function nextUsersPage() { if (usersPage < usersTotalPages) { usersPage++; loadUsers(); } }
 
         function renderUsersTable(users) {
             let html = '<table class="project-table table table-hover align-middle mb-0">';
@@ -2835,7 +2869,6 @@
         }
 
         function refreshData() {
-             loadData();
              // 根据当前激活的 tab 刷新对应的数据
              if(document.getElementById('tab-projects').classList.contains('active')) loadProjects();
              if(document.getElementById('tab-config').classList.contains('active')) loadConfig();
@@ -3050,25 +3083,34 @@
             }
         }
 
-        function loadData() {
-            fetch("/api/admin/info").then(r => r.json()).then(res => {
-                adminData = res;
-                // 先渲染模板列表，确保不被后面的报错影响
-                if (document.getElementById('tab-templates').classList.contains('active')) {
-                    renderTemplateManager(res.templates);
-                }
-                
-                try { renderTemplates(res.templates); } catch(e) { console.error(e); }
-                try { renderStyles(res.table_styles); } catch(e) { console.error(e); }
-            }).catch(e => {
-                console.error("加载数据失败:", e);
-                // alert("加载数据失败: " + e.message);
-            });
-        }
-        
         function loadTemplates() {
-            loadData();
+            const query = encodeURIComponent(document.getElementById('templatesSearch').value || '');
+            fetch(`/api/admin/templates?page=${templatesPage}&page_size=${templatesPageSize}&q=${query}`)
+                .then(r => r.json())
+                .then(res => {
+                    if (res.status !== 'ok') throw new Error(res.message || '模板加载失败');
+                    adminData = Object.assign(adminData || {}, { templates: res.templates || [] });
+                    templatesPage = res.page || templatesPage;
+                    templatesTotalPages = res.total_pages || 1;
+                    renderTemplateManager(res.templates || []);
+                    document.getElementById('templatesPageInfo').innerText = `${templatesPage} / ${templatesTotalPages}`;
+                    document.getElementById('templatesPrevBtn').disabled = templatesPage <= 1;
+                    document.getElementById('templatesNextBtn').disabled = templatesPage >= templatesTotalPages;
+                })
+                .catch(e => {
+                    console.error(e);
+                    document.getElementById('templateGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#ef4444;padding:40px;">加载模板失败</div>';
+                });
         }
+
+        function searchTemplates() {
+            templatesPage = 1;
+            clearTimeout(templatesSearchTimer);
+            templatesSearchTimer = setTimeout(loadTemplates, 250);
+        }
+
+        function prevTemplatesPage() { if (templatesPage > 1) { templatesPage--; loadTemplates(); } }
+        function nextTemplatesPage() { if (templatesPage < templatesTotalPages) { templatesPage++; loadTemplates(); } }
 
     function renderTemplates(list) {
             const select = document.getElementById("templateSelect");
@@ -3326,14 +3368,18 @@
         }
 
         function loadProjects() {
-            fetch("/api/admin/projects").then(r => r.json()).then(res => {
-                projectCache = res || [];
+            const query = encodeURIComponent(document.getElementById('projectSearch').value || '');
+            fetch(`/api/admin/projects?page=${projectPage}&page_size=${projectPageSize}&q=${query}`).then(r => r.json()).then(res => {
+                projectCache = res.items || [];
+                projectPage = res.page || projectPage;
+                projectTotalPages = res.total_pages || 1;
                 const tbody = document.getElementById("projectTableBody");
                 tbody.innerHTML = "";
                 const count = document.getElementById('projectCount');
-                if (count) count.textContent = projectCache.length;
+                if (count) count.textContent = res.total || 0;
                 if (!projectCache.length) {
                     tbody.innerHTML = '<tr><td colspan="4" class="table-empty">暂无项目，完成一次下载任务后会显示在这里</td></tr>';
+                    updateProjectPagination();
                     return;
                 }
                 projectCache.forEach(p => {
@@ -3344,7 +3390,7 @@
                             <button class="tree-toggle" onclick="toggleFolder('${escapeHtml(escapeJsString(p.path))}', this)">
                                 <span class="tree-chevron">›</span><span class="tree-folder-icon">▰</span>
                                 <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(p.name)}</span>
-                                <span style="font-size:11px;color:#a0aabd;font-weight:500;">${(p.files || []).length} 个文件</span>
+                                <span style="font-size:11px;color:#a0aabd;font-weight:500;">${p.file_count || 0} 个文件</span>
                             </button>
                         </td>
                         <td style="color:#64748b; font-size:13px;">${escapeHtml(p.ctime)}</td>
@@ -3358,14 +3404,30 @@
                     trDetail.id = `folder-${folderId}`;
                     trDetail.innerHTML = `
                         <td colspan="4">
-                            ${renderProjectFiles(p.path, p.files || [])}
+                            <div class="project-files-placeholder" data-project-path="${escapeHtml(p.path)}" style="padding:12px;color:#94a3b8;font-size:12px;">展开后加载文件树</div>
                         </td>
                     `;
                     tbody.appendChild(tr);
                     tbody.appendChild(trDetail);
                 });
+                updateProjectPagination();
             });
         }
+
+        function updateProjectPagination() {
+            document.getElementById('projectPageInfo').innerText = `${projectPage} / ${projectTotalPages}`;
+            document.getElementById('projectPrevBtn').disabled = projectPage <= 1;
+            document.getElementById('projectNextBtn').disabled = projectPage >= projectTotalPages;
+        }
+
+        function searchProjects() {
+            projectPage = 1;
+            clearTimeout(projectSearchTimer);
+            projectSearchTimer = setTimeout(loadProjects, 250);
+        }
+
+        function prevProjectPage() { if (projectPage > 1) { projectPage--; loadProjects(); } }
+        function nextProjectPage() { if (projectPage < projectTotalPages) { projectPage++; loadProjects(); } }
         
         function toggleFolder(path, button) {
             const id = "folder-" + encodeKey(path);
@@ -3373,6 +3435,21 @@
             if (el) {
                 el.classList.toggle('is-open');
                 if (button) button.classList.toggle('is-open', el.classList.contains('is-open'));
+                const placeholder = el.querySelector('.project-files-placeholder');
+                if (placeholder && !placeholder.dataset.loaded) {
+                    placeholder.dataset.loaded = 'loading';
+                    fetch('/api/admin/project-files?path=' + encodeURIComponent(path))
+                        .then(r => r.json())
+                        .then(res => {
+                            if (res.status === 'ok') {
+                                placeholder.outerHTML = renderProjectFiles(path, res.items || []);
+                            } else {
+                                placeholder.textContent = res.message || '文件树加载失败';
+                                placeholder.dataset.loaded = '';
+                            }
+                        })
+                        .catch(() => { placeholder.textContent = '文件树加载失败'; placeholder.dataset.loaded = ''; });
+                }
             }
         }
 
@@ -3824,7 +3901,7 @@
             
             if (mode === 'new') {
                  // Check duplicate in frontend (optional, backend handles overwrite)
-                 const isExisting = adminData.templates.some(t => t.name === name || t.name === name + '.docx');
+                 const isExisting = ((adminData && adminData.templates) || []).some(t => t.name === name || t.name === name + '.docx');
                  if (!isExisting && !file) {
                      return alert("新模板必须上传 Word 文件");
                  }

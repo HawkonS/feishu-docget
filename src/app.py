@@ -30,6 +30,7 @@ from src.core import user_store, feishu_oauth
 from src.core.config_loader import config, ConfigLoader, parse_size, SENSITIVE_KEYS, ALLOWED_CONFIG_KEYS, validate_config
 from src.converters.docx.style_manager import TableStyleManager
 from src.core.stats import update_download_stat, get_download_stats
+from src.core.sqlite_store import initialize_database, migrate_legacy_data, delete_download_stats, DATABASE_FILENAME
 from src.core.utils import sanitize_name
 base_dir = os.path.abspath(config.get('workspace.dir', '.'))
 # 飞书 OAuth 回调路径（redirect_uri 推导与回调路由共用单源）
@@ -37,6 +38,21 @@ OAUTH_CALLBACK_PATH = '/auth/feishu/callback'
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 HTML_DIR = os.path.join(CURRENT_DIR, 'web', 'templates')
 logger = ConfigLoader.get_logger('feishu_docget')
+
+# 首次升级时自动把旧 JSON/JSONL 导入数据库，保留原文件作为回滚备份；
+# tools/migrate_json_to_sqlite.py 可在停服窗口中显式执行并生成额外备份。
+try:
+    initialize_database(base_dir, config)
+    migration_result = migrate_legacy_data(base_dir, config, backup=False)
+    if migration_result.get('users_imported') or migration_result.get('stats_imported'):
+        logger.info(
+            '旧用户/统计数据已导入 SQLite：users=%s, stats=%s',
+            migration_result.get('users_imported', 0),
+            migration_result.get('stats_imported', 0),
+        )
+except Exception as e:
+    # 数据库故障不应在导入模块阶段吞掉堆栈；记录后让后续请求返回明确错误。
+    logger.error(f'初始化 SQLite 数据库失败: {e}', exc_info=True)
 app = Flask(__name__)
 secret_key = config.get('server.secret_key', '').strip()
 if not secret_key or secret_key == 'feishu_docget_secret_key_2025':
@@ -555,6 +571,35 @@ def list_templates():
     return items
 
 
+def paginate_items(items, page=1, page_size=20):
+    """返回管理后台统一使用的服务端分页结果。"""
+    try:
+        page = max(int(page or 1), 1)
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = min(max(int(page_size or 20), 1), 100)
+    except (TypeError, ValueError):
+        page_size = 20
+    total = len(items)
+    start = (page - 1) * page_size
+    total_pages = (total + page_size - 1) // page_size if total else 0
+    if total_pages:
+        page = min(page, total_pages)
+    else:
+        page = 1
+    start = (page - 1) * page_size
+    page_items = items[start:start + page_size]
+    return {
+        'items': page_items,
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'total_pages': total_pages,
+        'has_more': start + len(page_items) < total,
+    }
+
+
 def _resolve_template_path(name, allow_empty=False):
     """解析模板文件名，并保证真实文件严格位于 template.dir 内。"""
     raw_name = str(name or '').strip()
@@ -572,7 +617,7 @@ def _resolve_template_path(name, allow_empty=False):
         return None
     return candidate
 
-def list_projects():
+def list_projects(include_files=True):
     output_dir = os.path.join(base_dir, config['output.dir'])
     items = []
     if os.path.isdir(output_dir):
@@ -590,19 +635,88 @@ def list_projects():
                 except Exception:
                     ctime = 0
                     size = 0
-                files = []
-                for root, _, filenames in os.walk(path):
-                    for fname in filenames:
-                        abs_path = os.path.join(root, fname)
-                        rel_path = os.path.relpath(abs_path, path).replace('\\', '/')
-                        try:
-                            fctime = os.path.getctime(abs_path)
-                        except Exception:
-                            fctime = 0
-                        files.append({'name': fname, 'rel_path': rel_path, 'path': abs_path, 'ctime': datetime.fromtimestamp(fctime).isoformat(timespec='minutes'), 'is_md': fname.endswith('.md')})
-                files.sort(key=lambda x: x['ctime'], reverse=True)
-                items.append({'name': name, 'path': path, 'ctime': datetime.fromtimestamp(ctime).isoformat(timespec='minutes'), 'ctime_ts': ctime, 'size': size, 'files': files})
+                files = list_project_files(path) if include_files else []
+                file_count = len(files) if include_files else None
+                items.append({'name': name, 'path': path, 'ctime': datetime.fromtimestamp(ctime).isoformat(timespec='minutes'), 'ctime_ts': ctime, 'size': size, 'file_count': file_count, 'files': files})
     return sorted(items, key=lambda x: x.get('ctime_ts', 0), reverse=True)
+
+
+def list_project_files(path):
+    """按需读取单个项目的文件树，避免项目列表接口返回全部文件明细。"""
+    files = []
+    if not path or not os.path.isdir(path):
+        return files
+    for root, _, filenames in os.walk(path):
+        for fname in filenames:
+            abs_path = os.path.join(root, fname)
+            rel_path = os.path.relpath(abs_path, path).replace('\\', '/')
+            try:
+                fctime = os.path.getctime(abs_path)
+            except Exception:
+                fctime = 0
+            files.append({'name': fname, 'rel_path': rel_path, 'path': abs_path,
+                          'ctime': datetime.fromtimestamp(fctime).isoformat(timespec='minutes'),
+                          'is_md': fname.endswith('.md')})
+    files.sort(key=lambda x: x['ctime'], reverse=True)
+    return files
+
+
+def list_project_summaries(page=1, page_size=20, query=''):
+    """分页读取项目摘要。
+
+    先只扫描项目目录本身完成排序/分页，再为当前页计算大小和文件数，
+    这样不会因为历史项目文件树越来越大而拖慢每次 Tab 切换。
+    """
+    output_dir = os.path.join(base_dir, config['output.dir'])
+    candidates = []
+    query = str(query or '').strip().lower()
+    if os.path.isdir(output_dir):
+        for name in os.listdir(output_dir):
+            path = os.path.join(output_dir, name)
+            if not os.path.isdir(path) or (query and query not in name.lower()):
+                continue
+            try:
+                ctime = os.path.getctime(path)
+            except OSError:
+                ctime = 0
+            candidates.append((ctime, name, path))
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    total = len(candidates)
+    try:
+        page = max(int(page or 1), 1)
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = min(max(int(page_size or 20), 1), 100)
+    except (TypeError, ValueError):
+        page_size = 20
+    start = (page - 1) * page_size
+    total_pages = (total + page_size - 1) // page_size if total else 0
+    if total_pages:
+        page = min(page, total_pages)
+    else:
+        page = 1
+    start = (page - 1) * page_size
+    selected = candidates[start:start + page_size]
+    items = []
+    for ctime, name, path in selected:
+        size = 0
+        file_count = 0
+        for root, _, filenames in os.walk(path):
+            file_count += len(filenames)
+            for fname in filenames:
+                fp = os.path.join(root, fname)
+                if not os.path.islink(fp):
+                    try:
+                        size += os.path.getsize(fp)
+                    except OSError:
+                        pass
+        items.append({'name': name, 'path': path,
+                      'ctime': datetime.fromtimestamp(ctime).isoformat(timespec='minutes'),
+                      'ctime_ts': ctime, 'size': size, 'file_count': file_count, 'files': []})
+    return {'items': items, 'total': total, 'page': page,
+            'page_size': page_size, 'total_pages': total_pages,
+            'has_more': start + len(items) < total}
 
 def update_job(job_id, **fields):
     with jobs_lock:
@@ -915,7 +1029,12 @@ def api_user_logout():
 @app.route('/api/admin/users', methods=['GET'])
 @admin_required
 def api_admin_users():
-    return jsonify({'status': 'ok', 'users': user_store.list_users()})
+    paged = user_store.list_users(
+        page=request.args.get('page', 1),
+        page_size=request.args.get('page_size', 20),
+        query=request.args.get('q', ''),
+    )
+    return jsonify({'status': 'ok', **paged, 'users': paged['items']})
 
 @app.route('/api/admin/users/toggle', methods=['POST'])
 @admin_required
@@ -947,7 +1066,24 @@ def api_admin_users_set_admin():
 @app.route('/api/admin/projects', methods=['GET'])
 @admin_required
 def api_admin_projects():
-    return jsonify(list_projects())
+    return jsonify(list_project_summaries(
+        page=request.args.get('page', 1),
+        page_size=request.args.get('page_size', 20),
+        query=request.args.get('q', ''),
+    ))
+
+
+@app.route('/api/admin/project-files', methods=['GET'])
+@admin_required
+def api_admin_project_files():
+    path = request.args.get('path')
+    if not path:
+        return jsonify({'status': 'error', 'message': '无效路径'}), 400
+    output_dir = os.path.realpath(os.path.join(base_dir, config['output.dir']))
+    real_path = os.path.realpath(path)
+    if not real_path.startswith(output_dir + os.sep) or not os.path.isdir(real_path):
+        return jsonify({'status': 'error', 'message': '无效路径'}), 400
+    return jsonify({'status': 'ok', 'items': list_project_files(real_path)})
 
 @app.route('/api/admin/download_project', methods=['GET'])
 @admin_required
@@ -1427,6 +1563,23 @@ def api_template_preview(name):
 def api_admin_info():
     return jsonify({'templates': list_templates(), 'table_styles': TableStyleManager.list_styles()})
 
+
+@app.route('/api/admin/templates', methods=['GET'])
+@admin_required
+def api_admin_templates():
+    templates = list_templates()
+    query = str(request.args.get('q') or '').strip().lower()
+    if query:
+        templates = [t for t in templates if query in str(t.get('name') or '').lower()]
+    paged = paginate_items(templates, request.args.get('page', 1), request.args.get('page_size', 12))
+    return jsonify({'status': 'ok', **paged, 'templates': paged['items']})
+
+
+@app.route('/api/admin/table-styles', methods=['GET'])
+@admin_required
+def api_admin_table_styles():
+    return jsonify({'status': 'ok', 'items': TableStyleManager.list_styles()})
+
 @app.route('/api/admin/download_file', methods=['GET'])
 @admin_required
 def api_admin_download_file():
@@ -1492,7 +1645,15 @@ def save_config_api():
 @app.route('/api/stats', methods=['GET'])
 @admin_required
 def get_stats_api():
-    stats = get_download_stats(base_dir, config)
+    stats = get_download_stats(
+        base_dir, config,
+        page=request.args.get('page', 1),
+        page_size=request.args.get('page_size', 10),
+        title=request.args.get('title', ''),
+        url=request.args.get('url', ''),
+        ip=request.args.get('ip', ''),
+        date=request.args.get('date', ''),
+    )
     return jsonify(stats)
 
 @app.route('/api/admin/stats/delete', methods=['POST'])
@@ -1503,32 +1664,9 @@ def api_admin_stats_delete():
     id_list = data.get('id_list') or []
     if not ts_list and (not id_list):
         return jsonify({'status': 'error', 'message': '未选择记录'})
-    stats_file = os.path.join(base_dir, config['log.dir'], 'download_stats.jsonl')
-    if not os.path.exists(stats_file):
-        return jsonify({'status': 'ok'})
     try:
-        lines = []
-        with open(stats_file, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-        new_lines = []
-        ts_set = set((str(ts) for ts in ts_list))
-        id_set = set((str(x) for x in id_list))
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                record = json.loads(line)
-                if str(record.get('ts')) in ts_set:
-                    continue
-                if record.get('id') and str(record.get('id')) in id_set:
-                    continue
-                new_lines.append(line + '\n')
-            except Exception:
-                new_lines.append(line + '\n')
-        with open(stats_file, 'w', encoding='utf-8') as f:
-            f.writelines(new_lines)
-        return jsonify({'status': 'ok'})
+        deleted = delete_download_stats(base_dir, config, ts_list=ts_list, id_list=id_list)
+        return jsonify({'status': 'ok', 'deleted': deleted})
     except Exception as e:
         logger.error(f'删除统计记录失败: {e}', exc_info=True)
         return jsonify({'status': 'error', 'message': '删除统计记录失败，请稍后重试'})
@@ -1556,7 +1694,8 @@ def api_admin_logs():
         return jsonify([])
     files = []
     for f in os.listdir(log_dir):
-        if f == 'download_stats.jsonl':
+        if f in {'download_stats.jsonl', DATABASE_FILENAME,
+                 DATABASE_FILENAME + '-wal', DATABASE_FILENAME + '-shm'}:
             continue
         path = os.path.join(log_dir, f)
         if os.path.isfile(path):
@@ -1567,7 +1706,8 @@ def api_admin_logs():
 @app.route('/api/admin/logs/<filename>', methods=['GET'])
 @admin_required
 def api_admin_get_log(filename):
-    if filename == 'download_stats.jsonl':
+    if filename in {'download_stats.jsonl', DATABASE_FILENAME,
+                    DATABASE_FILENAME + '-wal', DATABASE_FILENAME + '-shm'}:
          return jsonify({'status': 'error', 'message': 'Cannot read stats file'})
     safe_name = os.path.basename(filename)
     if safe_name != filename or '..' in filename:
@@ -1679,7 +1819,8 @@ def api_admin_get_log(filename):
 @app.route('/api/admin/logs/<filename>', methods=['DELETE'])
 @admin_required
 def api_admin_delete_log(filename):
-    if filename == 'download_stats.jsonl':
+    if filename in {'download_stats.jsonl', DATABASE_FILENAME,
+                    DATABASE_FILENAME + '-wal', DATABASE_FILENAME + '-shm'}:
          return jsonify({'status': 'error', 'message': 'Cannot delete stats file'})
     safe_name = os.path.basename(filename)
     if safe_name != filename or '..' in filename:
