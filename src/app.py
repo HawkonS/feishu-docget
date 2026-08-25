@@ -20,7 +20,9 @@ import subprocess
 import secrets
 import tempfile
 import zipfile
+import hmac
 from html import escape
+from urllib.parse import urlsplit
 from flask import Flask, jsonify, request, send_file, send_from_directory, session, redirect, url_for
 from src.services.doc_service import process_document
 from src.core.bot_store import normalize_bot_config
@@ -47,6 +49,18 @@ if not secret_key or secret_key == 'feishu_docget_secret_key_2025':
 app.secret_key = secret_key
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+# Cookie 的 Secure 标志必须在应用初始化时设置，避免使用 waitress/WSGI 导入方式
+# 启动时退回不安全的 HTTP Cookie。生产环境应启用 server.https.enabled。
+https_enabled = ConfigLoader.get_bool('server.https.enabled', False)
+app.config['SESSION_COOKIE_SECURE'] = https_enabled
+if https_enabled:
+    # server.https.enabled 表示由一层可信反向代理终结 TLS；初始化阶段包装，
+    # 确保通过 WSGI 导入 app 时同样正确识别客户端 IP 与 https scheme。
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    # 不信任 X-Forwarded-For，防止直接访问服务时伪造来源 IP 绕过限流。
+    # scheme/host/prefix 仅接受最外层一跳代理提供的值。
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=0, x_proto=1, x_host=1, x_prefix=1)
+    app.config['PREFERRED_URL_SCHEME'] = 'https'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB
 
@@ -69,53 +83,101 @@ active_bot_downloads = 0
 download_dispatch_condition = threading.Condition(active_downloads_lock)
 
 _login_attempts = {}  # {ip: {'count': N, 'locked_until': timestamp, 'ban_level': N}}
+_admin_account_attempts = {}  # 单一后台账号的全局退避，防止轮换 IP 绕过限流
 _upload_attempts = {}  # {ip: {'count': N, 'locked_until': timestamp, 'ban_level': N}} 模板上传密码尝试记录
 _start_attempts = {}  # {ip: [timestamps]} 任务提交接口的滑动窗口限流
+_attempts_lock = threading.RLock()
 START_RATE_LIMIT = 10  # 单 IP 每分钟最多提交任务数
 
 
 def _check_login_lock(attempts, client_ip):
     """检查 IP 是否处于锁定状态。返回 (是否锁定, 剩余秒数)，锁定期过期时自动清理记录"""
-    attempt = attempts.get(client_ip)
-    if attempt and attempt.get('locked_until', 0) > 0:
+    with _attempts_lock:
+        attempt = attempts.get(client_ip)
+        if attempt and attempt.get('locked_until', 0) > 0:
+            now = time.time()
+            if now > attempt['locked_until']:
+                attempts.pop(client_ip, None)
+                return False, 0
+            return True, int(attempt['locked_until'] - now)
+        return False, 0
+
+
+def _record_login_failure(attempts, client_ip, failure_limit=5):
+    """记录一次密码校验失败，失败 5 次后按指数退避锁定"""
+    with _attempts_lock:
         now = time.time()
-        if now > attempt['locked_until']:
-            attempts.pop(client_ip, None)
-            return False, 0
-        return True, int(attempt['locked_until'] - now)
+        attempt = attempts.get(client_ip)
+        if not attempt:
+            attempts[client_ip] = {'count': 1, 'locked_until': 0, 'ban_level': 0}
+        else:
+            attempt['count'] = attempt.get('count', 0) + 1
+            if attempt['count'] >= failure_limit:
+                ban_level = attempt.get('ban_level', 0)
+                lock_seconds = min(60 * (3 ** ban_level), 3600)
+                attempt['locked_until'] = now + lock_seconds
+                attempt['count'] = 0
+                attempt['ban_level'] = ban_level + 1
+
+
+def _admin_login_lock(client_ip):
+    """同时检查 IP 和后台账号维度的登录退避状态。"""
+    ip_locked, ip_remaining = _check_login_lock(_login_attempts, client_ip)
+    account_locked, account_remaining = _check_login_lock(_admin_account_attempts, 'admin')
+    if ip_locked or account_locked:
+        return True, max(ip_remaining, account_remaining)
     return False, 0
 
 
-def _record_login_failure(attempts, client_ip):
-    """记录一次密码校验失败，失败 5 次后按指数退避锁定"""
-    now = time.time()
-    attempt = attempts.get(client_ip)
-    if not attempt:
-        attempts[client_ip] = {'count': 1, 'locked_until': 0, 'ban_level': 0}
-    else:
-        attempt['count'] = attempt.get('count', 0) + 1
-        if attempt['count'] >= 5:
-            ban_level = attempt.get('ban_level', 0)
-            lock_seconds = min(60 * (3 ** ban_level), 3600)
-            attempt['locked_until'] = now + lock_seconds
-            attempt['count'] = 0
-            attempt['ban_level'] = ban_level + 1
+def _record_admin_login_failure(client_ip):
+    _record_login_failure(_login_attempts, client_ip)
+    # 账号维度使用更高阈值，既阻止轮换 IP 暴力破解，也降低恶意锁死账号的风险。
+    _record_login_failure(_admin_account_attempts, 'admin', failure_limit=20)
+
+
+def _clear_admin_login_failures(client_ip):
+    with _attempts_lock:
+        _login_attempts.pop(client_ip, None)
+        _admin_account_attempts.pop('admin', None)
+
+
+def _get_csrf_token():
+    token = session.get('_csrf_token')
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session['_csrf_token'] = token
+        session.modified = True
+    return token
+
+
+@app.before_request
+def ensure_csrf_token_and_protect_unsafe_requests():
+    """为每个会话生成 CSRF token，并保护所有状态修改请求。"""
+    _get_csrf_token()
+    if request.method not in {'POST', 'PUT', 'PATCH', 'DELETE'}:
+        return None
+    expected = session.get('_csrf_token')
+    supplied = request.headers.get('X-CSRF-Token') or request.form.get('_csrf_token')
+    if not expected or not supplied or not hmac.compare_digest(str(expected), str(supplied)):
+        return jsonify({'status': 'error', 'message': 'CSRF 校验失败，请刷新页面后重试'}), 403
+    return None
 
 
 def _check_start_rate_limit(client_ip):
     """任务提交接口的滑动窗口限流，超限返回 False"""
-    now = time.time()
-    window = _start_attempts.setdefault(client_ip, [])
-    window[:] = [ts for ts in window if now - ts < 60]
-    if len(window) >= START_RATE_LIMIT:
-        return False
-    window.append(now)
-    return True
+    with _attempts_lock:
+        now = time.time()
+        window = _start_attempts.setdefault(client_ip, [])
+        window[:] = [ts for ts in window if now - ts < 60]
+        if len(window) >= START_RATE_LIMIT:
+            return False
+        window.append(now)
+        return True
 
 
 def _verify_job_access(job_id):
     """校验当前会话是否有权访问指定任务：管理员或任务创建者可访问"""
-    if session.get('is_admin'):
+    if _is_admin_session():
         return True
     tokens = session.get('job_tokens') or {}
     return bool(tokens.get(job_id))
@@ -131,6 +193,18 @@ def _login_enabled():
     return ConfigLoader.get_bool('login.enabled', False)
 
 
+def _is_admin_session():
+    """当前会话是否具备后台管理员权限。
+
+    ``is_admin`` 是管理员密码登录标志；飞书用户管理员权限持久化在用户库中，
+    因此每次请求都重新读取，管理员被取消或禁用后立即失效。
+    """
+    if session.get('is_admin'):
+        return True
+    user = session.get('user') or {}
+    return user_store.is_admin(user.get('open_id', ''))
+
+
 def _get_redirect_uri():
     """OAuth 回调地址：优先使用配置项，未配置时根据当前请求地址推导（HTTPS 模式下强制 https scheme）"""
     configured = str(config.get('login.oauth.redirect_uri', '') or '').strip()
@@ -143,11 +217,61 @@ def _get_redirect_uri():
     return base + OAUTH_CALLBACK_PATH
 
 
+def _inject_csrf(html):
+    """将会话 CSRF token 注入页面，并让同源写请求自动携带请求头。"""
+    token = escape(_get_csrf_token(), quote=True)
+    html = html.replace('[/* csrf_token */]', token)
+    if 'name="csrf-token"' not in html:
+        csrf_bootstrap = f'''<meta name="csrf-token" content="{token}">
+<script>
+(function () {{
+  const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = function (input, init) {{
+    const options = Object.assign({{}}, init || {{}});
+    const method = String(options.method || (input && input.method) || 'GET').toUpperCase();
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {{
+      const target = new URL(typeof input === 'string' ? input : input.url, window.location.href);
+      if (target.origin === window.location.origin) {{
+        const headers = new Headers(options.headers || (input && input.headers) || {{}});
+        headers.set('X-CSRF-Token', csrfToken);
+        options.headers = headers;
+      }}
+    }}
+    return originalFetch(input, options);
+  }};
+}})();
+</script>'''
+        html = html.replace('</head>', csrf_bootstrap + '</head>', 1)
+    return html
+
+
+def _script_json(value):
+    """将数据安全嵌入 script：JSON 中的 HTML 特殊字符使用 Unicode 转义。"""
+    return json.dumps(value, ensure_ascii=False).replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026').replace('\u2028', '\\u2028').replace('\u2029', '\\u2029')
+
+
+def _safe_http_url(value, fallback='#'):
+    raw = str(value or '').strip()
+    try:
+        parsed = urlsplit(raw)
+        if parsed.scheme.lower() in {'http', 'https'} and parsed.netloc:
+            return parsed.geturl()
+    except ValueError:
+        pass
+    return fallback
+
+
+def _safe_admin_path(value):
+    raw = str(value or '').strip()
+    return raw if raw.startswith('/') and not raw.startswith('//') else '/admin'
+
+
 def login_required(f):
-    # 未启用登录或已是管理员时直通；页面请求重定向 /login，API 请求返回 403 JSON
+    # 未启用登录或当前会话具备管理员权限时直通；页面请求重定向 /login，API 请求返回 403 JSON
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not _login_enabled() or session.get('is_admin'):
+        if not _login_enabled() or _is_admin_session():
             return f(*args, **kwargs)
         user = session.get('user')
         open_id = (user or {}).get('open_id', '')
@@ -168,7 +292,7 @@ def admin_required(f):
 
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not session.get('is_admin'):
+        if not _is_admin_session():
             return (jsonify({'status': 'error', 'message': '未登录'}), 403)
         return f(*args, **kwargs)
     return decorated_function
@@ -430,6 +554,24 @@ def list_templates():
     items.sort(key=lambda x: (not x['is_default'], x['name']))
     return items
 
+
+def _resolve_template_path(name, allow_empty=False):
+    """解析模板文件名，并保证真实文件严格位于 template.dir 内。"""
+    raw_name = str(name or '').strip()
+    if not raw_name and allow_empty:
+        return ''
+    if not raw_name or raw_name != os.path.basename(raw_name) or raw_name in {'.', '..'}:
+        return None
+    if not raw_name.lower().endswith('.docx'):
+        return None
+    template_root = os.path.realpath(os.path.join(base_dir, config['template.dir']))
+    candidate = os.path.realpath(os.path.join(template_root, raw_name))
+    if not candidate.startswith(template_root + os.sep):
+        return None
+    if not os.path.isfile(candidate):
+        return None
+    return candidate
+
 def list_projects():
     output_dir = os.path.join(base_dir, config['output.dir'])
     items = []
@@ -504,9 +646,9 @@ def run_job(job_id, doc_url, template_name, table_style, delete_template=False, 
             update_job(job_id, message='已完成下载任务排队，成功创建下载任务', log_type='info')
         update_job(job_id, status='running', progress=5, message='正在准备任务...', log_type='dynamic')
         update_download_stat(base_dir, config, job_id, '下载中', doc_url=doc_url, ip_address=client_ip, user_name=user_name)
-        template_path = ''
-        if template_name:
-            template_path = os.path.join(base_dir, config['template.dir'], template_name)
+        template_path = _resolve_template_path(template_name, allow_empty=True)
+        if template_path is None:
+            raise ValueError('模板文件不存在或路径无效')
         output_root = os.path.join(base_dir, config['output.dir'])
         result = process_document(doc_url=doc_url, template_path=template_path, table_style=table_style, base_dir=base_dir, output_root=output_root, progress_cb=lambda p, m, t='info': update_job(job_id, progress=p, message=m, log_type=t), add_cover=add_cover, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, body_style=body_style, image_style=image_style, ignore_mention=ignore_mention, ignore_template_heading_num=ignore_template_heading_num, table_config=table_config, margin_config=margin_config, code_block_config=code_block_config, document_info=document_info, add_title=add_title, bot_config=bot_config, user_access_token=user_token or None)
         if delete_template and template_path:
@@ -575,31 +717,36 @@ def _validate_document_info(document_info):
 @login_required
 def index():
     templates = list_templates()
-    template_json = json.dumps(templates, ensure_ascii=False)
+    template_json = _script_json(templates)
     table_styles = TableStyleManager.list_styles()
-    style_json = json.dumps(table_styles, ensure_ascii=False)
+    style_json = _script_json(table_styles)
     style_css = TableStyleManager.get_frontend_css()
     with open(os.path.join(HTML_DIR, 'index.html'), 'r', encoding='utf-8') as f:
         html = f.read()
     html = html.replace('[/* template_json */]', template_json)
     html = html.replace('[/* style_json */]', style_json)
     html = html.replace('/* [style_css] */', style_css)
-    html = html.replace('[/* usage_url */]', config.get('usage.url', 'https://github.com/HawkonS/feishu-docget'))
-    html = html.replace('Hawkon 2025 -2026', config.get('copyright.text', 'Hawkon 2025 -2026'))
-    html = html.replace('Hawkon 2025', config.get('copyright.text', 'Hawkon 2025 -2026'))
-    html = html.replace('[/* page_title */]', config.get('page.title', '飞书文档下载工具'))
-    html = html.replace('[/* page_description */]', config.get('page.description', '支持将飞书文档链接下载为指定模板的 Word 文件'))
-    html = html.replace('[/* page_placeholder */]', config.get('page.placeholder', '输入飞书文档链接，如 https://hawkon.feishu.cn/wiki/...'))
-    html = html.replace('[/* usage_link_text */]', config.get('page.usage_link_text', '使用说明'))
-    html = html.replace('[/* usage_doc_url */]', config.get('url.usage_doc', 'https://github.com/HawkonS/feishu-docget'))
-    html = html.replace('[/* default_template */]', config.get('template.default', 'template.docx'))
+    html = html.replace('[/* usage_url */]', escape(_safe_http_url(config.get('usage.url', 'https://github.com/HawkonS/feishu-docget'))))
+    copyright_text = escape(config.get('copyright.text', 'Hawkon 2025 -2026'))
+    html = html.replace('Hawkon 2025 -2026', copyright_text)
+    html = html.replace('Hawkon 2025', copyright_text)
+    html = html.replace('[/* page_title */]', escape(config.get('page.title', '飞书文档下载工具')))
+    html = html.replace('[/* page_description */]', escape(config.get('page.description', '支持将飞书文档链接下载为指定模板的 Word 文件')))
+    html = html.replace('[/* page_placeholder */]', escape(config.get('page.placeholder', '输入飞书文档链接，如 https://hawkon.feishu.cn/wiki/...'), quote=True))
+    html = html.replace('[/* usage_link_text */]', escape(config.get('page.usage_link_text', '使用说明')))
+    html = html.replace('[/* usage_doc_url */]', escape(_safe_http_url(config.get('url.usage_doc', 'https://github.com/HawkonS/feishu-docget'))))
+    html = html.replace('[/* default_template */]', escape(config.get('template.default', 'template.docx'), quote=True))
+    html = html.replace('[/* default_template_json */]', _script_json(config.get('template.default', 'template.docx')))
     html = html.replace('[/* image_max_width */]', str(config.get('image.max_width', '16')))
     html = html.replace('[/* image_max_height */]', str(config.get('image.max_height', '23')))
-    # 登录状态标志：未开启登录或未登录（无 open_id）时注入 'false'，前端据此控制用户信息条显隐
-    user_logged_in = 'false'
+    # 登录状态标志：管理员和普通飞书用户都需要显示首页右上角用户卡片。
+    # 密码管理员 session 不带 user/open_id，不能只依赖普通用户的登录标志判断。
+    is_admin = _is_admin_session()
+    user_logged_in = 'true' if is_admin else 'false'
     if _login_enabled() and (session.get('user') or {}).get('open_id'):
         user_logged_in = 'true'
     html = html.replace('[/* user_logged_in */]', user_logged_in)
+    html = html.replace('[/* user_is_admin */]', 'true' if is_admin else 'false')
     # 登录用户 open_id：用户名缺失时前端作为兜底展示文案；同样转义防注入
     user_open_id = ''
     if _login_enabled():
@@ -613,10 +760,13 @@ def index():
             user_avatar = record.get('avatar', '') or ''
     html = html.replace('[/* user_avatar */]', escape(user_avatar))
     # 登录用户名：仅作展示，HTML 转义防止注入；必须保持为最后一个替换，避免注入内容被二次替换
-    user_name = ''
-    if _login_enabled():
+    user_name = '管理员' if is_admin else ''
+    if _login_enabled() and not is_admin:
         user_name = (session.get('user') or {}).get('name', '') or ''
     html = html.replace('[/* user_name */]', escape(user_name))
+    html = html.replace('[/* admin_url */]', escape(_safe_admin_path(admin_path), quote=True))
+    html = html.replace('[/* user_avatar_js */]', _script_json(user_avatar))
+    html = _inject_csrf(html)
     return html
 
 @app.route('/login', methods=['GET'])
@@ -628,9 +778,10 @@ def user_login_page():
         return redirect('/')
     with open(os.path.join(HTML_DIR, 'user_login.html'), 'r', encoding='utf-8') as f:
         html = f.read()
-    html = html.replace('[/* page_title */]', config.get('page.title', '飞书文档下载工具'))
-    html = html.replace('Hawkon 2025 -2026', config.get('copyright.text', 'Hawkon 2025 -2026'))
-    html = html.replace('Hawkon 2025', config.get('copyright.text', 'Hawkon 2025 -2026'))
+    html = html.replace('[/* page_title */]', escape(config.get('page.title', '飞书文档下载工具')))
+    copyright_text = escape(config.get('copyright.text', 'Hawkon 2025 -2026'))
+    html = html.replace('Hawkon 2025 -2026', copyright_text)
+    html = html.replace('Hawkon 2025', copyright_text)
     return html
 
 @app.route('/auth/feishu/authorize', methods=['GET'])
@@ -698,42 +849,60 @@ def favicon():
 
 @app.route(admin_path, methods=['GET'])
 def admin_page():
-    if session.get('is_admin'):
+    if _is_admin_session():
         with open(os.path.join(HTML_DIR, 'dashboard.html'), 'r', encoding='utf-8') as f:
             html = f.read()
-        html = html.replace('Hawkon 2025 -2026', config.get('copyright.text', 'Hawkon 2025 -2026'))
-        html = html.replace('Hawkon 2025', config.get('copyright.text', 'Hawkon 2025 -2026'))
-        html = html.replace('[/* page_title */]', config.get('page.title', '飞书文档下载工具'))
-        html = html.replace('[/* default_template */]', config.get('template.default', 'template.docx'))
+        copyright_text = escape(config.get('copyright.text', 'Hawkon 2025 -2026'))
+        html = html.replace('Hawkon 2025 -2026', copyright_text)
+        html = html.replace('Hawkon 2025', copyright_text)
+        html = html.replace('[/* page_title */]', escape(config.get('page.title', '飞书文档下载工具')))
+        html = html.replace('[/* default_template */]', escape(config.get('template.default', 'template.docx'), quote=True))
+        html = html.replace('[/* default_template_json */]', _script_json(config.get('template.default', 'template.docx')))
+        html = html.replace('[/* usage_url */]', escape(_safe_http_url(config.get('usage.url', 'https://github.com/HawkonS/feishu-docget'))))
         html = html.replace('[/* image_max_width */]', str(config.get('image.max_width', '16')))
         html = html.replace('[/* image_max_height */]', str(config.get('image.max_height', '23')))
         html = html.replace('/* [style_css] */', TableStyleManager.get_frontend_css())
+        html = _inject_csrf(html)
         return html
-    return send_file(os.path.join(HTML_DIR, 'login.html'))
+    with open(os.path.join(HTML_DIR, 'login.html'), 'r', encoding='utf-8') as f:
+        html = f.read()
+    copyright_text = escape(config.get('copyright.text', 'Hawkon 2025 -2026'))
+    html = html.replace('Hawkon 2025 -2026', copyright_text)
+    html = html.replace('Hawkon 2025', copyright_text)
+    return _inject_csrf(html)
 
 @app.route('/api/admin/login', methods=['POST'])
 def api_admin_login():
     client_ip = request.remote_addr or 'unknown'
-    locked, remaining = _check_login_lock(_login_attempts, client_ip)
+    locked, remaining = _admin_login_lock(client_ip)
     if locked:
         return jsonify({'status': 'error', 'message': f'账户已锁定，请 {remaining} 秒后重试'})
 
     data = request.get_json(silent=True) or {}
     password = (data.get('password') or '').strip()
     admin_password = str(config.get('admin.password') or '').strip()
-    if password == admin_password:
-        _login_attempts.pop(client_ip, None)
+    if admin_password and hmac.compare_digest(password, admin_password):
+        _clear_admin_login_failures(client_ip)
         session['is_admin'] = True
         session.permanent = True
         return jsonify({'status': 'ok'})
 
     # 登录失败，增加计数
-    _record_login_failure(_login_attempts, client_ip)
+    _record_admin_login_failure(client_ip)
     return jsonify({'status': 'error', 'message': '密码错误'})
 
-@app.route('/api/admin/logout', methods=['POST', 'GET'])
+@app.route('/api/admin/logout', methods=['POST'])
 def api_admin_logout():
+    # 密码管理员与飞书管理员共用后台入口；飞书管理员退出时需清除用户会话。
+    is_password_admin = bool(session.get('is_admin'))
+    user = session.get('user') or {}
+    user_is_admin = user_store.is_admin(user.get('open_id', ''))
     session.pop('is_admin', None)
+    # 任务令牌属于登录会话，退出后台后不应继续用于查询/下载任务。
+    session.pop('job_tokens', None)
+    # 非密码管理员调用该入口时一并退出飞书会话，避免管理员权限刚被取消后按钮失效。
+    if user_is_admin or not is_password_admin:
+        session.pop('user', None)
     return jsonify({'status': 'ok'})
 
 @app.route('/api/user/logout', methods=['POST'])
@@ -758,6 +927,20 @@ def api_admin_users_toggle():
     if not user_store.get_user(open_id):
         return jsonify({'status': 'error', 'message': '用户不存在'})
     if not user_store.set_disabled(open_id, bool(data.get('disabled'))):
+        return jsonify({'status': 'error', 'message': '保存失败，请检查服务器磁盘与权限'})
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/api/admin/users/set-admin', methods=['POST'])
+@admin_required
+def api_admin_users_set_admin():
+    data = request.get_json(silent=True) or {}
+    open_id = str(data.get('open_id') or '').strip()
+    if not open_id:
+        return jsonify({'status': 'error', 'message': '缺少 open_id'})
+    if not user_store.get_user(open_id):
+        return jsonify({'status': 'error', 'message': '用户不存在'})
+    if not user_store.set_admin(open_id, bool(data.get('is_admin'))):
         return jsonify({'status': 'error', 'message': '保存失败，请检查服务器磁盘与权限'})
     return jsonify({'status': 'ok'})
 
@@ -873,7 +1056,7 @@ def api_upload_template():
     name = request.form.get('name')
     
     # 如果是管理员登录，跳过密码验证，强制为 long_term 模式
-    if session.get('is_admin'):
+    if _is_admin_session():
         mode = 'long_term'
     else:
         # 非管理员的密码校验同样受速率限制保护，防止暴力破解
@@ -894,10 +1077,11 @@ def api_upload_template():
         else:
             correct_password = None
         
-        if not correct_password or password != correct_password:
+        if not correct_password or not hmac.compare_digest(str(password or ''), str(correct_password)):
             _record_login_failure(_upload_attempts, client_ip)
             return jsonify({'status': 'error', 'message': '密码错误'})
-        _upload_attempts.pop(client_ip, None)
+        with _attempts_lock:
+            _upload_attempts.pop(client_ip, None)
 
     # 验证文件和名称
     if not name:
@@ -968,19 +1152,19 @@ def api_admin_rename_template():
     if old_name == new_name:
         return jsonify({'status': 'ok'})
         
-    template_dir = os.path.join(base_dir, config['template.dir'])
-    
-    # 处理 old_name
-    safe_old = os.path.basename(old_name)
+    template_dir = os.path.realpath(os.path.join(base_dir, config['template.dir']))
+
+    safe_old = os.path.basename(str(old_name).strip())
     if not safe_old.lower().endswith('.docx'):
         safe_old += '.docx'
-    old_path = os.path.join(template_dir, safe_old)
-    
-    if not os.path.exists(old_path):
+    old_path = _resolve_template_path(safe_old)
+    if not old_path:
         return jsonify({'status': 'error', 'message': '原模板不存在'})
         
     # 处理 new_name
-    safe_new = os.path.basename(new_name)
+    safe_new = os.path.basename(str(new_name).strip())
+    if safe_new != str(new_name).strip() or safe_new in {'.', '..'} or not safe_new:
+        return jsonify({'status': 'error', 'message': '无效文件名'})
     # 如果用户没输后缀，后端逻辑通常是加上，但这里 old_name 已经是带后缀的文件名吗？
     # 前端传过来的 name 通常是不带后缀的显示名，还是带后缀的？
     # list_templates 返回的 name 是带 .docx 的 (e.g. "template.docx")
@@ -992,6 +1176,8 @@ def api_admin_rename_template():
         safe_new_filename = safe_new + '.docx'
         
     new_path = os.path.join(template_dir, safe_new_filename)
+    if os.path.realpath(new_path).startswith(template_dir + os.sep) is False:
+        return jsonify({'status': 'error', 'message': '无效文件名'})
     
     if os.path.exists(new_path):
         return jsonify({'status': 'error', 'message': '新名称已存在'})
@@ -1025,17 +1211,17 @@ def api_admin_delete_template():
     if not name:
         return jsonify({'status': 'error', 'message': '模板名称不能为空'})
         
-    template_dir = os.path.join(base_dir, config['template.dir'])
     safe_name = os.path.basename(name)
+    if safe_name != str(name).strip() or not safe_name.lower().endswith('.docx'):
+        return jsonify({'status': 'error', 'message': '无效文件名'})
     
     # 禁止删除默认模板
     default_template = config.get('template.default', 'template.docx')
     if safe_name == default_template:
         return jsonify({'status': 'error', 'message': '默认模板不能删除'})
         
-    path = os.path.join(template_dir, safe_name)
-    
-    if not os.path.exists(path):
+    path = _resolve_template_path(safe_name)
+    if not path:
         return jsonify({'status': 'error', 'message': '模板不存在'})
         
     try:
@@ -1061,8 +1247,7 @@ def api_admin_set_default_template():
     if '..' in name or safe_name != name:
         return jsonify({'status': 'error', 'message': '无效文件名'})
 
-    template_dir = os.path.join(base_dir, config['template.dir'])
-    if not os.path.exists(os.path.join(template_dir, safe_name)):
+    if not _resolve_template_path(safe_name):
             return jsonify({'status': 'error', 'message': '模板文件不存在'})
 
     try:
@@ -1100,6 +1285,11 @@ def api_start():
     add_title = bool(data.get('addTitle'))
     if not doc_url:
         return jsonify({'status': 'error', 'message': '缺少文档链接'})
+    template_path = _resolve_template_path(template, allow_empty=True)
+    if template_path is None:
+        return jsonify({'status': 'error', 'message': '模板文件不存在或路径无效'})
+    # 队列中仅保留经过校验的文件名；实际执行时再次 realpath 校验，防止竞态替换。
+    template = os.path.basename(template_path) if template_path else ''
     try:
         bot_config = normalize_bot_config(data.get('botConfig'))
     except ValueError as e:
@@ -1208,10 +1398,8 @@ def api_jobs():
 
 @app.route('/api/template/<name>', methods=['GET'])
 def api_template(name):
-    template_dir = os.path.join(base_dir, config['template.dir'])
-    safe_name = os.path.basename(name)
-    path = os.path.join(template_dir, safe_name)
-    if not os.path.exists(path):
+    path = _resolve_template_path(name)
+    if not path:
         return jsonify({'status': 'error', 'message': '模板未找到'})
     inline = request.args.get('inline', 'false').lower() == 'true'
     base, ext = os.path.splitext(os.path.basename(path))
@@ -1224,11 +1412,13 @@ def api_template(name):
 
 @app.route('/api/template_preview/<name>', methods=['GET'])
 def api_template_preview(name):
-    template_dir = os.path.join(base_dir, config['template.dir'])
-    safe_name = os.path.basename(name)
+    safe_name = os.path.basename(str(name))
+    if safe_name != str(name) or not safe_name.lower().endswith('.docx'):
+        return (jsonify({'status': 'error', 'message': '预览图未找到'}), 404)
     png_name = os.path.splitext(safe_name)[0] + '.png'
-    path = os.path.join(template_dir, png_name)
-    if not os.path.exists(path):
+    template_dir = os.path.realpath(os.path.join(base_dir, config['template.dir']))
+    path = os.path.realpath(os.path.join(template_dir, png_name))
+    if not path.startswith(template_dir + os.sep) or not os.path.isfile(path):
         return (jsonify({'status': 'error', 'message': '预览图未找到'}), 404)
     return send_file(path, mimetype='image/png')
 
@@ -1590,6 +1780,8 @@ def set_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    if request.path in {'/', '/login', admin_path} or request.path.startswith('/api/admin/'):
+        response.headers['Cache-Control'] = 'no-store'
     # HSTS 仅在 HTTPS 模式下启用
     if app.config.get('SESSION_COOKIE_SECURE'):
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
@@ -1597,12 +1789,7 @@ def set_security_headers(response):
 
 if __name__ == '__main__':
     port = ConfigLoader.get_int('server.port', 7800)
-    https_enabled = ConfigLoader.get_bool('server.https.enabled', False)
     if https_enabled:
-        from werkzeug.middleware.proxy_fix import ProxyFix
-        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
-        app.config['SESSION_COOKIE_SECURE'] = True
-        app.config['PREFERRED_URL_SCHEME'] = 'https'
         logger.info(f'服务启动于端口 {port} (HTTPS 代理模式)...')
     else:
         logger.info(f'服务启动于端口 {port}...')

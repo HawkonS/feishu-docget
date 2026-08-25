@@ -1763,7 +1763,7 @@
                 <!-- Tab: Users -->
                 <div id="tab-users" class="tab-pane scrollable">
                     <div class="data-toolbar">
-                        <div style="font-size:14px; color:#64748b;">管理已通过飞书登录的用户（禁用后无法登录）</div>
+                        <div style="font-size:14px; color:#64748b;">管理已通过飞书登录的用户（可禁用或设置后台管理员）</div>
                         <button onclick="loadUsers()" class="btn btn-primary btn-sm btn-start" style="padding: 8px 16px;">刷新</button>
                     </div>
                     <div id="usersTableContainer" class="table-shell"></div>
@@ -1977,9 +1977,15 @@
 
         function safeUrl(url) {
             if (!url) return '#';
-            const s = String(url).trim().toLowerCase();
-            if (s.startsWith('javascript:') || s.startsWith('data:') || s.startsWith('vbscript:')) return '#';
-            return escapeHtml(url);
+            try {
+                const parsed = new URL(String(url).trim());
+                const host = parsed.hostname.toLowerCase();
+                const allowedHost = host === 'feishu.cn' || host.endsWith('.feishu.cn') ||
+                    host === 'larksuite.com' || host.endsWith('.larksuite.com');
+                return parsed.protocol === 'https:' && allowedHost ? parsed.href : '#';
+            } catch (_) {
+                return '#';
+            }
         }
 
         function escapeJsString(s) {
@@ -2646,7 +2652,7 @@
                         <td style="text-align:center;"><input type="checkbox" class="stat-checkbox" value="${item.id ? 'id:'+escapeHtml(item.id) : 'ts:'+escapeHtml(item.ts)}"></td>
                         <td style="color: #64748b; vertical-align:top;">${escapeHtml(item.time.replace('T', ' ').split('.')[0])}</td>
                         <td style="font-weight: 600; white-space: normal; word-break: break-all; vertical-align:top; color:#2d3b52;">${escapeHtml(item.title) || '-'}</td>
-                        <td style="vertical-align:top; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(item.url)}"><a href="${safeUrl(item.url)}" target="_blank" style="color:#3b82f6;">链接</a></td>
+                        <td style="vertical-align:top; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(item.url)}"><a href="${escapeHtml(safeUrl(item.url))}" target="_blank" rel="noopener noreferrer" style="color:#3b82f6;">链接</a></td>
                         <td style="vertical-align:top;">${statusClass ? `<span class="status-pill ${statusClass}">${escapeHtml(statusText)}</span>` : escapeHtml(statusText)}</td>
                         <td style="color: #64748b; vertical-align:top;">${item.user ? escapeHtml(item.user) : '-'}</td>
                         <td style="color: #64748b; vertical-align:top;">${escapeHtml(item.ip) || '-'}</td>
@@ -2757,7 +2763,7 @@
 
         function renderUsersTable(users) {
             let html = '<table class="project-table table table-hover align-middle mb-0">';
-            html += '<thead><tr><th>姓名</th><th>open_id</th><th style="width:150px">创建时间</th><th style="width:150px">最近登录</th><th style="width:80px">状态</th><th style="width:80px">操作</th></tr></thead><tbody>';
+            html += '<thead><tr><th>姓名</th><th>open_id</th><th style="width:150px">创建日期</th><th style="width:150px">最近登录</th><th style="width:120px">状态</th><th style="width:180px">操作</th></tr></thead><tbody>';
 
             if (users.length === 0) {
                 html += '<tr><td colspan="6" class="table-empty">暂无登录用户</td></tr>';
@@ -2771,11 +2777,16 @@
 
                     const statusTag = u.disabled
                         ? '<span class="status-pill danger">已禁用</span>'
-                        : '<span class="status-pill success">正常</span>';
+                        : (u.is_admin
+                            ? '<span class="status-pill success">管理员</span>'
+                            : '<span class="status-pill success">正常</span>');
 
                     const toggleBtn = u.disabled
                         ? `<button onclick="toggleUserDisabled('${escapeHtml(escapeJsString(u.open_id))}', false)" class="btn btn-sm table-action">启用</button>`
                         : `<button onclick="toggleUserDisabled('${escapeHtml(escapeJsString(u.open_id))}', true)" class="btn btn-sm table-action danger">禁用</button>`;
+                    const adminBtn = u.is_admin
+                        ? `<button onclick="toggleUserAdmin('${escapeHtml(escapeJsString(u.open_id))}', false)" class="btn btn-sm table-action">取消管理员</button>`
+                        : `<button onclick="toggleUserAdmin('${escapeHtml(escapeJsString(u.open_id))}', true)" class="btn btn-sm table-action">设为管理员</button>`;
 
                     html += `<tr>
                         <td><div class="user-cell">${avatar}<span class="user-name">${escapeHtml(name)}</span></div></td>
@@ -2783,7 +2794,7 @@
                         <td style="color:#64748b;">${escapeHtml(formatDateTime(u.created_at))}</td>
                         <td style="color:#64748b;">${escapeHtml(formatDateTime(u.last_login_at))}</td>
                         <td>${statusTag}</td>
-                        <td>${toggleBtn}</td>
+                        <td><div style="display:flex; gap:6px; flex-wrap:wrap;">${toggleBtn}${adminBtn}</div></td>
                     </tr>`;
                 }
             }
@@ -2796,6 +2807,22 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ open_id: openId, disabled: disabled })
+            }).then(r => r.json()).then(res => {
+                if (res.status === 'ok') {
+                    loadUsers();
+                } else {
+                    alert(res.message || '操作失败');
+                }
+            }).catch(e => {
+                alert('请求错误: ' + e.message);
+            });
+        }
+
+        function toggleUserAdmin(openId, isAdmin) {
+            fetch('/api/admin/users/set-admin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ open_id: openId, is_admin: isAdmin })
             }).then(r => r.json()).then(res => {
                 if (res.status === 'ok') {
                     loadUsers();
@@ -3048,7 +3075,7 @@
             if (!select) return; // 容错处理
             select.innerHTML = "";
             
-            const defaultTemplate = "[/* default_template */]";
+            const defaultTemplate = [/* default_template_json */];
             list.sort((a, b) => {
                 if (a.name === defaultTemplate) return -1;
                 if (b.name === defaultTemplate) return 1;
@@ -3600,14 +3627,25 @@
                 // Edit Dropdown
                 const editDropdown = document.createElement("div");
                 editDropdown.className = "dropdown";
-                editDropdown.innerHTML = `
-                    <span class="action-link blue" style="cursor:pointer; display:flex; align-items:center; font-size: 13px;">编辑 <span style="font-size:10px; margin-left:2px;">▼</span></span>
-                    <div class="dropdown-content">
-                        <div class="dropdown-item" onclick="openRenameModal('${t.name}')">重命名</div>
-                        <div class="dropdown-item" onclick="openUploadModal('file', '${t.name}')">更换文件</div>
-                        <div class="dropdown-item" onclick="openUploadModal('image', '${t.name}')">更换图片</div>
-                    </div>
-                `;
+                const editTrigger = document.createElement("span");
+                editTrigger.className = "action-link blue";
+                editTrigger.style.cssText = "cursor:pointer; display:flex; align-items:center; font-size:13px;";
+                editTrigger.textContent = "编辑 ▼";
+                const dropdownContent = document.createElement("div");
+                dropdownContent.className = "dropdown-content";
+                [
+                    ['重命名', () => openRenameModal(t.name)],
+                    ['更换文件', () => openUploadModal('file', t.name)],
+                    ['更换图片', () => openUploadModal('image', t.name)]
+                ].forEach(([label, handler]) => {
+                    const item = document.createElement("div");
+                    item.className = "dropdown-item";
+                    item.textContent = label;
+                    item.addEventListener('click', handler);
+                    dropdownContent.appendChild(item);
+                });
+                editDropdown.appendChild(editTrigger);
+                editDropdown.appendChild(dropdownContent);
                 actions.appendChild(editDropdown);
 
                 if (!t.is_default) {
