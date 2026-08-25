@@ -12,6 +12,7 @@ from docx.shared import Pt, Mm, RGBColor, Cm
 from docx.enum.text import WD_LINE_SPACING
 from copy import deepcopy
 from src.core.config_loader import ConfigLoader, config
+from src.converters.docx.style_manager import TableStyleManager
 try:
     from docx.opc.constants import RELATIONSHIP_TYPE as RT
 except ImportError:
@@ -386,6 +387,11 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
     heading_style_ids = _get_heading_style_ids(doc, ns)
     template_heading_numbering_indents = _get_template_heading_numbering_indents(template_path, heading_style_ids, ns)
 
+    # Keep table body and header paragraphs on dedicated Word styles.  The
+    # styles are created even when a document has no tables so the exported
+    # document always exposes the same two presets in Word's Styles pane.
+    table_body_style, table_header_style = TableStyleManager.ensure_table_paragraph_styles(doc)
+
     default_max_h = ConfigLoader.get_float('image.max_height', 23.0)
         
     default_max_w = ConfigLoader.get_float('image.max_width', 16.0)
@@ -460,6 +466,22 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
     all_tables = []
     for t in top_tables:
         all_tables.extend(_get_all_tables(t))
+
+    # Apply the paragraph styles before any optional direct formatting below.
+    # Code-block tables deliberately keep their own monospace style.
+    for table in all_tables:
+        try:
+            tblPr = table._element.tblPr
+            caption = tblPr.find(qn('w:tblCaption')) if tblPr is not None else None
+            if caption is not None and caption.get(qn('w:val')) == 'code_block':
+                continue
+        except Exception:
+            # A malformed table property should not prevent the normal table
+            # paragraphs from receiving their styles.
+            pass
+        TableStyleManager.apply_table_paragraph_styles(
+            table, table_body_style, table_header_style
+        )
 
     # First, handle indentation clearance for ALL tables 
     # to avoid interference from nested table processing later.
@@ -1789,8 +1811,6 @@ def _apply_custom_code_block_style(table, config, ns):
             r = run._element
             r.rPr.rFonts.set(qn('w:eastAsia'), font_family)
 
-from src.converters.docx.style_manager import TableStyleManager
-from docx.oxml.ns import qn
 import logging
 logger = logging.getLogger('doc_download')
 

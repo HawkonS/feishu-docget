@@ -10,6 +10,7 @@ import docx.opc.constants
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
 from src.core.config_loader import ConfigLoader
 from src.core.image_processor import smart_crop
+from src.converters.docx.style_manager import TableStyleManager
 
 
 def _is_svg_file(file_path):
@@ -442,6 +443,10 @@ class FeishuDocxConverter:
             logger.info('创建了新的空文档')
         if len(self.doc.sections) == 0:
             self.doc.add_section()
+        # Register the two paragraph presets before rendering so a DOCX
+        # produced directly by the converter (without the cleaner) still has
+        # the same table body/header styles as the normal service pipeline.
+        self.table_body_style, self.table_header_style = TableStyleManager.ensure_table_paragraph_styles(self.doc)
         try:
             self.injector = NumberingInjector(self.doc)
         except Exception as e:
@@ -451,10 +456,34 @@ class FeishuDocxConverter:
             if self.check_stop_func and self.check_stop_func():
                 raise InterruptedError('任务已停止')
             self._render_block(root, self.doc, level=0)
+        self._apply_table_paragraph_styles()
         self.processed_count = self.total_blocks
         self._update_progress(percentage=90, message=f'已组织 {self.total_blocks} / {self.total_blocks} 个文件块（已完成 {self.fallback_download_count} 张补充图片下载）', log_type='success')
         self.doc.save(output_path)
         return output_path
+
+    def _apply_table_paragraph_styles(self):
+        """Apply the table body/header presets to generated table paragraphs."""
+        ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+
+        def visit(table):
+            try:
+                tbl_pr = table._element.tblPr
+                caption = tbl_pr.find(f'{{{ns}}}tblCaption') if tbl_pr is not None else None
+                if caption is not None and caption.get(f'{{{ns}}}val') == 'code_block':
+                    return
+            except Exception:
+                pass
+            TableStyleManager.apply_table_paragraph_styles(
+                table, self.table_body_style, self.table_header_style
+            )
+            for row in table.rows:
+                for cell in row.cells:
+                    for nested_table in cell.tables:
+                        visit(nested_table)
+
+        for table in self.doc.tables:
+            visit(table)
 
     def _render_children(self, block, container, child_level):
         children_ids = block.get('children') or []
