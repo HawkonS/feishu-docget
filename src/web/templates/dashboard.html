@@ -2,8 +2,10 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>文档下载管理后台</title>
     <link rel="icon" href="/favicon.ico">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
     <script src="/static/vendor/jszip.min.js"></script>
     <script src="/static/vendor/docx-preview.min.js"></script>
     <style>
@@ -871,10 +873,266 @@
         .toast-error { background: #ef4444; }
         .toast-warning { background: #d97706; }
 
+        /* ---------- Admin workspace refresh ----------
+           A small, dependency-free visual system for dense data screens. */
+        :root {
+            --ink: #172033;
+            --muted: #718096;
+            --line: #e7ebf3;
+            --line-strong: #d9e1ee;
+            --surface: #ffffff;
+            --surface-soft: #f7f9fc;
+            --accent: #356df3;
+            --accent-soft: #edf3ff;
+            --success: #139a72;
+            --danger: #d84a5a;
+            --warning: #c17a15;
+        }
+        *, *::before, *::after { box-sizing: border-box; }
+        body {
+            background: #f4f6fa;
+            color: var(--ink);
+        }
+        .sidebar {
+            width: 240px;
+            padding: 18px 12px;
+            background: #fbfcfe;
+            border-right: 1px solid var(--line);
+            gap: 4px;
+        }
+        .sidebar-brand {
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            padding: 7px 12px 22px;
+            color: var(--ink);
+            font-size: 15px;
+            font-weight: 750;
+            letter-spacing: -.01em;
+        }
+        .sidebar-brand-mark {
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            color: #fff;
+            background: linear-gradient(135deg, #5a86ff, #2f5ddd);
+            box-shadow: 0 6px 14px rgba(53,109,243,.24);
+            font-size: 15px;
+        }
+        .sidebar-brand small {
+            display: block;
+            margin-top: 2px;
+            color: #9aa6b8;
+            font-size: 10px;
+            font-weight: 500;
+            letter-spacing: .03em;
+        }
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            min-height: 42px;
+            padding: 0 13px;
+            border-radius: 10px;
+            color: #637087;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .nav-item:hover { background: #f0f4fb; color: #315dcc; }
+        .nav-item.active {
+            color: #2452c4;
+            background: var(--accent-soft);
+            box-shadow: inset 3px 0 0 var(--accent);
+        }
+        .nav-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 25px;
+            height: 25px;
+            border-radius: 7px;
+            background: #f0f3f8;
+            color: #7d899d;
+            font-size: 13px;
+            font-weight: 700;
+        }
+        .nav-item.active .nav-icon { background: #dbe7ff; color: var(--accent); }
+        .main-content { background: #f4f6fa; }
+        .header {
+            height: 70px;
+            padding: 0 32px;
+            background: rgba(255,255,255,.9);
+            border-bottom: 1px solid var(--line);
+            backdrop-filter: blur(12px);
+        }
+        .page-title { color: var(--ink); font-size: 21px; letter-spacing: -.02em; }
+        .header-actions { gap: 8px; align-items: center; }
+        .action-link {
+            padding: 7px 11px;
+            border-radius: 8px;
+            color: #66738a !important;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .action-link:hover { background: #f0f4fb; color: #2e60ce !important; }
+        .action-link.red:hover { color: var(--danger) !important; background: #fff0f1; }
+        .content-body { padding: 26px 32px 30px; }
+        .tab-pane.active { gap: 16px; }
+        .panel-surface,
+        .table-shell,
+        .data-toolbar,
+        .tree-shell {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            box-shadow: 0 5px 18px rgba(25, 42, 70, .035);
+        }
+        .table-shell { overflow: auto; min-height: 0; }
+        .project-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 13px;
+            table-layout: fixed;
+        }
+        .project-table th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            padding: 12px 16px;
+            color: #8a96a9;
+            background: #fafbfc;
+            border-bottom: 1px solid var(--line);
+            font-size: 11px;
+            font-weight: 750;
+            letter-spacing: .055em;
+            text-align: left;
+            white-space: nowrap;
+        }
+        .project-table td {
+            padding: 14px 16px;
+            color: #39465b;
+            border-bottom: 1px solid #f0f2f6;
+            vertical-align: middle;
+        }
+        .project-table tbody tr:not(.tree-detail-row):hover td { background: #fbfcff; }
+        .project-table tbody tr:last-child td { border-bottom: 0; }
+        .project-table input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); vertical-align: middle; }
+        .table-empty {
+            padding: 54px 20px !important;
+            color: #9aa6b8 !important;
+            text-align: center;
+        }
+        .data-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 14px 16px;
+            flex-wrap: wrap;
+        }
+        .toolbar-meta { color: var(--muted); font-size: 13px; }
+        .toolbar-meta strong { color: var(--accent); font-size: 18px; margin-left: 4px; }
+        .toolbar-fields { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+        .toolbar-fields .md-search-input { width: 145px !important; margin: 0; padding: 8px 10px; border-radius: 8px; border-color: var(--line-strong); background: #fbfcfe; }
+        .toolbar-fields .md-search-input:focus { background: #fff; box-shadow: 0 0 0 3px rgba(53,109,243,.1); }
+        .toolbar-actions { display: flex; gap: 8px; margin-left: auto; }
+        .btn-start { border-radius: 8px; box-shadow: none; font-size: 13px; }
+        .btn-start:hover { box-shadow: 0 5px 12px rgba(53,109,243,.16); }
+        .cfg-card { border-color: var(--line); border-radius: 14px; box-shadow: 0 5px 18px rgba(25,42,70,.035); }
+        .cfg-card-head { background: #fff; padding: 15px 18px; }
+        .cfg-card-head:hover { background: #fafbff; }
+        .cfg-card-body { background: #fcfdff; gap: 10px 14px; padding: 14px; }
+        .cfg-item { padding: 13px 14px; border: 1px solid #edf0f5; border-radius: 10px; background: #fff; }
+        .cfg-item:hover { border-color: #dce5f5; box-shadow: 0 3px 10px rgba(25,42,70,.035); }
+        .cfg-label { color: #2d3b52; }
+        .cfg-key { color: #a0aabd; }
+        .tree-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            max-width: 100%;
+            padding: 0;
+            border: 0;
+            background: transparent;
+            color: #26354d;
+            font: inherit;
+            font-weight: 650;
+            cursor: pointer;
+            text-align: left;
+        }
+        .tree-chevron { color: #91a0b6; font-size: 10px; transition: transform .18s ease; }
+        .tree-toggle.is-open .tree-chevron { transform: rotate(90deg); color: var(--accent); }
+        .tree-folder-icon,
+        .tree-file-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 27px;
+            height: 27px;
+            flex-shrink: 0;
+            border-radius: 8px;
+            background: #fff4d8;
+            color: #c17a15;
+            font-size: 13px;
+        }
+        .tree-file-icon { background: #eef3ff; color: var(--accent); }
+        .tree-detail-row { display: none; }
+        .tree-detail-row.is-open { display: table-row; }
+        .tree-detail-row > td { padding: 0 18px 14px 48px; background: #fcfdff; }
+        .tree-children { border-left: 1px solid #dfe7f4; padding: 3px 0 3px 17px; }
+        .tree-file-row,
+        .tree-folder-row { display: flex; align-items: center; gap: 10px; min-height: 38px; border-bottom: 1px solid #f1f3f7; font-size: 12px; }
+        .tree-file-row:last-child, .tree-folder-row:last-child { border-bottom: 0; }
+        .tree-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #526078; }
+        .tree-file-date { width: 140px; flex-shrink: 0; color: #a0aabd; font-size: 11px; }
+        .tree-row-actions { display: flex; gap: 9px; flex-shrink: 0; }
+        .tree-row-actions a, .tree-row-actions button { border: 0; background: transparent; color: var(--accent); cursor: pointer; font: inherit; font-size: 11px; text-decoration: none; }
+        .tree-row-actions .danger { color: var(--danger); }
+        .tree-folder-row { color: #46546a; font-weight: 650; }
+        .tree-folder-row .tree-file-name { color: #46546a; }
+        .tree-folder-children { display: none; padding-left: 25px; }
+        .tree-folder-children.is-open { display: block; }
+        .status-pill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+        .status-pill::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+        .status-pill.success { color: var(--success); background: #eaf8f3; }
+        .status-pill.danger { color: var(--danger); background: #fff0f1; }
+        .user-cell { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .user-cell img, .user-avatar-fallback { width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0; }
+        .user-avatar-fallback { display: inline-flex; align-items: center; justify-content: center; color: #315dcc; background: #dce7ff; font-size: 12px; font-weight: 750; }
+        .user-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #2d3b52; font-weight: 650; }
+        .mono-muted { color: #8793a7; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; word-break: break-all; }
+        .table-action { border: 0; border-radius: 7px; padding: 6px 10px; font: inherit; font-size: 11px; font-weight: 650; cursor: pointer; color: var(--accent); background: #edf3ff; }
+        .table-action.danger { color: var(--danger); background: #fff0f1; }
+        .pagination { align-items: center !important; color: #8995a8; }
+        .pagination button { border: 1px solid var(--line-strong) !important; background: #fff !important; color: #64738a !important; border-radius: 8px !important; box-shadow: none !important; }
+        .pagination button:disabled { opacity: .4; cursor: not-allowed; }
+        .log-layout { border: 1px solid var(--line); border-radius: 14px !important; background: #fff !important; box-shadow: 0 5px 18px rgba(25,42,70,.035); }
+        .log-sidebar { width: 260px !important; background: #fafbfe !important; border-right-color: var(--line) !important; }
+        .log-sidebar-title { padding: 15px 17px !important; background: #fff !important; color: #45536a !important; border-bottom-color: var(--line) !important; font-size: 12px !important; letter-spacing: .04em; }
+        .log-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 11px 15px; border-bottom: 1px solid #f0f2f6; color: #68758a; cursor: pointer; font-size: 12px; transition: .15s ease; }
+        .log-item:hover { background: #f3f6fc; }
+        .log-item.active { color: var(--accent); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); font-weight: 650; }
+        .log-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .log-item-size { color: #a2adbd; flex-shrink: 0; font-size: 10px; }
+        .log-main { background: #fff !important; }
+        .log-main-head { padding: 15px 20px !important; border-bottom-color: var(--line) !important; }
+        .log-content { padding: 20px !important; background: #101827 !important; color: #d6deeb !important; font-size: 12px !important; }
+        @media (max-width: 900px) {
+            .sidebar { width: 208px; }
+            .content-body { padding: 20px; }
+            .tree-file-date { width: 110px; }
+        }
+
         @media (max-width: 768px) {
             .app-container { flex-direction: column; height: auto; min-height: 100vh; overflow: auto; }
-            .sidebar { width: 100%; border-right: none; border-bottom: 1px solid #eee; padding-top: 0; flex-direction: row; overflow-x: auto; height: 50px; align-items: center; }
-            .nav-item { padding: 0 16px; white-space: nowrap; line-height: 50px; }
+            .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--line); padding: 0 8px; flex-direction: row; overflow-x: auto; height: 58px; align-items: center; }
+            .sidebar-brand { display: none; }
+            .nav-item { min-height: 38px; padding: 0 12px; white-space: nowrap; }
+            .nav-icon { display: none; }
             .main-content { height: auto; overflow: visible; }
             .content-body { overflow: visible; padding: 16px; }
             .md-selection-area { grid-template-columns: 1fr; height: auto; }
@@ -885,41 +1143,572 @@
             .advanced-grid { grid-template-columns: 1fr; }
             .compact-grid-2 { grid-template-columns: 1fr; }
             .cfg-search { max-width: none; }
+            .header { height: 62px; padding: 0 16px; }
+            .header-actions .action-link:first-child { display: none; }
+            .content-body { padding: 16px; }
+            .data-toolbar { align-items: stretch; }
+            .toolbar-fields, .toolbar-actions { width: 100%; }
+            .toolbar-fields .md-search-input { flex: 1; min-width: 115px; }
+            .toolbar-actions .btn-start { flex: 1; }
+            .table-shell { overflow-x: auto; }
+            .project-table { min-width: 680px; }
+            .tree-detail-row > td { padding-left: 20px; }
+            .tree-file-date { width: 95px; }
+            .log-sidebar { width: 180px !important; }
+        }
+
+        /* Bootstrap 5 layout bridge: Bootstrap supplies the responsive primitives;
+           these few tokens keep the existing admin data views visually consistent. */
+        .app-container { min-width: 0; }
+        .sidebar .offcanvas-body { min-height: 0; overflow-y: auto; }
+        .sidebar .nav { flex: 1 1 auto; }
+        .header .btn { font-weight: 600; }
+        .header-actions { flex-wrap: wrap; }
+        .header-actions .action-link { text-decoration: none; }
+        .header-actions .action-link.blue { color: var(--accent) !important; }
+        .header-actions .action-link.red { color: var(--danger) !important; }
+        .toolbar-fields .form-control { min-height: 34px; }
+        .toolbar-fields .form-control:focus,
+        .cfg-search.form-control:focus { border-color: #86b7fe; box-shadow: 0 0 0 .2rem rgba(13,110,253,.12); }
+        .project-table.table > :not(caption) > * > * { border-bottom-color: #edf0f5; }
+        .project-table.table thead th { vertical-align: middle; }
+        .project-table.table-hover > tbody > tr:hover > * { --bs-table-accent-bg: #fbfcff; }
+        .status-pill.success { --bs-success-rgb: 19,154,114; }
+        .status-pill.danger { --bs-danger-rgb: 216,74,90; }
+        .table-action.btn { --bs-btn-padding-y: .35rem; --bs-btn-padding-x: .65rem; }
+        .modal-content .btn-primary,
+        .modal-content .btn-secondary { min-height: 38px; }
+        @media (min-width: 992px) {
+            .sidebar.offcanvas-lg { position: relative; visibility: visible; transform: none; }
+        }
+        @media (max-width: 991.98px) {
+            html, body { height: 100%; overflow: hidden; }
+            .app-container { height: 100dvh; overflow: hidden; }
+            .sidebar { width: min(286px, 88vw) !important; height: 100dvh; min-height: 100dvh; padding: 18px 12px; border-right: 1px solid var(--line); border-bottom: 0; flex-direction: column; align-items: stretch; }
+            .sidebar-brand { display: flex !important; }
+            .sidebar .nav-item { min-height: 42px; padding: 0 13px; white-space: nowrap; }
+            .sidebar .nav-icon { display: inline-flex; }
+            .main-content { width: 100%; min-width: 0; height: 100dvh; }
+            .content-body { min-height: 0; overflow-y: auto; }
+            .tab-pane.active { min-height: min(680px, calc(100dvh - 110px)); }
+            .tab-pane.scrollable { overflow: visible; }
+            .header-actions .action-link:first-child { display: none; }
+        }
+        @media (max-width: 575.98px) {
+            .header { padding: 0 .75rem; }
+            .page-title { font-size: 18px; }
+            .header-actions { gap: 4px; }
+            .header-actions .btn { padding: .35rem .5rem; font-size: .75rem; }
+            .content-body { padding: .75rem; }
+            .data-toolbar { padding: .75rem; }
+            .toolbar-fields .form-control { flex: 1 1 125px; width: auto !important; }
+            .toolbar-actions { margin-left: 0; }
+            .toolbar-actions .btn { flex: 1 1 auto; }
+            .project-table { min-width: 720px; }
+            .log-layout { min-height: 560px; }
+            .log-sidebar { width: 155px !important; }
+            .log-main-head { padding: .75rem !important; }
+            .log-main-head #logControls { flex-wrap: wrap; justify-content: flex-end; }
+            .tree-detail-row > td { padding-left: 12px; padding-right: 12px; }
+            .tree-file-date { display: none; }
+            .tree-row-actions { gap: 6px; }
+        }
+
+        /* ---------- Final Bootstrap 5 visual system ----------
+           One compact theme keeps the dense admin screens calm and readable. */
+        :root {
+            --admin-ink: #182230;
+            --admin-muted: #6b778c;
+            --admin-border: #e4e8ef;
+            --admin-surface: #ffffff;
+            --admin-canvas: #f5f7fb;
+            --admin-sidebar: #f8f9fd;
+            --admin-sidebar-muted: #8b96a8;
+            --admin-primary: #4268ed;
+            --admin-primary-soft: #edf2ff;
+            --admin-danger: #d84f5f;
+        }
+        html, body { background: var(--admin-canvas); color: var(--admin-ink); }
+        body { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+        .app-container { display: flex; width: 100%; height: 100vh; min-height: 100vh; background: var(--admin-canvas); }
+        .sidebar {
+            width: 248px;
+            flex: 0 0 248px;
+            padding: 20px 14px;
+            background: var(--admin-sidebar) !important;
+            border: 0;
+            color: var(--admin-ink);
+            gap: 0;
+        }
+        .sidebar .offcanvas-body { background: var(--admin-sidebar) !important; }
+        .sidebar-brand {
+            min-height: 42px;
+            margin: 0 8px 28px;
+            padding: 0;
+            color: var(--admin-ink);
+            font-size: 15px;
+            letter-spacing: .01em;
+        }
+        .sidebar-brand small { color: var(--admin-sidebar-muted); font-size: 9px; letter-spacing: .1em; }
+        .sidebar-brand-mark { width: 34px; height: 34px; border-radius: 10px; background: var(--admin-primary); box-shadow: 0 5px 12px rgba(66,104,237,.2); }
+        .sidebar nav { padding: 0 !important; }
+        .sidebar .nav-item {
+            min-height: 44px;
+            padding: 0 12px;
+            width: 100%;
+            border: 0;
+            background: transparent !important;
+            -webkit-appearance: none;
+            appearance: none;
+            text-align: left;
+            font-family: inherit;
+            border-radius: 0 8px 8px 0;
+            color: var(--admin-sidebar-muted);
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .sidebar .nav-item:hover { color: #3557c9; background: #f0f3fa; }
+        .sidebar .nav-item.active {
+            color: #3459d2;
+            background: rgba(66,104,237,.08) !important;
+            box-shadow: inset 3px 0 0 var(--admin-primary);
+        }
+        .sidebar .nav-icon { display: none; }
+        .main-content { min-width: 0; background: var(--admin-canvas); }
+        .header {
+            height: 72px;
+            padding: 0 34px;
+            background: var(--admin-surface);
+            border-bottom: 1px solid var(--admin-border);
+        }
+        .page-title { color: var(--admin-ink); font-size: 20px; font-weight: 700; letter-spacing: -.025em; }
+        .header-actions { gap: 8px; }
+        .header-actions .btn { border-radius: 8px; font-size: 12px; }
+        .header-actions .btn-light { border-color: transparent; background: #f3f5f8; }
+        .content-body { padding: 28px 34px 34px; background: var(--admin-canvas); }
+        .tab-pane.active { gap: 14px; }
+        .data-toolbar,
+        .table-shell,
+        .cfg-card,
+        .log-layout,
+        .panel-surface {
+            border: 1px solid var(--admin-border);
+            border-radius: 12px;
+            background: var(--admin-surface);
+            box-shadow: 0 1px 2px rgba(16,24,40,.025);
+        }
+        .data-toolbar { padding: 13px 16px; }
+        .toolbar-meta { color: var(--admin-muted); font-size: 12px; }
+        .toolbar-meta strong { color: var(--admin-ink); font-size: 18px; font-weight: 750; }
+        .toolbar-fields { gap: 8px; }
+        .toolbar-fields .form-control { border-color: var(--admin-border); background: #fbfcfe; border-radius: 8px; color: var(--admin-ink); }
+        .toolbar-fields .form-control::placeholder { color: #9aa6b8; }
+        .toolbar-actions { gap: 8px; }
+        .btn { border-radius: 8px; font-weight: 600; }
+        .btn-primary { --bs-btn-bg: var(--admin-primary); --bs-btn-border-color: var(--admin-primary); --bs-btn-hover-bg: #315ed8; --bs-btn-hover-border-color: #315ed8; }
+        .btn-outline-primary { --bs-btn-color: var(--admin-primary); --bs-btn-border-color: #b6c8ff; --bs-btn-hover-bg: var(--admin-primary-soft); --bs-btn-hover-color: #2b57c8; --bs-btn-hover-border-color: #9eb7ff; }
+        .btn-start { box-shadow: none; }
+        .project-table { color: var(--admin-ink); }
+        .project-table th { color: #7d899c; background: #fafbfc; border-bottom-color: var(--admin-border); font-size: 10px; letter-spacing: .08em; }
+        .project-table td { color: #3d4b61; border-bottom-color: #eef1f5; }
+        .project-table tbody tr:not(.tree-detail-row):hover td { background: #fbfcff; }
+        .project-table.table-hover > tbody > tr:hover > * { --bs-table-accent-bg: #fbfcff; }
+        .table-empty { color: #9aa6b8 !important; }
+        .tree-toggle { color: #2b374a; font-weight: 650; }
+        .tree-folder-icon { background: #fff6de; color: #c68a20; }
+        .tree-file-icon { background: #edf2ff; color: var(--admin-primary); }
+        .tree-detail-row > td { background: #fcfdff; }
+        .tree-children { border-left-color: #dce4f2; }
+        .tree-file-row, .tree-folder-row { border-bottom-color: #eef1f5; }
+        .tree-file-name { color: #5c6a7e; }
+        .tree-row-actions a, .tree-row-actions button { color: var(--admin-primary); }
+        .tree-row-actions .danger { color: var(--admin-danger); }
+        .status-pill.success { color: #13865f; background: #eaf8f2; }
+        .status-pill.danger { color: var(--admin-danger); background: #fff0f2; }
+        .table-action { color: var(--admin-primary); background: var(--admin-primary-soft); }
+        .table-action.danger { color: var(--admin-danger); background: #fff0f2; }
+        .cfg-card { overflow: hidden; }
+        .cfg-card-head { padding: 15px 18px; background: #fff; border-bottom-color: var(--admin-border); }
+        .cfg-card-head:hover { background: #fafbff; }
+        .cfg-card-body { padding: 14px; background: #fcfdff; }
+        .cfg-item { border-color: #edf0f4; border-radius: 9px; }
+        .cfg-item:hover { border-color: #ced9ee; box-shadow: none; }
+        .cfg-search.form-control, .cfg-input.form-control, .cfg-input.form-select { border-color: var(--admin-border); border-radius: 8px; }
+        .log-layout { box-shadow: 0 1px 2px rgba(16,24,40,.025); }
+        .log-sidebar { background: #fafbfc !important; border-right-color: var(--admin-border) !important; }
+        .log-sidebar-title { background: #fff !important; color: #4d5a6e !important; border-bottom-color: var(--admin-border) !important; }
+        .log-item { border-bottom-color: #eef1f5; color: #67758a; }
+        .log-item.active { color: var(--admin-primary); background: var(--admin-primary-soft); box-shadow: inset 3px 0 0 var(--admin-primary); }
+        .log-main-head { background: #fff; border-bottom-color: var(--admin-border) !important; }
+        .log-content { background: #141b2b !important; }
+        #templateGrid > div { border-color: var(--admin-border) !important; border-radius: 12px !important; box-shadow: 0 1px 2px rgba(16,24,40,.025) !important; }
+        #templateGrid > div:hover { box-shadow: 0 10px 24px rgba(16,24,40,.08) !important; }
+        .footer-copyright { color: #a0aabd; }
+        @media (min-width: 992px) {
+            .sidebar.offcanvas-lg { position: relative; visibility: visible; transform: none; }
+        }
+        @media (max-width: 991.98px) {
+            .app-container { display: block; height: 100dvh; overflow: hidden; }
+            .sidebar { width: min(286px, 88vw) !important; height: 100dvh; padding: 20px 14px; }
+            .sidebar .offcanvas-header { margin: -20px -14px 18px; padding: 18px 20px; }
+            .sidebar .offcanvas-body > .sidebar-brand { display: none !important; }
+            .main-content { width: 100%; height: 100dvh; }
+            .content-body { min-height: 0; overflow-y: auto; padding: 20px 16px 24px; }
+            .header { height: 64px; padding: 0 16px; }
+            .tab-pane.active { min-height: calc(100dvh - 100px); }
+        }
+        @media (max-width: 575.98px) {
+            .header-actions .btn { padding: 6px 8px; }
+            .header-actions .btn-outline-primary { display: none; }
+            .data-toolbar { align-items: stretch; }
+            .toolbar-fields, .toolbar-actions { width: 100%; }
+            .toolbar-fields .form-control { flex: 1 1 130px; width: auto !important; }
+            .project-table { min-width: 700px; }
+            .log-sidebar { width: 154px !important; }
+        }
+
+        /* ---------- New workspace layout ----------
+           This is an intentionally self-contained visual layer. The old left rail is
+           replaced by a calm top navigation so the content gets the full viewport. */
+        :root {
+            --workspace-bg: #f3f5f8;
+            --workspace-surface: #ffffff;
+            --workspace-ink: #202a3a;
+            --workspace-muted: #7c8798;
+            --workspace-border: #e5e9ef;
+            --workspace-primary: #4a5bd5;
+            --workspace-primary-soft: #eef0ff;
+            --workspace-success: #15866a;
+            --workspace-danger: #d65362;
+        }
+        html, body { background: var(--workspace-bg); color: var(--workspace-ink); }
+        body { overflow: hidden; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+        .app-container { display: flex; flex-direction: column; width: 100%; height: 100vh; min-height: 100vh; overflow: hidden; background: var(--workspace-bg); }
+        .sidebar,
+        .sidebar.offcanvas-lg,
+        .sidebar.offcanvas-start {
+            position: relative !important;
+            inset: auto !important;
+            transform: none !important;
+            visibility: visible !important;
+            width: 100% !important;
+            max-width: none !important;
+            height: 66px !important;
+            min-height: 66px;
+            flex: 0 0 66px;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            padding: 0 30px;
+            overflow: hidden;
+            border: 0;
+            border-bottom: 1px solid var(--workspace-border);
+            background: var(--workspace-surface) !important;
+            color: var(--workspace-ink);
+        }
+        .sidebar .offcanvas-header { display: none !important; }
+        .sidebar .offcanvas-body {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center;
+            width: 100%;
+            min-height: 0;
+            padding: 0 !important;
+            overflow: visible;
+            background: transparent !important;
+        }
+        .sidebar .offcanvas-body > .sidebar-brand { display: flex !important; flex: 0 0 auto; margin: 0 38px 0 0; }
+        .sidebar-brand { min-height: 36px; margin: 0 38px 0 0; padding: 0; color: var(--workspace-ink); font-size: 14px; }
+        .sidebar-brand-mark { width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(135deg, #5969e3, #4655ca); box-shadow: 0 5px 12px rgba(74,91,213,.18); }
+        .sidebar-brand small { color: #a1a9b8; font-size: 8px; letter-spacing: .1em; }
+        .sidebar nav { display: flex !important; flex: 1 1 auto; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center; gap: 4px !important; height: 100%; padding: 0 !important; overflow-x: auto; scrollbar-width: none; }
+        .sidebar nav::-webkit-scrollbar { display: none; }
+        .sidebar .nav-item,
+        .sidebar .nav-item.active {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: auto;
+            min-height: 36px;
+            flex: 0 0 auto;
+            padding: 0 14px;
+            border: 0;
+            border-radius: 7px;
+            background: transparent !important;
+            box-shadow: none;
+            color: #758095;
+            font-size: 12px;
+            font-weight: 650;
+            white-space: nowrap;
+            transition: color .16s ease, background .16s ease;
+        }
+        .sidebar .nav-item:hover { color: var(--workspace-ink); background: #f3f5f9 !important; }
+        .sidebar .nav-item.active { color: var(--workspace-primary); background: var(--workspace-primary-soft) !important; }
+        .sidebar .nav-icon { display: none; }
+        .main-content { width: 100%; min-width: 0; height: calc(100vh - 66px); flex: 1 1 auto; background: var(--workspace-bg); }
+        .header { height: 72px; padding: 0 34px; background: rgba(255,255,255,.92); border-bottom: 1px solid var(--workspace-border); }
+        .header > .d-flex > .d-lg-none { display: none !important; }
+        .page-title { color: var(--workspace-ink); font-size: 19px; font-weight: 720; letter-spacing: -.025em; }
+        .header-actions { gap: 7px; }
+        .header-actions .btn { border-radius: 7px; font-size: 11px; font-weight: 650; }
+        .header-actions .btn-light { border: 1px solid transparent; background: #f4f6f9; color: #667286; }
+        .content-body { width: 100%; max-width: 1480px; margin: 0 auto; padding: 26px 34px 34px; background: var(--workspace-bg); }
+        .tab-pane.active { gap: 14px; }
+        .data-toolbar,
+        .table-shell,
+        .cfg-card,
+        .log-layout,
+        .panel-surface { border: 1px solid var(--workspace-border); border-radius: 11px; background: var(--workspace-surface); box-shadow: 0 1px 2px rgba(22,31,48,.025); }
+        .data-toolbar { padding: 13px 15px; }
+        .toolbar-meta { color: var(--workspace-muted); font-size: 12px; }
+        .toolbar-meta strong { color: var(--workspace-ink); font-size: 18px; font-weight: 750; }
+        .toolbar-fields { gap: 7px; }
+        .toolbar-fields .form-control { min-height: 34px; border-color: var(--workspace-border); border-radius: 7px; background: #fafbfc; color: var(--workspace-ink); font-size: 12px; }
+        .toolbar-fields .form-control:focus { border-color: #9aa8ed; box-shadow: 0 0 0 3px rgba(74,91,213,.1); }
+        .toolbar-actions { gap: 7px; }
+        .btn { border-radius: 7px; font-weight: 650; }
+        .btn-primary { --bs-btn-bg: var(--workspace-primary); --bs-btn-border-color: var(--workspace-primary); --bs-btn-hover-bg: #3d4dbb; --bs-btn-hover-border-color: #3d4dbb; }
+        .btn-outline-primary { --bs-btn-color: var(--workspace-primary); --bs-btn-border-color: #c6cdf8; --bs-btn-hover-bg: var(--workspace-primary-soft); --bs-btn-hover-color: #3e4db8; --bs-btn-hover-border-color: #adb8f0; }
+        .project-table { color: var(--workspace-ink); }
+        .project-table th { padding: 11px 15px; color: #8b95a6; background: #fafbfc; border-bottom-color: var(--workspace-border); font-size: 10px; letter-spacing: .08em; }
+        .project-table td { padding: 13px 15px; color: #455269; border-bottom-color: #edf0f4; }
+        .project-table.table-hover > tbody > tr:hover > * { --bs-table-accent-bg: #fbfcff; }
+        .table-empty { color: #a0a9b7 !important; }
+        .tree-toggle { color: #2e3a4d; font-weight: 650; }
+        .tree-folder-icon { width: 25px; height: 25px; border-radius: 7px; background: #fff6df; color: #c78d25; }
+        .tree-file-icon { width: 25px; height: 25px; border-radius: 7px; background: #eef1ff; color: var(--workspace-primary); }
+        .tree-detail-row > td { background: #fcfdff; }
+        .tree-children { border-left-color: #dce2ee; }
+        .tree-file-row, .tree-folder-row { border-bottom-color: #edf0f4; }
+        .tree-file-name { color: #5e6b7f; }
+        .tree-row-actions a, .tree-row-actions button { color: var(--workspace-primary); }
+        .tree-row-actions .danger { color: var(--workspace-danger); }
+        .status-pill.success { color: var(--workspace-success); background: #eaf7f2; }
+        .status-pill.danger { color: var(--workspace-danger); background: #fff0f2; }
+        .table-action { color: var(--workspace-primary); background: var(--workspace-primary-soft); }
+        .table-action.danger { color: var(--workspace-danger); background: #fff0f2; }
+        .cfg-card { overflow: hidden; }
+        .cfg-card-head { padding: 14px 17px; background: #fff; border-bottom-color: var(--workspace-border); }
+        .cfg-card-body { padding: 13px; background: #fcfdff; }
+        .cfg-item { border-color: #edf0f4; border-radius: 8px; }
+        .cfg-item:hover { border-color: #cfd7eb; box-shadow: none; }
+        .log-layout { box-shadow: 0 1px 2px rgba(22,31,48,.025); }
+        .log-sidebar { background: #fafbfc !important; border-right-color: var(--workspace-border) !important; }
+        .log-sidebar-title { background: #fff !important; color: #536078 !important; border-bottom-color: var(--workspace-border) !important; }
+        .log-item { border-bottom-color: #edf0f4; color: #6d798c; }
+        .log-item.active { color: var(--workspace-primary); background: var(--workspace-primary-soft); box-shadow: inset 3px 0 0 var(--workspace-primary); }
+        .log-main-head { background: #fff; border-bottom-color: var(--workspace-border) !important; }
+        .log-content { background: #151b28 !important; }
+        #templateGrid > div { border-color: var(--workspace-border) !important; border-radius: 11px !important; box-shadow: 0 1px 2px rgba(22,31,48,.025) !important; }
+        #templateGrid > div:hover { box-shadow: 0 10px 22px rgba(22,31,48,.08) !important; }
+        .footer-copyright { color: #a1a9b7; }
+        @media (max-width: 767.98px) {
+            .sidebar, .sidebar.offcanvas-lg, .sidebar.offcanvas-start { height: 58px !important; min-height: 58px; flex-basis: 58px; padding: 0 14px; }
+            .sidebar .offcanvas-body > .sidebar-brand { margin-right: 18px; }
+            .sidebar-brand { font-size: 13px; }
+            .sidebar-brand-mark { width: 29px; height: 29px; }
+            .sidebar .nav-item, .sidebar .nav-item.active { min-height: 34px; padding: 0 10px; font-size: 11px; }
+            .main-content { height: calc(100vh - 58px); }
+            .header { height: 62px; padding: 0 15px; }
+            .header > .d-flex > .d-lg-none { display: none !important; }
+            .page-title { font-size: 17px; }
+            .content-body { padding: 17px 13px 24px; }
+            .header-actions .btn-outline-primary { display: none; }
+            .data-toolbar { align-items: stretch; }
+            .toolbar-fields, .toolbar-actions { width: 100%; }
+            .toolbar-fields .form-control { flex: 1 1 130px; width: auto !important; }
+            .project-table { min-width: 700px; }
+        }
+        /* Configuration is a workspace of its own: compact heading, searchable toolbar and a quiet save dock. */
+        #tab-config { gap: 0; }
+        .config-workspace { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 0 24px; }
+        .config-toolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
+        .config-intro { min-width: 0; }
+        .config-eyebrow { margin-bottom: 5px; color: #9aa4b4; font-size: 10px; font-weight: 750; letter-spacing: .11em; }
+        .config-intro h2 { margin: 0; color: var(--workspace-ink); font-size: 20px; line-height: 1.2; letter-spacing: -.025em; }
+        .config-intro p { margin: 7px 0 0; color: var(--workspace-muted); font-size: 12px; }
+        .config-search-control { position: relative; width: min(300px, 100%); margin: 0; }
+        .config-search-control .cfg-search { height: 38px; padding-left: 36px; background: #fff; }
+        .config-search-icon { position: absolute; left: 13px; top: 7px; z-index: 1; color: #9aa4b4; font-size: 21px; line-height: 1; transform: rotate(-20deg); }
+        .cfg-card { margin-bottom: 13px; }
+        .cfg-card-head { min-height: 49px; }
+        .cfg-card-title { font-size: 13px; }
+        .cfg-count { padding: 3px 7px; border-radius: 999px; background: #f3f5f9; color: #8d98a9; font-size: 10px; }
+        .cfg-arrow { font-size: 11px; }
+        .cfg-card-body { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
+        .cfg-item { min-height: 126px; padding: 13px; }
+        .cfg-label { font-size: 13px; }
+        .cfg-desc, .cfg-hint { font-size: 11px; }
+        .config-savebar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex: 0 0 auto; min-height: 58px; padding: 12px 0 0; border-top: 1px solid var(--workspace-border); color: #9aa4b4; font-size: 11px; }
+        .config-savebar .btn { flex: 0 0 auto; padding: 9px 20px !important; }
+        @media (max-width: 767.98px) {
+            .config-toolbar { display: block; margin-bottom: 15px; }
+            .config-search-control { width: 100%; margin-top: 14px; }
+            .config-intro h2 { font-size: 18px; }
+            .config-savebar { align-items: flex-end; }
+            .config-savebar > span { max-width: 58%; line-height: 1.5; }
+            .cfg-card-body { grid-template-columns: 1fr; }
+        }
+
+        /* ---------- Requested shell: left menu + right header/content ---------- */
+        @media (min-width: 768px) {
+            html, body { overflow: hidden; }
+            .app-container {
+                display: flex;
+                flex-direction: row;
+                align-items: stretch;
+                height: 100vh;
+                min-height: 100vh;
+                overflow: hidden;
+            }
+            .sidebar,
+            .sidebar.offcanvas-lg,
+            .sidebar.offcanvas-start {
+                position: relative !important;
+                inset: auto !important;
+                transform: none !important;
+                visibility: visible !important;
+                width: 224px !important;
+                max-width: 224px !important;
+                height: 100vh !important;
+                min-height: 100vh;
+                flex: 0 0 224px;
+                display: flex;
+                flex-direction: column;
+                align-items: stretch;
+                padding: 24px 14px;
+                border: 0;
+                border-right: 1px solid var(--workspace-border);
+                background: #fbfcfe !important;
+                overflow: hidden;
+            }
+            .sidebar .offcanvas-header { display: none !important; }
+            .sidebar .offcanvas-body {
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: stretch;
+                width: 100%;
+                height: 100%;
+                padding: 0 !important;
+                overflow: hidden;
+                background: transparent !important;
+            }
+            .sidebar .offcanvas-body > .sidebar-brand { display: none !important; }
+            .sidebar nav {
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: stretch;
+                flex: 0 0 auto;
+                width: 100%;
+                height: auto;
+                gap: 4px !important;
+                overflow: visible;
+            }
+            .sidebar .nav-item,
+            .sidebar .nav-item.active {
+                justify-content: flex-start;
+                width: 100%;
+                min-height: 42px;
+                padding: 0 15px;
+                border-radius: 8px;
+                background: transparent !important;
+                box-shadow: none;
+                color: #7b8799;
+                font-size: 13px;
+            }
+            .sidebar .nav-item:hover { background: #f1f3f8 !important; color: #3c4a60; }
+            .sidebar .nav-item.active { background: #eef1ff !important; color: var(--workspace-primary); box-shadow: inset 3px 0 0 var(--workspace-primary); }
+            .main-content {
+                width: auto;
+                min-width: 0;
+                height: 100vh;
+                flex: 1 1 auto;
+                overflow: hidden;
+            }
+            .header { flex: 0 0 70px; height: 70px; padding: 0 30px; }
+            .content-body { height: calc(100vh - 70px); min-height: 0; overflow-y: auto; padding: 26px 30px 30px; }
+        }
+        @media (max-width: 767.98px) {
+            .app-container { display: flex; flex-direction: column; height: 100dvh; min-height: 100dvh; }
+            .sidebar,
+            .sidebar.offcanvas-lg,
+            .sidebar.offcanvas-start {
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                z-index: 1045;
+                width: min(260px, 82vw) !important;
+                max-width: min(260px, 82vw) !important;
+                height: 100dvh !important;
+                min-height: 100dvh;
+                padding: 22px 14px;
+                background: #fbfcfe !important;
+                border-right: 1px solid var(--workspace-border);
+            }
+            .sidebar.offcanvas-lg:not(.show) { transform: translateX(-100%) !important; visibility: hidden !important; }
+            .sidebar.offcanvas-lg.show { transform: translateX(0) !important; visibility: visible !important; }
+            .sidebar .offcanvas-header { display: flex !important; margin: -22px -14px 18px; padding: 16px 18px; }
+            .sidebar .offcanvas-header .sidebar-brand { display: flex !important; margin: 0; }
+            .sidebar .offcanvas-body > .sidebar-brand { display: none !important; }
+            .sidebar nav { display: flex !important; flex-direction: column !important; align-items: stretch; height: auto; gap: 4px !important; overflow: visible; }
+            .sidebar .nav-item, .sidebar .nav-item.active { justify-content: flex-start; width: 100%; min-height: 42px; padding: 0 15px; }
+            .main-content { width: 100%; height: 100dvh; flex: 1 1 auto; overflow: hidden; }
+            .header { flex: 0 0 62px; height: 62px; padding: 0 14px; }
+            .header > .d-flex > .d-lg-none { display: inline-flex !important; }
+            .content-body { height: calc(100dvh - 62px); min-height: 0; overflow-y: auto; padding: 17px 13px 24px; }
         }
     </style>
 </head>
 <body>
-    <div class="app-container">
-        <!-- Sidebar -->
-        <div class="sidebar">
-            <div class="nav-item active" onclick="switchTab('projects')">项目管理</div>
-            <div class="nav-item" onclick="switchTab('config')">配置管理</div>
-            <div class="nav-item" onclick="switchTab('stats')">下载统计</div>
-            <div class="nav-item" onclick="switchTab('users')">用户管理</div>
-            <div class="nav-item" onclick="switchTab('logs')">日志检查</div>
-            <div class="nav-item" onclick="switchTab('templates')">模板维护</div>
-            <div class="nav-item" onclick="switchTab('system')">系统管理</div>
-        </div>
+    <div class="app-container container-fluid p-0">
+        <!-- Sidebar: Bootstrap offcanvas-lg keeps desktop navigation fixed and turns it into a drawer on phones. -->
+        <aside class="sidebar offcanvas-lg offcanvas-start" tabindex="-1" id="adminSidebar" aria-label="管理导航">
+            <div class="offcanvas-header d-lg-none border-bottom mb-2">
+                <div class="sidebar-brand p-0"><span class="sidebar-brand-mark">F</span><span>文档工作台<small>FEISHU DOCGET</small></span></div>
+                <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="关闭导航"></button>
+            </div>
+            <div class="offcanvas-body p-0 d-flex flex-column">
+                <div class="sidebar-brand"><span class="sidebar-brand-mark">F</span><span>文档工作台<small>FEISHU DOCGET</small></span></div>
+                <nav class="nav flex-column gap-1 px-2" aria-label="后台模块">
+                    <button type="button" class="nav-item active" onclick="switchTab('projects')"><span class="nav-icon">▦</span><span>项目管理</span></button>
+                    <button type="button" class="nav-item" onclick="switchTab('config')"><span class="nav-icon">⚙</span><span>配置管理</span></button>
+                    <button type="button" class="nav-item" onclick="switchTab('stats')"><span class="nav-icon">↗</span><span>下载统计</span></button>
+                    <button type="button" class="nav-item" onclick="switchTab('users')"><span class="nav-icon">◎</span><span>用户管理</span></button>
+                    <button type="button" class="nav-item" onclick="switchTab('logs')"><span class="nav-icon">≡</span><span>日志检查</span></button>
+                    <button type="button" class="nav-item" onclick="switchTab('templates')"><span class="nav-icon">▤</span><span>模板维护</span></button>
+                    <button type="button" class="nav-item" onclick="switchTab('system')"><span class="nav-icon">◌</span><span>系统管理</span></button>
+                </nav>
+            </div>
+        </aside>
 
         <!-- Main Content -->
-        <div class="main-content">
+        <div class="main-content flex-grow-1">
             <!-- Header -->
-            <div class="header">
-                <div class="page-title" id="pageTitle">项目管理</div>
-                <div class="header-actions">
-                    <span class="action-link blue" onclick="window.location.href='/'">+ 新建任务</span>
-                    <span class="action-link blue" onclick="refreshData()">刷新</span>
-                    <span class="action-link red" onclick="logout()">退出登录</span>
+            <header class="header">
+                <div class="d-flex align-items-center gap-3">
+                    <button class="btn btn-outline-secondary d-lg-none p-2" type="button" data-bs-toggle="offcanvas" data-bs-target="#adminSidebar" aria-controls="adminSidebar" aria-label="打开导航">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                    </button>
+                    <div class="page-title" id="pageTitle">项目管理</div>
                 </div>
-            </div>
+                <div class="header-actions">
+                    <button type="button" class="btn btn-sm btn-outline-primary action-link blue" onclick="window.location.href='/'">+ 新建任务</button>
+                    <button type="button" class="btn btn-sm btn-light action-link blue" onclick="refreshData()">刷新</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger action-link red" onclick="logout()">退出登录</button>
+                </div>
+            </header>
 
-            <div class="content-body">
+            <main class="content-body container-fluid">
                 <!-- Tab: Projects -->
                 <div id="tab-projects" class="tab-pane active">
-                    <div style="overflow-y:auto; flex:1;">
-                        <table class="project-table">
+                    <div class="data-toolbar">
+                        <div class="toolbar-meta">已生成项目 <strong id="projectCount">0</strong></div>
+                        <div class="toolbar-meta" style="font-size:12px;">点击项目名称展开文件树</div>
+                    </div>
+                    <div class="table-shell" style="overflow:auto; flex:1;">
+                        <table class="project-table table table-hover align-middle mb-0">
                             <thead>
-                                <tr><th>项目名称</th><th>创建时间</th><th>磁盘空间</th><th>操作</th></tr>
+                                <tr><th style="width:42%">项目名称</th><th style="width:22%">创建时间</th><th style="width:16%">磁盘空间</th><th style="width:20%">操作</th></tr>
                             </thead>
                             <tbody id="projectTableBody"></tbody>
                         </table>
@@ -928,33 +1717,42 @@
 
                 <!-- Tab: Config -->
                 <div id="tab-config" class="tab-pane">
-                    <div style="flex: 1; overflow-y: auto; padding: 20px;">
-                        <div class="cfg-search-bar">
-                            <input id="configSearch" class="cfg-search cfg-input" type="text" placeholder="搜索配置（label / desc / key）" oninput="filterConfigItems()">
+                    <div class="config-workspace">
+                        <div class="config-toolbar">
+                            <div class="config-intro">
+                                <div class="config-eyebrow">SYSTEM SETTINGS</div>
+                                <h2>运行配置</h2>
+                                <p>集中管理服务、飞书授权和文档导出参数</p>
+                            </div>
+                            <label class="config-search-control">
+                                <span class="config-search-icon" aria-hidden="true">⌕</span>
+                                <input id="configSearch" class="cfg-search cfg-input form-control" type="search" placeholder="搜索配置项" oninput="filterConfigItems()">
+                            </label>
                         </div>
                         <div id="configForm"></div>
                     </div>
-                    <div style="padding: 20px; border-top: 1px solid #e2e8f0; text-align: right; background: #fff;">
-                        <button id="saveConfigBtn" onclick="saveConfig()" class="btn-start" style="padding: 10px 24px;">保存配置</button>
+                    <div class="config-savebar">
+                        <span>修改配置后记得保存，标记“需重启生效”的项目将在重启后应用</span>
+                        <button id="saveConfigBtn" onclick="saveConfig()" class="btn btn-primary btn-start" style="padding: 10px 24px;">保存配置</button>
                     </div>
                 </div>
 
                 <!-- Tab: Stats -->
                 <div id="tab-stats" class="tab-pane scrollable">
-                    <div style="margin-bottom:20px; font-size:14px; display:flex; flex-wrap:wrap; align-items:center; gap:10px; justify-content: space-between;">
-                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                            <span>总下载数: <span id="totalCount" style="font-weight:bold; color:#3b82f6;">0</span></span>
-                            <input type="text" id="statsSearchTitle" placeholder="搜索标题/下载人..." oninput="searchStats()" class="md-search-input" style="width:150px;">
-                            <input type="text" id="statsSearchUrl" placeholder="搜索 URL..." oninput="searchStats()" class="md-search-input" style="width:140px;">
-                            <input type="text" id="statsSearchIp" placeholder="搜索 IP..." oninput="searchStats()" class="md-search-input" style="width:120px;">
-                            <input type="date" id="statsSearchDate" onchange="searchStats()" class="md-search-input" style="width:140px;">
+                    <div class="data-toolbar">
+                        <div class="toolbar-meta">总下载数 <strong id="totalCount">0</strong></div>
+                        <div class="toolbar-fields">
+                            <input type="text" id="statsSearchTitle" placeholder="搜索标题/下载人..." oninput="searchStats()" class="md-search-input form-control form-control-sm" style="width:150px;">
+                            <input type="text" id="statsSearchUrl" placeholder="搜索 URL..." oninput="searchStats()" class="md-search-input form-control form-control-sm" style="width:140px;">
+                            <input type="text" id="statsSearchIp" placeholder="搜索 IP..." oninput="searchStats()" class="md-search-input form-control form-control-sm" style="width:120px;">
+                            <input type="date" id="statsSearchDate" onchange="searchStats()" class="md-search-input form-control form-control-sm" style="width:140px;">
                         </div>
-                        <div style="display:flex; gap:10px;">
-                            <button onclick="deleteSelectedStats()" class="btn-start" style="padding: 8px 16px; background-color: #ef4444;">批量删除</button>
-                            <button onclick="downloadAll()" class="btn-start" style="padding: 8px 16px;">下载全部文件 (Zip)</button>
+                        <div class="toolbar-actions">
+                            <button onclick="deleteSelectedStats()" class="btn btn-outline-danger btn-sm btn-start" style="padding: 8px 16px;">批量删除</button>
+                            <button onclick="downloadAll()" class="btn btn-primary btn-sm btn-start" style="padding: 8px 16px;">下载全部文件</button>
                         </div>
                     </div>
-                    <div id="tableContainer"></div>
+                    <div id="tableContainer" class="table-shell"></div>
                     <div class="pagination" style="margin-top:20px; display:flex; gap:10px; justify-content:center;">
                         <button onclick="prevPage()" id="prevBtn" class="magnify-btn" style="position:static; width:80px;">上一页</button>
                         <span id="pageInfo" style="line-height:26px; font-size:13px;">1 / 1</span>
@@ -964,29 +1762,29 @@
 
                 <!-- Tab: Users -->
                 <div id="tab-users" class="tab-pane scrollable">
-                    <div style="margin-bottom:20px; font-size:14px; display:flex; flex-wrap:wrap; align-items:center; gap:10px; justify-content: space-between;">
+                    <div class="data-toolbar">
                         <div style="font-size:14px; color:#64748b;">管理已通过飞书登录的用户（禁用后无法登录）</div>
-                        <button onclick="loadUsers()" class="btn-start" style="padding: 8px 16px;">刷新</button>
+                        <button onclick="loadUsers()" class="btn btn-primary btn-sm btn-start" style="padding: 8px 16px;">刷新</button>
                     </div>
-                    <div id="usersTableContainer"></div>
+                    <div id="usersTableContainer" class="table-shell"></div>
                 </div>
 
                 <!-- Tab: Logs -->
                 <div id="tab-logs" class="tab-pane" style="height:100%;">
-                    <div style="display: flex; height: 100%; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
-                        <div style="width: 250px; border-right: 1px solid #e2e8f0; overflow-y: auto; background: #f8fafc; display: flex; flex-direction: column;">
-                             <div style="padding: 12px; font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0; background: #f1f5f9;">日志文件列表</div>
+                    <div class="log-layout" style="display: flex; height: 100%; overflow: hidden;">
+                        <div class="log-sidebar" style="overflow-y: auto; display: flex; flex-direction: column;">
+                             <div class="log-sidebar-title">日志文件列表</div>
                              <div id="logList" style="flex: 1; overflow-y: auto;"></div>
                         </div>
-                        <div style="flex: 1; display: flex; flex-direction: column; height: 100%; background: #fff;">
-                            <div style="padding: 12px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #fff;">
+                        <div class="log-main" style="flex: 1; display: flex; flex-direction: column; height: 100%;">
+                            <div class="log-main-head" style="display: flex; justify-content: space-between; align-items: center;">
                                 <span id="currentLogName" style="font-weight: 600; color: #1e293b;">请选择日志文件</span>
                                 <div id="logControls" style="display:none; align-items:center; gap:10px;">
                                     <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:#64748b;">
                                         刷新间隔: <input type="number" id="logMonitorInterval" value="3" min="1" style="width:40px; padding:4px; border:1px solid #d9e4f5; border-radius:4px; text-align:center;"> s
                                     </div>
-                                    <button id="toggleLogMonitorBtn" onclick="toggleLogMonitor()" class="btn-start" style="padding: 6px 12px; font-size: 12px; background: #94a3b8;">开启监控</button>
-                                    <button id="deleteLogBtn" onclick="deleteCurrentLog()" class="btn-start" style="padding: 6px 16px; background-color: #ef4444; font-size: 13px;">删除日志</button>
+                                    <button id="toggleLogMonitorBtn" onclick="toggleLogMonitor()" class="btn btn-secondary btn-sm btn-start" style="padding: 6px 12px; font-size: 12px;">开启监控</button>
+                                    <button id="deleteLogBtn" onclick="deleteCurrentLog()" class="btn btn-danger btn-sm btn-start" style="padding: 6px 16px; font-size: 13px;">删除日志</button>
                                 </div>
                             </div>
                             <div id="logStatusBar" style="display:none; padding: 8px 20px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; font-size: 12px; color: #64748b; align-items: center; justify-content: space-between;">
@@ -994,9 +1792,9 @@
                                     <span id="logLineInfo"></span>
                                     <span id="logSizeInfo" style="color:#94a3b8;"></span>
                                 </div>
-                                <button id="loadEarlierBtn" onclick="loadEarlierLogs()" style="display:none; padding: 4px 12px; font-size: 12px; background: #3b82f6; color: #fff; border: none; border-radius: 4px; cursor: pointer;">加载更早日志</button>
+                                <button id="loadEarlierBtn" onclick="loadEarlierLogs()" class="btn btn-primary btn-sm" style="display:none; padding: 4px 12px; font-size: 12px;">加载更早日志</button>
                             </div>
-                            <pre id="logContent" style="flex: 1; overflow: auto; padding: 20px; margin: 0; font-family: 'Menlo', 'Monaco', 'Courier New', monospace; font-size: 13px; color: #334155; line-height: 1.6; white-space: pre-wrap; background: #fff;"></pre>
+                            <pre id="logContent" class="log-content" style="flex: 1; overflow: auto; margin: 0; font-family: 'Menlo', 'Monaco', 'Courier New', monospace; line-height: 1.6; white-space: pre-wrap;"></pre>
                         </div>
                     </div>
                 </div>
@@ -1008,7 +1806,7 @@
                         <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
                             <div style="font-size: 14px; color: #64748b;">管理用于文档生成的 Word 模板文件</div>
                             <div>
-                                <button onclick="openUploadModal()" class="btn-start" style="padding: 8px 16px;">+ 上传模板</button>
+                                <button onclick="openUploadModal()" class="btn btn-primary btn-sm btn-start" style="padding: 8px 16px;">+ 上传模板</button>
                             </div>
                         </div>
                         <!-- Grid -->
@@ -1028,11 +1826,11 @@
                                 <div>
                                     <div style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">服务操作</div>
                                     <div style="display: flex; gap: 10px;">
-                                        <button onclick="systemAction('restart')" class="btn-start" style="background: #fff; color: #f59e0b; border: 1px solid #f59e0b; padding: 8px 16px; font-size: 13px; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">
+                                        <button onclick="systemAction('restart')" class="btn btn-outline-warning btn-sm btn-start" style="padding: 8px 16px; font-size: 13px; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
                                             重启服务
                                         </button>
-                                        <button onclick="systemAction('update')" class="btn-start" style="background: #fff; color: #10b981; border: 1px solid #10b981; padding: 8px 16px; font-size: 13px; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">
+                                        <button onclick="systemAction('update')" class="btn btn-outline-success btn-sm btn-start" style="padding: 8px 16px; font-size: 13px; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                                             更新并重启服务
                                         </button>
@@ -1047,11 +1845,11 @@
                                     <div style="display: flex; align-items: center; gap: 12px;">
                                         <div style="display:flex; align-items:center; gap:8px; background: #f8fafc; padding: 4px 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
                                             <span style="font-size: 12px; color: #64748b;">刷新间隔:</span>
-                                            <input type="number" id="monitorInterval" value="5" min="1" style="width: 40px; padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px; text-align: center; font-size: 13px; outline: none;">
+                                            <input type="number" id="monitorInterval" value="5" min="1" class="form-control form-control-sm" style="width: 40px; text-align: center; font-size: 13px; outline: none;">
                                             <span style="font-size: 12px; color: #64748b;">s</span>
                                         </div>
                                         
-                                        <button id="toggleMonitorBtn" onclick="toggleSystemMonitor()" class="btn-start" style="padding: 8px 20px; font-size: 13px; background: #94a3b8; transition: all 0.2s;">开启监控</button>
+                                        <button id="toggleMonitorBtn" onclick="toggleSystemMonitor()" class="btn btn-secondary btn-sm btn-start" style="padding: 8px 20px; font-size: 13px; transition: all 0.2s;">开启监控</button>
                                     </div>
                                 </div>
                             </div>
@@ -1075,7 +1873,7 @@
                         </div>
                     </div>
                 </div>
-            </div>
+            </main>
         </div>
     </div>
 
@@ -1168,6 +1966,7 @@
     </div>
 
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         function escapeHtml(s) {
             const div = document.createElement('div');
@@ -1239,6 +2038,13 @@
             document.querySelectorAll(".tab-pane").forEach(c => c.classList.remove("active"));
             const content = document.getElementById("tab-" + name);
             if(content) content.classList.add("active");
+
+            // Bootstrap offcanvas navigation closes after selecting a module on phones.
+            if (window.innerWidth < 992 && window.bootstrap) {
+                const sidebar = document.getElementById('adminSidebar');
+                const offcanvas = sidebar ? bootstrap.Offcanvas.getInstance(sidebar) : null;
+                if (offcanvas) offcanvas.hide();
+            }
             
             // 更新标题
             const titles = {
@@ -1389,14 +2195,14 @@
                 // 敏感项：密码框 + 编辑/眼睛切换，留空=不修改
                 const input = document.createElement('input');
                 input.type = 'password';
-                input.className = 'cfg-input cfg-masked';
+                input.className = 'cfg-input cfg-masked form-control';
                 input.value = item.value;
                 input.dataset.masked = 'true';
                 input.readOnly = true;
 
                 const editBtn = document.createElement('button');
                 editBtn.type = 'button';
-                editBtn.className = 'cfg-btn';
+                editBtn.className = 'cfg-btn btn btn-outline-secondary btn-sm';
                 editBtn.textContent = '编辑';
                 editBtn.onclick = () => {
                     input.value = '';
@@ -1410,7 +2216,7 @@
 
                 const eyeBtn = document.createElement('button');
                 eyeBtn.type = 'button';
-                eyeBtn.className = 'cfg-btn';
+                eyeBtn.className = 'cfg-btn btn btn-outline-secondary btn-sm';
                 eyeBtn.textContent = '显示';
                 eyeBtn.onclick = () => {
                     const shown = input.type === 'text';
@@ -1431,7 +2237,7 @@
                 toggle.className = 'cfg-toggle';
                 const input = document.createElement('input');
                 input.type = 'checkbox';
-                input.className = 'cfg-input';
+                input.className = 'cfg-input form-check-input';
                 input.checked = String(item.value).toLowerCase() === 'true';
                 // bool 切换时追加联动刷新依赖项显隐（保留原有脏检查刷新）
                 input.addEventListener('change', () => { updateSaveBtnState(); applyCfgDependents(); });
@@ -1444,7 +2250,7 @@
             } else if (item.type === 'int' || item.type === 'float') {
                 const input = document.createElement('input');
                 input.type = 'number';
-                input.className = 'cfg-input';
+                input.className = 'cfg-input form-control';
                 input.value = item.value;
                 if (item.min !== null && item.min !== undefined) input.min = item.min;
                 if (item.max !== null && item.max !== undefined) input.max = item.max;
@@ -1463,7 +2269,7 @@
                 control = input;
             } else if (item.type === 'enum') {
                 const select = document.createElement('select');
-                select.className = 'cfg-input';
+                select.className = 'cfg-input form-select';
                 (item.options || []).forEach(opt => {
                     const o = document.createElement('option');
                     o.value = opt;
@@ -1486,7 +2292,7 @@
                 // str / size / url / path → 文本输入框
                 const input = document.createElement('input');
                 input.type = 'text';
-                input.className = 'cfg-input';
+                input.className = 'cfg-input form-control';
                 input.value = item.value;
                 if (item.placeholder) input.placeholder = item.placeholder;
                 input.addEventListener('input', () => { clearCfgFieldError(item.key); updateSaveBtnState(); });
@@ -1547,7 +2353,7 @@
             if (!spec) return null;
             const genBtn = document.createElement('button');
             genBtn.type = 'button';
-            genBtn.className = 'cfg-btn cfg-btn-primary';
+            genBtn.className = 'cfg-btn cfg-btn-primary btn btn-outline-primary btn-sm';
             genBtn.textContent = spec.label;
             genBtn.onclick = () => {
                 input.value = spec.generate();
@@ -1826,19 +2632,22 @@
             const end = start + pageSize;
             const pageData = filteredStats.slice(start, end);
             
-            let html = '<table class="project-table" style="width:100%; table-layout: fixed;">';
+            let html = '<table class="project-table table table-hover align-middle mb-0 stats-table" style="width:100%; table-layout: fixed;">';
             html += '<thead><tr><th style="width:40px; text-align:center;"><input type="checkbox" id="selectAllStats" onchange="toggleSelectAllStats()"></th><th style="width:150px">时间</th><th>标题</th><th style="width:100px">URL</th><th style="width:80px">状态</th><th style="width:100px">下载人</th><th style="width:120px">IP</th></tr></thead><tbody>';
             
             if (pageData.length === 0) {
-                html += '<tr><td colspan="7" style="text-align: center; padding: 20px; color: #94a3b8;">暂无数据</td></tr>';
+                html += '<tr><td colspan="7" class="table-empty">暂无下载记录</td></tr>';
             } else {
                 for (const item of pageData) {
+                    const statusText = String(item.status || '-');
+                    const statusLower = statusText.toLowerCase();
+                    const statusClass = /success|ok|完成|成功|正常/.test(statusLower) ? 'success' : (/fail|error|失败|异常/.test(statusLower) ? 'danger' : '');
                     html += `<tr>
                         <td style="text-align:center;"><input type="checkbox" class="stat-checkbox" value="${item.id ? 'id:'+escapeHtml(item.id) : 'ts:'+escapeHtml(item.ts)}"></td>
                         <td style="color: #64748b; vertical-align:top;">${escapeHtml(item.time.replace('T', ' ').split('.')[0])}</td>
-                        <td style="font-weight: 500; white-space: normal; word-break: break-all; vertical-align:top;">${escapeHtml(item.title) || '-'}</td>
+                        <td style="font-weight: 600; white-space: normal; word-break: break-all; vertical-align:top; color:#2d3b52;">${escapeHtml(item.title) || '-'}</td>
                         <td style="vertical-align:top; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(item.url)}"><a href="${safeUrl(item.url)}" target="_blank" style="color:#3b82f6;">链接</a></td>
-                        <td style="vertical-align:top;">${escapeHtml(item.status) || '-'}</td>
+                        <td style="vertical-align:top;">${statusClass ? `<span class="status-pill ${statusClass}">${escapeHtml(statusText)}</span>` : escapeHtml(statusText)}</td>
                         <td style="color: #64748b; vertical-align:top;">${item.user ? escapeHtml(item.user) : '-'}</td>
                         <td style="color: #64748b; vertical-align:top;">${escapeHtml(item.ip) || '-'}</td>
                     </tr>`;
@@ -1925,7 +2734,7 @@
         function userAvatarFallback(img) {
             const name = img.dataset.name || '?';
             const span = document.createElement('span');
-            span.style.cssText = 'width:32px; height:32px; border-radius:50%; background:#3b82f6; color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:14px; font-weight:600; flex-shrink:0;';
+            span.className = 'user-avatar-fallback';
             span.textContent = Array.from(name)[0] || '?';
             img.replaceWith(span);
         }
@@ -1947,30 +2756,31 @@
         }
 
         function renderUsersTable(users) {
-            let html = '<table class="project-table">';
-            html += '<thead><tr><th>姓名</th><th>open_id</th><th style="width:150px">最近登录</th><th style="width:80px">状态</th><th style="width:80px">操作</th></tr></thead><tbody>';
+            let html = '<table class="project-table table table-hover align-middle mb-0">';
+            html += '<thead><tr><th>姓名</th><th>open_id</th><th style="width:150px">创建时间</th><th style="width:150px">最近登录</th><th style="width:80px">状态</th><th style="width:80px">操作</th></tr></thead><tbody>';
 
             if (users.length === 0) {
-                html += '<tr><td colspan="5" style="text-align:center; padding:20px; color:#94a3b8;">暂无登录用户</td></tr>';
+                html += '<tr><td colspan="6" class="table-empty">暂无登录用户</td></tr>';
             } else {
                 for (const u of users) {
                     const name = u.name || '-';
                     const firstChar = Array.from(name)[0] || '?';
                     const avatar = u.avatar
                         ? `<img src="${escapeHtml(u.avatar)}" data-name="${escapeHtml(name)}" onerror="this.onerror=null; userAvatarFallback(this);" style="width:32px; height:32px; border-radius:50%; object-fit:cover; flex-shrink:0;" alt="">`
-                        : `<span style="width:32px; height:32px; border-radius:50%; background:#3b82f6; color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:14px; font-weight:600; flex-shrink:0;">${escapeHtml(firstChar)}</span>`;
+                        : `<span class="user-avatar-fallback">${escapeHtml(firstChar)}</span>`;
 
                     const statusTag = u.disabled
-                        ? '<span style="padding:2px 8px; border-radius:4px; font-size:12px; background:#fee2e2; color:#dc2626;">已禁用</span>'
-                        : '<span style="padding:2px 8px; border-radius:4px; font-size:12px; background:#dcfce7; color:#16a34a;">正常</span>';
+                        ? '<span class="status-pill danger">已禁用</span>'
+                        : '<span class="status-pill success">正常</span>';
 
                     const toggleBtn = u.disabled
-                        ? `<button onclick="toggleUserDisabled('${escapeHtml(escapeJsString(u.open_id))}', false)" class="btn-start" style="padding:6px 12px; font-size:12px; background:#10b981;">启用</button>`
-                        : `<button onclick="toggleUserDisabled('${escapeHtml(escapeJsString(u.open_id))}', true)" class="btn-start" style="padding:6px 12px; font-size:12px; background-color:#ef4444;">禁用</button>`;
+                        ? `<button onclick="toggleUserDisabled('${escapeHtml(escapeJsString(u.open_id))}', false)" class="btn btn-sm table-action">启用</button>`
+                        : `<button onclick="toggleUserDisabled('${escapeHtml(escapeJsString(u.open_id))}', true)" class="btn btn-sm table-action danger">禁用</button>`;
 
                     html += `<tr>
-                        <td><div style="display:flex; align-items:center; gap:10px;">${avatar}<span style="font-weight:500;">${escapeHtml(name)}</span></div></td>
-                        <td style="color:#64748b; font-size:12px; font-family:monospace; word-break:break-all;">${escapeHtml(u.open_id) || '-'}</td>
+                        <td><div class="user-cell">${avatar}<span class="user-name">${escapeHtml(name)}</span></div></td>
+                        <td class="mono-muted">${escapeHtml(u.open_id) || '-'}</td>
+                        <td style="color:#64748b;">${escapeHtml(formatDateTime(u.created_at))}</td>
                         <td style="color:#64748b;">${escapeHtml(formatDateTime(u.last_login_at))}</td>
                         <td>${statusTag}</td>
                         <td>${toggleBtn}</td>
@@ -2043,30 +2853,14 @@
 
                 files.forEach(f => {
                     const div = document.createElement('div');
-                    div.style.padding = '10px 16px';
-                    div.style.cursor = 'pointer';
-                    div.style.fontSize = '13px';
-                    div.style.borderBottom = '1px solid #f1f5f9';
-                    div.style.color = '#475569';
-                    div.style.display = 'flex';
-                    div.style.justifyContent = 'space-between';
-                    div.style.alignItems = 'center';
-                    div.style.transition = 'background 0.2s';
+                    div.className = 'log-item' + (currentLog === f.name ? ' active' : '');
                     
                     div.innerHTML = `
-                        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 8px;" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
-                        <span style="font-size: 11px; color: #94a3b8; flex-shrink: 0;">${escapeHtml(formatSize(f.size))}</span>
+                        <span class="log-item-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
+                        <span class="log-item-size">${escapeHtml(formatSize(f.size))}</span>
                     `;
                     
                     div.onclick = () => selectLog(f.name);
-                    div.onmouseover = () => { if(currentLog !== f.name) div.style.background = '#f8fafc'; };
-                    div.onmouseout = () => { if(currentLog !== f.name) div.style.background = ''; };
-                    
-                    if (currentLog === f.name) {
-                        div.style.background = '#eef6ff';
-                        div.style.color = '#3b82f6';
-                        div.style.fontWeight = '500';
-                    }
                     
                     list.appendChild(div);
                 });
@@ -2088,17 +2882,7 @@
             
             // Re-render list to update selection style
             const list = document.getElementById('logList');
-            Array.from(list.children).forEach(child => {
-                 if (child.innerText.includes(name)) {
-                     child.style.background = '#eef6ff';
-                     child.style.color = '#3b82f6';
-                     child.style.fontWeight = '500';
-                 } else {
-                     child.style.background = '';
-                     child.style.color = '#475569';
-                     child.style.fontWeight = 'normal';
-                 }
-            });
+            Array.from(list.children).forEach(child => child.classList.toggle('active', child.querySelector('.log-item-name')?.textContent === name));
             
             document.getElementById('logContent').innerText = '正在加载日志内容...';
             
@@ -2418,64 +3202,71 @@
             preview.innerHTML = html;
         }
 
-        function groupFiles(files) {
-            const root = [];
-            const folders = {};
-            (files || []).forEach(f => {
-                const parts = (f.rel_path || "").split("/");
-                if (parts.length > 1) {
-                    const folder = parts[0];
-                    const rest = parts.slice(1).join("/");
-                    if (!folders[folder]) folders[folder] = [];
-                    folders[folder].push({ ...f, rel_path: rest });
-                } else {
-                    root.push(f);
-                }
-            });
-            return { root, folders };
-        }
-
         function renderFileRow(f, displayName) {
             const name = displayName || f.rel_path;
             const download = `/api/admin/download_file?path=${encodeURIComponent(f.path)}`;
             return `
-                <div style="display:grid; grid-template-columns: 1fr 140px 100px; gap:8px; padding:6px 0; border-bottom:1px dashed #eee; align-items:center;">
-                    <div title="${escapeHtml(name)}" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(name)}</div>
-                    <div style="font-size:12px; color:#64748b;">${escapeHtml(f.ctime)}</div>
-                    <div style="text-align:right;">
-                        <a href="${download}" style="color:#3b82f6; text-decoration:none; margin-right:8px; font-size:12px;">下载</a>
-                        <span style="color:#ef4444; cursor:pointer; font-size:12px;" onclick="deleteFile('${escapeJsString(f.path)}')">删除</span>
-                    </div>
+                <div class="tree-file-row">
+                    <span class="tree-file-icon">•</span>
+                    <span class="tree-file-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+                    <span class="tree-file-date">${escapeHtml(f.ctime || '-')}</span>
+                    <span class="tree-row-actions">
+                        <a href="${download}">下载</a>
+                        <button class="danger" onclick="deleteFile('${escapeHtml(escapeJsString(f.path))}')">删除</button>
+                    </span>
                 </div>
             `;
         }
 
-        function renderProjectFiles(path, files) {
-            const grouped = groupFiles(files);
-            let html = "";
-            grouped.root.forEach(f => {
-                html += renderFileRow(f, f.rel_path);
+        function buildFileTree(files) {
+            const root = { files: [], folders: {} };
+            (files || []).forEach(file => {
+                const parts = String(file.rel_path || '').split('/').filter(Boolean);
+                if (!parts.length) { root.files.push(file); return; }
+                let node = root;
+                parts.forEach((part, index) => {
+                    if (index === parts.length - 1) {
+                        node.files.push({ ...file, rel_path: part });
+                        return;
+                    }
+                    node.folders[part] ||= { files: [], folders: {} };
+                    node = node.folders[part];
+                });
             });
-            Object.keys(grouped.folders).forEach(folder => {
-                const subId = encodeKey(path + "/" + folder);
-                // 确保路径使用正斜杠以保持 JS 逻辑一致性
-                const folderPath = path.replace(/\\/g, '/') + "/" + folder;
+            return root;
+        }
+
+        function renderFileTree(node, basePath) {
+            let html = '<div class="tree-children">';
+            node.files.forEach(file => { html += renderFileRow(file, file.rel_path); });
+            Object.keys(node.folders).sort((a, b) => a.localeCompare(b)).forEach(folder => {
+                const child = node.folders[folder];
+                const folderPath = basePath.replace(/\\/g, '/') + '/' + folder;
+                const subId = encodeKey(folderPath);
                 html += `
-                    <div style="padding:4px 0; font-weight:600; color:#475569; display:flex; justify-content:space-between; align-items:center;">
-                        <div style="cursor:pointer;" onclick="toggleSubfolder('${escapeJsString(subId)}')">
-                            📂 ${escapeHtml(folder)} <span id="arrow-${escapeHtml(subId)}" style="font-size:10px;">▼</span>
-                        </div>
-                        <div style="font-size:12px;">
-                            <a href="/api/admin/download_folder?path=${encodeURIComponent(folderPath)}" style="color:#3b82f6; text-decoration:none; margin-right:8px;">打包下载</a>
-                            <span style="color:#ef4444; cursor:pointer;" onclick="deleteProject('${escapeJsString(folderPath)}')">删除</span>
-                        </div>
+                    <div class="tree-folder-row">
+                        <button class="tree-toggle" onclick="toggleSubfolder('${escapeHtml(escapeJsString(subId))}', this)">
+                            <span class="tree-chevron">›</span><span class="tree-folder-icon">▰</span>
+                            <span class="tree-file-name">${escapeHtml(folder)}</span>
+                        </button>
+                        <span class="tree-row-actions">
+                            <a href="/api/admin/download_folder?path=${encodeURIComponent(folderPath)}">打包下载</a>
+                            <button class="danger" onclick="deleteProject('${escapeHtml(escapeJsString(folderPath))}')">删除</button>
+                        </span>
                     </div>
-                    <div id="sub-${escapeHtml(subId)}" style="display:none; padding-left:16px;">
-                        ${grouped.folders[folder].map(f => renderFileRow(f, f.rel_path)).join("")}
-                    </div>
+                    <div id="sub-${escapeHtml(subId)}" class="tree-folder-children">${renderFileTree(child, folderPath)}</div>
                 `;
             });
-            return html || "<div style='color:#94a3b8; font-size:12px;'>无文件</div>";
+            html += '</div>';
+            return html;
+        }
+
+        function renderProjectFiles(path, files) {
+            const tree = buildFileTree(files);
+            if (!tree.files.length && !Object.keys(tree.folders).length) {
+                return "<div class='table-empty' style='padding:22px !important; text-align:left;'>该项目暂无文件</div>";
+            }
+            return renderFileTree(tree, path);
         }
 
         
@@ -2512,27 +3303,34 @@
                 projectCache = res || [];
                 const tbody = document.getElementById("projectTableBody");
                 tbody.innerHTML = "";
+                const count = document.getElementById('projectCount');
+                if (count) count.textContent = projectCache.length;
+                if (!projectCache.length) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="table-empty">暂无项目，完成一次下载任务后会显示在这里</td></tr>';
+                    return;
+                }
                 projectCache.forEach(p => {
                     const folderId = encodeKey(p.path);
                     const tr = document.createElement("tr");
                     tr.innerHTML = `
                         <td>
-                            <div style="cursor:pointer; font-weight:600; color:#1e293b;" onclick="toggleFolder('${escapeJsString(p.path)}')">
-                                📁 ${escapeHtml(p.name)} <span style="font-size:10px; color:#94a3b8;">▼</span>
-                            </div>
+                            <button class="tree-toggle" onclick="toggleFolder('${escapeHtml(escapeJsString(p.path))}', this)">
+                                <span class="tree-chevron">›</span><span class="tree-folder-icon">▰</span>
+                                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(p.name)}</span>
+                                <span style="font-size:11px;color:#a0aabd;font-weight:500;">${(p.files || []).length} 个文件</span>
+                            </button>
                         </td>
                         <td style="color:#64748b; font-size:13px;">${escapeHtml(p.ctime)}</td>
                         <td style="color:#64748b; font-size:13px;">${escapeHtml(formatSize(p.size || 0))}</td>
                         <td>
-                            <a href="/api/admin/download_project?path=${encodeURIComponent(p.path)}" style="color:#3b82f6; text-decoration:none; margin-right:12px; font-size:13px;">下载</a>
-                            <span class="action-link red" onclick="deleteProject('${escapeJsString(p.path)}')">删除</span>
+                            <span class="tree-row-actions"><a href="/api/admin/download_project?path=${encodeURIComponent(p.path)}">下载项目</a><button class="danger" onclick="deleteProject('${escapeHtml(escapeJsString(p.path))}')">删除</button></span>
                         </td>
                     `;
                     const trDetail = document.createElement("tr");
+                    trDetail.className = 'tree-detail-row';
                     trDetail.id = `folder-${folderId}`;
-                    trDetail.style.display = "none";
                     trDetail.innerHTML = `
-                        <td colspan="3" style="background:#f8fafc; padding:10px 20px;">
+                        <td colspan="4">
                             ${renderProjectFiles(p.path, p.files || [])}
                         </td>
                     `;
@@ -2542,15 +3340,21 @@
             });
         }
         
-        function toggleFolder(path) {
+        function toggleFolder(path, button) {
             const id = "folder-" + encodeKey(path);
             const el = document.getElementById(id);
-            if (el) el.style.display = el.style.display === "none" ? "table-row" : "none";
+            if (el) {
+                el.classList.toggle('is-open');
+                if (button) button.classList.toggle('is-open', el.classList.contains('is-open'));
+            }
         }
 
-        function toggleSubfolder(id) {
+        function toggleSubfolder(id, button) {
             const el = document.getElementById("sub-" + id);
-            if (el) el.style.display = el.style.display === "none" ? "block" : "none";
+            if (el) {
+                el.classList.toggle('is-open');
+                if (button) button.classList.toggle('is-open', el.classList.contains('is-open'));
+            }
         }
 
         function deleteProject(path) {
