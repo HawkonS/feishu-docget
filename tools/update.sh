@@ -36,12 +36,37 @@ echo "   正在更新 feishu-docget..."
 echo "=========================================="
 echo "项目目录: $PROJECT_DIR"
 
-# 1. 强制拉取远程代码
-echo "[1/2] 正在拉取远程代码..."
-git fetch --all
+# 1. 获取远程代码，并在失败时停止整个流程。
+#    不能继续使用本地残留的 origin/main，否则网络失败时也会误应用旧版本并重启服务。
+REMOTE_NAME="origin"
+REMOTE_BRANCH="main"
+
+CURRENT_COMMIT=$(git rev-parse --verify HEAD 2>/dev/null)
+if [ -z "$CURRENT_COMMIT" ]; then
+    echo "❌ 无法读取当前 Git 版本，已停止升级；服务未重启"
+    exit 1
+fi
+CURRENT_VERSION=$(git show -s --format='%H %ad %s' --date=iso "$CURRENT_COMMIT" 2>/dev/null) || CURRENT_VERSION="$CURRENT_COMMIT"
+echo "当前版本: $CURRENT_VERSION"
+
+echo "[1/2] 正在拉取远程代码 ($REMOTE_NAME/$REMOTE_BRANCH)..."
+if ! git fetch --prune "$REMOTE_NAME" "$REMOTE_BRANCH"; then
+    echo "❌ 远程代码拉取失败，已停止升级；服务未重启"
+    echo "当前版本保持不变: $CURRENT_VERSION"
+    exit 1
+fi
+
+TARGET_COMMIT=$(git rev-parse --verify "refs/remotes/$REMOTE_NAME/$REMOTE_BRANCH^{commit}" 2>/dev/null)
+if [ -z "$TARGET_COMMIT" ]; then
+    echo "❌ 拉取成功但未找到远程目标版本 $REMOTE_NAME/$REMOTE_BRANCH，已停止升级；服务未重启"
+    echo "当前版本保持不变: $CURRENT_VERSION"
+    exit 1
+fi
+TARGET_VERSION=$(git show -s --format='%H %ad %s' --date=iso "$TARGET_COMMIT" 2>/dev/null) || TARGET_VERSION="$TARGET_COMMIT"
+echo "目标版本: $TARGET_VERSION"
 
 echo "=== 即将应用以下更新 ==="
-git log HEAD..origin/main --oneline 2>/dev/null || echo "(无法获取更新日志)"
+git log "HEAD..$TARGET_COMMIT" --oneline 2>/dev/null || echo "(无法获取更新日志)"
 echo ""
 if [ "$SKIP_CONFIRM" != "true" ]; then
     echo "确认更新？(y/N)"
@@ -52,12 +77,23 @@ if [ "$SKIP_CONFIRM" != "true" ]; then
     fi
 fi
 
-git reset --hard origin/main
-if [ $? -ne 0 ]; then
+# 使用本次 fetch 确认过的提交哈希，避免 reset 到不明确或已变化的远程引用。
+if ! git reset --hard "$TARGET_COMMIT"; then
     echo "❌ 代码更新失败，请检查网络或 Git 配置"
+    echo "当前版本保持不变: $CURRENT_VERSION"
     exit 1
 fi
-echo "✅ 代码已更新到最新版本"
+
+APPLIED_COMMIT=$(git rev-parse --verify HEAD 2>/dev/null)
+if [ "$APPLIED_COMMIT" != "$TARGET_COMMIT" ]; then
+    echo "❌ 应用后的版本校验失败，已停止重启"
+    echo "期望版本: $TARGET_VERSION"
+    ACTUAL_VERSION=$(git show -s --format='%H %ad %s' --date=iso "$APPLIED_COMMIT" 2>/dev/null) || ACTUAL_VERSION="$APPLIED_COMMIT"
+    echo "实际版本: $ACTUAL_VERSION"
+    exit 1
+fi
+APPLIED_VERSION=$(git show -s --format='%H %ad %s' --date=iso "$APPLIED_COMMIT" 2>/dev/null) || APPLIED_VERSION="$APPLIED_COMMIT"
+echo "✅ 代码已更新到版本: $APPLIED_VERSION"
 
 # 2. 尝试重启服务
 echo "[2/2] 正在尝试重启服务..."

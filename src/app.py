@@ -1955,7 +1955,7 @@ def api_admin_system():
                 logger.error(f'启动更新脚本失败: {e}')
         
         threading.Thread(target=run_update_bg).start()
-        return jsonify({'status': 'ok', 'message': '更新任务已在后台启动，服务稍后将自动重启'})
+        return jsonify({'status': 'ok', 'message': '更新任务已在后台启动；仅在成功应用新版本后重启服务，请查看更新日志'})
 
     elif action in ['restart', 'stop']:
         if shutil.which('systemctl') is None:
