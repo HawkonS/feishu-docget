@@ -1675,6 +1675,265 @@
             .header > .d-flex > .d-lg-none { display: inline-flex !important; }
             .content-body { height: calc(100dvh - 62px); min-height: 0; overflow-y: auto; padding: 17px 13px 24px; }
         }
+
+        /* Template library */
+        #tab-templates { gap: 0; }
+        .template-workspace {
+            display: flex;
+            flex: 1 1 auto;
+            min-height: 0;
+            flex-direction: column;
+        }
+        .template-toolbar {
+            display: flex;
+            flex: 0 0 auto;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 24px;
+            margin-bottom: 20px;
+        }
+        .template-heading { min-width: 0; }
+        .template-eyebrow {
+            margin-bottom: 5px;
+            color: #9aa4b4;
+            font-size: 10px;
+            font-weight: 750;
+            letter-spacing: .11em;
+        }
+        .template-heading-row { display: flex; align-items: center; gap: 10px; }
+        .template-heading h2 {
+            margin: 0;
+            color: var(--workspace-ink);
+            font-size: 20px;
+            line-height: 1.2;
+            letter-spacing: -.025em;
+        }
+        .template-count {
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: #e9edff;
+            color: var(--workspace-primary);
+            font-size: 10px;
+            font-weight: 700;
+        }
+        .template-heading p { margin: 7px 0 0; color: var(--workspace-muted); font-size: 12px; }
+        .template-toolbar-actions { display: flex; align-items: center; gap: 9px; }
+        .template-search { position: relative; width: 230px; }
+        .template-search svg {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            z-index: 1;
+            color: #9aa4b4;
+            transform: translateY(-50%);
+            pointer-events: none;
+        }
+        .template-search .form-control {
+            width: 100%;
+            height: 38px;
+            padding: 7px 12px 7px 36px;
+            border-color: var(--workspace-border);
+            border-radius: 9px;
+            background: #fff;
+            font-size: 12px;
+        }
+        .template-search .form-control:focus { border-color: #9aa8ed; box-shadow: 0 0 0 3px rgba(74,91,213,.1); }
+        .template-upload-btn { height: 38px; padding: 0 16px !important; border-radius: 9px; font-size: 12px; }
+        .template-upload-btn svg { margin-right: 6px; }
+        #templateGrid.template-grid {
+            display: grid;
+            flex: 1 1 auto;
+            min-height: 0;
+            grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+            align-content: start;
+            gap: 16px;
+            padding: 2px 4px 16px 2px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #cbd2dd transparent;
+        }
+        #templateGrid > .template-card {
+            position: relative;
+            display: flex;
+            min-width: 0;
+            flex-direction: column;
+            overflow: visible;
+            border: 1px solid var(--workspace-border) !important;
+            border-radius: 13px !important;
+            background: #fff;
+            box-shadow: 0 1px 2px rgba(22,31,48,.035) !important;
+            transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+        }
+        #templateGrid > .template-card:hover {
+            z-index: 3;
+            border-color: #d6dcec !important;
+            box-shadow: 0 12px 28px rgba(35,48,78,.09) !important;
+            transform: translateY(-2px);
+        }
+        .template-preview {
+            position: relative;
+            display: flex;
+            height: 164px;
+            flex: 0 0 164px;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            border-radius: 12px 12px 0 0;
+            border-bottom: 1px solid #edf0f4;
+            background:
+                radial-gradient(circle at 50% 18%, rgba(255,255,255,.9), transparent 42%),
+                linear-gradient(145deg, #f5f7fb, #eef1f6);
+        }
+        .template-preview::after {
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            box-shadow: inset 0 -18px 30px rgba(74,91,213,.025);
+            content: "";
+            pointer-events: none;
+        }
+        .template-preview img {
+            width: auto;
+            max-width: calc(100% - 44px);
+            height: calc(100% - 22px);
+            object-fit: contain;
+            background: #fff;
+            box-shadow: 0 5px 16px rgba(36,47,68,.12);
+        }
+        .template-no-preview { display: flex; flex-direction: column; align-items: center; gap: 8px; color: #a2acbb; font-size: 11px; }
+        .template-no-preview-icon {
+            display: inline-flex;
+            width: 42px;
+            height: 42px;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #e2e6ee;
+            border-radius: 11px;
+            background: rgba(255,255,255,.75);
+            color: #8e99aa;
+        }
+        .template-default-badge {
+            position: absolute;
+            top: 11px;
+            right: 11px;
+            z-index: 2;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            border: 1px solid rgba(255,255,255,.75);
+            border-radius: 999px;
+            background: rgba(236,239,255,.94);
+            box-shadow: 0 2px 8px rgba(55,70,140,.08);
+            color: #4858c8;
+            font-size: 10px;
+            font-weight: 750;
+            backdrop-filter: blur(6px);
+        }
+        .template-card-body { display: flex; min-height: 126px; flex: 1 1 auto; flex-direction: column; padding: 14px 15px 13px; }
+        .template-card-title {
+            overflow: hidden;
+            color: #2c374a;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1.45;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .template-card-meta { margin-top: 5px; color: #9aa4b4; font-size: 10px; font-weight: 600; letter-spacing: .025em; }
+        .template-card-actions { display: flex; align-items: center; gap: 7px; margin-top: auto; padding-top: 13px; }
+        .template-action-btn,
+        .template-icon-btn {
+            display: inline-flex;
+            height: 32px;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #e2e6ee;
+            border-radius: 8px;
+            background: #fff;
+            color: #657187;
+            font-family: inherit;
+            font-size: 11px;
+            font-weight: 650;
+            line-height: 1;
+            text-decoration: none;
+            cursor: pointer;
+            transition: border-color .15s ease, background .15s ease, color .15s ease;
+        }
+        .template-action-btn { gap: 6px; padding: 0 11px; }
+        .template-action-btn:hover,
+        .template-icon-btn:hover { border-color: #c7cef5; background: #f5f6ff; color: var(--workspace-primary); }
+        .template-action-btn.primary { order: 1; flex: 1 1 auto; border-color: #d7dcfb; background: #f1f3ff; color: #4858c8; }
+        .template-icon-btn { width: 32px; flex: 0 0 32px; padding: 0; }
+        .template-more { order: 2; }
+        .template-more .dropdown-content {
+            top: auto;
+            right: 0;
+            bottom: calc(100% + 7px);
+            left: auto;
+            min-width: 142px;
+            padding: 6px;
+            border-color: #e1e5ec;
+            border-radius: 10px;
+            box-shadow: 0 14px 30px rgba(32,43,67,.14);
+        }
+        .template-more:hover .dropdown-content,
+        .template-more:focus-within .dropdown-content { display: block; }
+        .template-menu .dropdown-item {
+            width: 100%;
+            padding: 8px 9px;
+            border: 0;
+            border-radius: 7px;
+            background: transparent;
+            color: #566278;
+            font-family: inherit;
+            font-size: 11px;
+            text-align: left;
+        }
+        .template-menu .dropdown-item:hover { background: #f4f6fa; color: var(--workspace-primary); }
+        .template-menu .template-menu-danger { margin-top: 5px; border-top: 1px solid #edf0f4; border-radius: 0 0 7px 7px; color: var(--workspace-danger); }
+        .template-menu .template-menu-danger:hover { background: #fff2f3; color: #c43f50; }
+        .template-empty {
+            display: flex;
+            min-height: 280px;
+            grid-column: 1 / -1;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border: 1px dashed #dce1e9 !important;
+            border-radius: 13px !important;
+            background: rgba(255,255,255,.55) !important;
+            color: #8f9aab;
+            box-shadow: none !important;
+            font-size: 12px;
+        }
+        .template-empty strong { margin-bottom: 6px; color: #536078; font-size: 13px; }
+        .template-pagination { display: flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 8px; padding-top: 12px; }
+        .template-page-btn {
+            position: static;
+            min-width: 68px;
+            padding: 6px 10px;
+            border: 1px solid var(--workspace-border);
+            border-radius: 8px;
+            background: #fff;
+            color: #69758a;
+            font-size: 11px;
+        }
+        .template-page-btn:disabled { opacity: .42; }
+        #templatesPageInfo { min-width: 42px; color: #8e98a8; font-size: 11px; text-align: center; }
+        @media (max-width: 767.98px) {
+            .template-toolbar { display: block; margin-bottom: 15px; }
+            .template-heading h2 { font-size: 18px; }
+            .template-toolbar-actions { margin-top: 14px; }
+            .template-search { flex: 1 1 auto; width: auto; }
+            #templateGrid.template-grid { grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr)); }
+        }
+        @media (max-width: 420px) {
+            .template-heading p { display: none; }
+            .template-upload-btn span { display: none; }
+            .template-upload-btn { width: 40px; padding: 0 !important; }
+            .template-upload-btn svg { margin: 0; }
+        }
     </style>
 </head>
 <body>
@@ -1835,21 +2094,31 @@
 
                 <!-- Tab: Templates -->
                 <div id="tab-templates" class="tab-pane">
-                    <div style="padding: 0 20px 20px 20px; display: flex; flex-direction: column; flex: 1; min-height: 0; box-sizing: border-box;">
-                        <!-- Toolbar -->
-                        <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
-                            <div style="font-size: 14px; color: #64748b;">管理用于文档生成的 Word 模板文件</div>
-                            <div style="display:flex; align-items:center; gap:10px;">
-                                <input type="search" id="templatesSearch" placeholder="搜索模板" oninput="searchTemplates()" class="md-search-input form-control form-control-sm" style="width:180px;">
-                                <button data-system-admin-only="true" onclick="openUploadModal()" class="btn btn-primary btn-sm btn-start" style="padding: 8px 16px;">+ 上传模板</button>
+                    <div class="template-workspace">
+                        <div class="template-toolbar">
+                            <div class="template-heading">
+                                <div class="template-eyebrow">TEMPLATE LIBRARY</div>
+                                <div class="template-heading-row">
+                                    <h2>模板库</h2>
+                                    <span id="templatesCount" class="template-count">0 个模板</span>
+                                </div>
+                                <p>管理文档生成所使用的 Word 模板与预览封面</p>
+                            </div>
+                            <div class="template-toolbar-actions">
+                                <label class="template-search" aria-label="搜索模板">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
+                                    <input type="search" id="templatesSearch" placeholder="搜索模板名称" oninput="searchTemplates()" class="form-control form-control-sm">
+                                </label>
+                                <button data-system-admin-only="true" onclick="openUploadModal()" class="btn btn-primary btn-sm template-upload-btn">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span>上传模板</span>
+                                </button>
                             </div>
                         </div>
-                        <!-- Grid -->
-                        <div id="templateGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px; overflow-y: auto; padding-bottom: 20px; flex: 1; align-content: start; min-height: 0;"></div>
-                        <div class="pagination" style="margin-top:12px; display:flex; gap:10px; justify-content:center; flex-shrink:0;">
-                            <button onclick="prevTemplatesPage()" id="templatesPrevBtn" class="magnify-btn" style="position:static; width:80px;">上一页</button>
-                            <span id="templatesPageInfo" style="line-height:26px; font-size:13px;">1 / 1</span>
-                            <button onclick="nextTemplatesPage()" id="templatesNextBtn" class="magnify-btn" style="position:static; width:80px;">下一页</button>
+                        <div id="templateGrid" class="template-grid"></div>
+                        <div class="template-pagination">
+                            <button onclick="prevTemplatesPage()" id="templatesPrevBtn" class="template-page-btn">上一页</button>
+                            <span id="templatesPageInfo">1 / 1</span>
+                            <button onclick="nextTemplatesPage()" id="templatesNextBtn" class="template-page-btn">下一页</button>
                         </div>
                     </div>
                 </div>
@@ -3197,6 +3466,8 @@
                     adminData = Object.assign(adminData || {}, { templates: res.templates || [] });
                     templatesPage = res.page || templatesPage;
                     templatesTotalPages = res.total_pages || 1;
+                    const count = document.getElementById('templatesCount');
+                    if (count) count.innerText = `${res.total || 0} 个模板`;
                     renderTemplateManager(res.templates || []);
                     document.getElementById('templatesPageInfo').innerText = `${templatesPage} / ${templatesTotalPages}`;
                     document.getElementById('templatesPrevBtn').disabled = templatesPage <= 1;
@@ -3712,126 +3983,79 @@
             grid.innerHTML = "";
             
             if (!list || list.length === 0) {
-                grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; color:#94a3b8; padding:40px; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%;"><div>暂无模板文件</div><div style="font-size:12px; margin-top:8px;">请点击右上角上传按钮添加模板</div></div>';
+                grid.innerHTML = '<div class="template-empty"><strong>暂无模板文件</strong><span>点击右上角“上传模板”开始创建模板库</span></div>';
                 return;
             }
             
             list.forEach(t => {
                 const card = document.createElement("div");
-                card.style.border = "1px solid #e2e8f0";
-                card.style.borderRadius = "8px";
-                // card.style.overflow = "hidden"; // Remove overflow hidden to show dropdown
-                card.style.background = "#fff";
-                card.style.display = "flex";
-                card.style.flexDirection = "column";
-                card.style.transition = "box-shadow 0.2s";
-                // card.style.minHeight = "300px"; // Remove fixed min-height
-                card.style.position = "relative"; // Ensure z-index works
-                card.onmouseover = () => { card.style.boxShadow = "0 4px 12px rgba(0,0,0,0.1)"; card.style.zIndex = "10"; };
-                card.onmouseout = () => { card.style.boxShadow = "none"; card.style.zIndex = "1"; };
+                card.className = "template-card";
                 
                 // Preview Image
                 const imgContainer = document.createElement("div");
-                imgContainer.style.height = "180px";
-                imgContainer.style.background = "#f8fafc";
-                imgContainer.style.borderTopLeftRadius = "8px";
-                imgContainer.style.borderTopRightRadius = "8px";
-                imgContainer.style.overflow = "hidden";
-                imgContainer.style.display = "flex";
-                imgContainer.style.alignItems = "center";
-                imgContainer.style.justifyContent = "center";
-                imgContainer.style.borderBottom = "1px solid #f1f5f9";
-                imgContainer.style.position = "relative";
+                imgContainer.className = "template-preview";
                 
                 if (t.has_png) {
                     const img = document.createElement("img");
                     img.src = `/api/template_preview/${encodeURIComponent(t.name)}`;
-                    img.style.maxWidth = "100%";
-                    img.style.maxHeight = "100%";
+                    img.alt = `${t.name} 预览`;
                     imgContainer.appendChild(img);
                 } else {
-                    imgContainer.innerHTML = `<span style="color:#94a3b8; font-size:12px;">无预览图</span>`;
+                    imgContainer.innerHTML = `<div class="template-no-preview"><span class="template-no-preview-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-4.5-4.5L7 20"/></svg></span><span>暂无预览图</span></div>`;
+                }
+
+                if (t.is_default) {
+                    const badge = document.createElement("span");
+                    badge.className = "template-default-badge";
+                    badge.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z"/></svg>默认模板';
+                    imgContainer.appendChild(badge);
                 }
                 
                 // Info
                 const info = document.createElement("div");
-                info.style.padding = "16px";
-                info.style.display = "flex";
-                info.style.flexDirection = "column";
-                info.style.gap = "8px";
-                
-                const header = document.createElement("div");
-                header.style.display = "flex";
-                header.style.justifyContent = "space-between";
-                header.style.alignItems = "flex-start";
-                header.style.gap = "8px";
-                // header.style.minHeight = "44px"; // Remove fixed height constraint
+                info.className = "template-card-body";
 
                 const name = document.createElement("div");
-                name.style.fontWeight = "600";
-                name.style.fontSize = "15px";
-                name.style.color = "#334155";
-                name.style.lineHeight = "1.4";
-                name.style.wordBreak = "break-all";
-                name.style.display = "-webkit-box";
-                name.style.webkitLineClamp = "2";
-                name.style.webkitBoxOrient = "vertical";
-                name.style.overflow = "hidden";
+                name.className = "template-card-title";
                 name.innerText = t.name;
-                
-                header.appendChild(name);
+                info.appendChild(name);
 
-                if (t.is_default) {
-                    const badge = document.createElement("span");
-                    badge.style.background = "#dbeafe";
-                    badge.style.color = "#1e40af";
-                    badge.style.padding = "2px 8px";
-                    badge.style.borderRadius = "4px";
-                    badge.style.fontSize = "11px";
-                    badge.style.whiteSpace = "nowrap";
-                    badge.style.height = "fit-content";
-                    badge.style.marginTop = "2px";
-                    badge.innerText = "默认";
-                    header.appendChild(badge);
-                }
+                const meta = document.createElement("div");
+                meta.className = "template-card-meta";
+                meta.innerText = `WORD 文档 · ${formatSize(t.size)}`;
+                info.appendChild(meta);
 
                 // Bottom Row (Meta + Actions)
                 const bottomRow = document.createElement("div");
-                bottomRow.style.display = "flex";
-                bottomRow.style.justifyContent = "space-between";
-                bottomRow.style.alignItems = "center";
-                bottomRow.style.marginTop = "4px"; // Small gap between title and controls
-
-                // Meta (Left)
-                const meta = document.createElement("div");
-                meta.style.fontSize = "13px";
-                meta.style.color = "#94a3b8";
-                meta.innerText = formatSize(t.size);
-                bottomRow.appendChild(meta);
-                
-                // Actions (Right)
+                bottomRow.className = "template-card-actions";
                 const actions = document.createElement("div");
-                actions.style.display = "flex";
-                actions.style.gap = "12px";
-                actions.style.alignItems = "center";
+                actions.className = "template-card-actions";
+                actions.style.margin = "0";
+                actions.style.padding = "0";
+                actions.style.width = "100%";
                 
                 if (isSystemAdmin) {
                     // Template maintenance is reserved for the system administrator.
                     const editDropdown = document.createElement("div");
-                    editDropdown.className = "dropdown";
-                    const editTrigger = document.createElement("span");
-                    editTrigger.className = "action-link blue";
-                    editTrigger.style.cssText = "cursor:pointer; display:flex; align-items:center; font-size:13px;";
-                    editTrigger.textContent = "编辑 ▼";
+                    editDropdown.className = "dropdown template-more";
+                    const editTrigger = document.createElement("button");
+                    editTrigger.type = "button";
+                    editTrigger.className = "template-icon-btn";
+                    editTrigger.setAttribute("aria-label", `编辑 ${t.name}`);
+                    editTrigger.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/></svg>';
                     const dropdownContent = document.createElement("div");
-                    dropdownContent.className = "dropdown-content";
+                    dropdownContent.className = "dropdown-content template-menu";
                     [
                         ['重命名', () => openRenameModal(t.name)],
                         ['更换文件', () => openUploadModal('file', t.name)],
-                        ['更换图片', () => openUploadModal('image', t.name)]
+                        ['更换图片', () => openUploadModal('image', t.name)],
+                        ...(t.is_default ? [] : [['设为默认', () => setDefaultTemplate(t.name)]]),
+                        ...(t.is_default ? [] : [['删除模板', () => deleteTemplate(t.name)]])
                     ].forEach(([label, handler]) => {
-                        const item = document.createElement("div");
+                        const item = document.createElement("button");
+                        item.type = "button";
                         item.className = "dropdown-item";
+                        if (label === '删除模板') item.classList.add('template-menu-danger');
                         item.textContent = label;
                         item.addEventListener('click', handler);
                         dropdownContent.appendChild(item);
@@ -3839,37 +4063,16 @@
                     editDropdown.appendChild(editTrigger);
                     editDropdown.appendChild(dropdownContent);
                     actions.appendChild(editDropdown);
-
-                    if (!t.is_default) {
-                        const setDefBtn = document.createElement("span");
-                        setDefBtn.className = "action-link blue";
-                        setDefBtn.innerText = "设为默认";
-                        setDefBtn.style.fontSize = "13px";
-                        setDefBtn.onclick = () => setDefaultTemplate(t.name);
-                        actions.appendChild(setDefBtn);
-                    }
                 }
                 
                 const downloadBtn = document.createElement("a");
                 downloadBtn.href = `/api/template/${encodeURIComponent(t.name)}`;
-                downloadBtn.className = "action-link blue";
-                downloadBtn.innerText = "下载";
-                downloadBtn.style.fontSize = "13px";
-                downloadBtn.style.textDecoration = "none";
+                downloadBtn.className = "template-action-btn primary";
+                downloadBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 21h16"/></svg>下载模板';
                 actions.appendChild(downloadBtn);
-                
-                if (isSystemAdmin && !t.is_default) {
-                    const delBtn = document.createElement("span");
-                    delBtn.className = "action-link red";
-                    delBtn.innerText = "删除";
-                    delBtn.style.fontSize = "13px";
-                    delBtn.onclick = () => deleteTemplate(t.name);
-                    actions.appendChild(delBtn);
-                }
-                
+
                 bottomRow.appendChild(actions);
                 
-                info.appendChild(header);
                 info.appendChild(bottomRow);
                 
                 card.appendChild(imgContainer);
