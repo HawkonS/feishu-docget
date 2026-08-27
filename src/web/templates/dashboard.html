@@ -1107,6 +1107,14 @@
         .mono-muted { color: #8793a7; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; word-break: break-all; }
         .table-action { border: 0; border-radius: 7px; padding: 6px 10px; font: inherit; font-size: 11px; font-weight: 650; cursor: pointer; color: var(--accent); background: #edf3ff; }
         .table-action.danger { color: var(--danger); background: #fff0f1; }
+        .role-badge { display: inline-flex; align-items: center; padding: 5px 9px; border-radius: 7px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+        .role-badge.system { color: #7047c7; background: #f1edff; }
+        .role-badge.operator { color: var(--accent); background: #edf3ff; }
+        .role-badge.user { color: #65738a; background: #f1f3f6; }
+        .user-role-select { width: 118px; border: 1px solid var(--line-strong); border-radius: 7px; padding: 6px 28px 6px 9px; color: #344158; background-color: #fff; font: inherit; font-size: 11px; font-weight: 650; cursor: pointer; }
+        .user-role-select:focus { border-color: var(--accent); outline: 2px solid var(--accent-soft); }
+        .user-role-select:disabled { color: #8a96a8; background-color: #f5f6f8; cursor: not-allowed; }
+        .protected-hint { color: #98a2b2; font-size: 11px; white-space: nowrap; }
         .pagination { align-items: center !important; color: #8995a8; }
         .pagination button { border: 1px solid var(--line-strong) !important; background: #fff !important; color: #64738a !important; border-radius: 8px !important; box-shadow: none !important; }
         .pagination button:disabled { opacity: .4; cursor: not-allowed; }
@@ -1686,7 +1694,7 @@
                     <button type="button" class="nav-item" onclick="switchTab('users')"><span class="nav-icon">◎</span><span>用户管理</span></button>
                     <button type="button" class="nav-item" onclick="switchTab('logs')"><span class="nav-icon">≡</span><span>日志检查</span></button>
                     <button type="button" class="nav-item" onclick="switchTab('templates')"><span class="nav-icon">▤</span><span>模板维护</span></button>
-                    <button type="button" class="nav-item" onclick="switchTab('system')"><span class="nav-icon">◌</span><span>系统管理</span></button>
+                    <button type="button" class="nav-item" data-system-admin-only="true" onclick="switchTab('system')"><span class="nav-icon">◌</span><span>系统管理</span></button>
                 </nav>
             </div>
         </aside>
@@ -1781,7 +1789,7 @@
                 <!-- Tab: Users -->
                 <div id="tab-users" class="tab-pane scrollable">
                     <div class="data-toolbar">
-                        <div style="font-size:14px; color:#64748b;">管理已通过飞书登录的用户；系统管理员为固定账号，不可禁用或修改</div>
+                        <div style="font-size:14px; color:#64748b;">系统管理员包含运营管理员的全部权限，并可管理角色和系统设置；运营管理员不能管理系统管理员</div>
                         <div class="toolbar-fields">
                             <input type="search" id="usersSearch" placeholder="搜索姓名 / open_id" oninput="searchUsers()" class="md-search-input form-control form-control-sm" style="width:180px;">
                             <button onclick="loadUsers()" class="btn btn-primary btn-sm btn-start" style="padding: 8px 16px;">刷新</button>
@@ -2056,6 +2064,7 @@
 
         function switchTab(name) {
             if (name === 'config' && !isSystemAdmin) name = 'projects';
+            if (name === 'system' && !isSystemAdmin) name = 'projects';
             if (window.location.hash.substring(1) === name) {
                 renderTab(name);
             } else {
@@ -2067,6 +2076,10 @@
 
         function renderTab(name) {
             if (name === 'config' && !isSystemAdmin) {
+                name = 'projects';
+                if (window.location.hash !== '#projects') window.location.hash = 'projects';
+            }
+            if (name === 'system' && !isSystemAdmin) {
                 name = 'projects';
                 if (window.location.hash !== '#projects') window.location.hash = 'projects';
             }
@@ -2844,10 +2857,10 @@
 
         function renderUsersTable(users) {
             let html = '<table class="project-table table table-hover align-middle mb-0">';
-            html += '<thead><tr><th>姓名</th><th>open_id</th><th style="width:150px">创建日期</th><th style="width:150px">最近登录</th><th style="width:120px">状态</th><th style="width:280px">操作</th></tr></thead><tbody>';
+            html += '<thead><tr><th>姓名</th><th>open_id</th><th style="width:150px">创建日期</th><th style="width:150px">最近登录</th><th style="width:140px">角色</th><th style="width:90px">状态</th><th style="width:100px">操作</th></tr></thead><tbody>';
 
             if (users.length === 0) {
-                html += '<tr><td colspan="6" class="table-empty">暂无登录用户</td></tr>';
+                html += '<tr><td colspan="7" class="table-empty">暂无登录用户</td></tr>';
             } else {
                 for (const u of users) {
                     const name = u.name || '-';
@@ -2856,39 +2869,51 @@
                         ? `<img src="${escapeHtml(u.avatar)}" data-name="${escapeHtml(name)}" onerror="this.onerror=null; userAvatarFallback(this);" style="width:32px; height:32px; border-radius:50%; object-fit:cover; flex-shrink:0;" alt="">`
                         : `<span class="user-avatar-fallback">${escapeHtml(firstChar)}</span>`;
 
+                    const currentRole = u.is_system_admin
+                        ? 'system_admin'
+                        : (u.is_operator_admin ? 'operator_admin' : 'user');
+                    const roleLabel = currentRole === 'system_admin'
+                        ? '系统管理员'
+                        : (currentRole === 'operator_admin' ? '运营管理员' : '普通用户');
+                    const roleClass = currentRole === 'system_admin'
+                        ? 'system'
+                        : (currentRole === 'operator_admin' ? 'operator' : 'user');
+                    const canChangeRole = !u.is_system && (isSystemAdmin || !u.is_system_admin);
+                    let roleCell = `<span class="role-badge ${roleClass}">${roleLabel}</span>`;
+                    if (canChangeRole) {
+                        const roleOptions = [
+                            ['user', '普通用户'],
+                            ['operator_admin', '运营管理员'],
+                        ];
+                        if (isSystemAdmin) roleOptions.push(['system_admin', '系统管理员']);
+                        const options = roleOptions.map(([value, label]) => {
+                            const selected = value === currentRole ? 'selected' : '';
+                            const disabled = value === 'system_admin' && u.disabled ? 'disabled' : '';
+                            return `<option value="${value}" ${selected} ${disabled}>${label}</option>`;
+                        }).join('');
+                        roleCell = `<select class="user-role-select" aria-label="调整 ${escapeHtml(name)} 的角色" data-original-role="${currentRole}" onchange="changeUserRole('${escapeHtml(escapeJsString(u.open_id))}', '${escapeHtml(escapeJsString(name))}', this)" title="${u.disabled && isSystemAdmin ? '启用用户后才能设为系统管理员' : '调整用户角色'}">${options}</select>`;
+                    }
+
                     const statusTag = u.disabled
                         ? '<span class="status-pill danger">已禁用</span>'
-                        : (u.system_admin_bound
-                            ? '<span class="status-pill success">最高权限</span>'
-                            : u.is_admin
-                            ? '<span class="status-pill success">管理员</span>'
-                            : '<span class="status-pill success">正常</span>');
+                        : '<span class="status-pill success">正常</span>';
 
                     const toggleBtn = u.is_system
-                        ? '<span class="status-pill success">系统账号</span>'
-                        : u.system_admin_bound
-                        ? '<span class="status-pill success">不可禁用</span>'
+                        ? '<span class="protected-hint">内置账号</span>'
+                        : u.is_system_admin
+                        ? '<span class="protected-hint">不可禁用</span>'
                         : (u.disabled
                             ? `<button onclick="toggleUserDisabled('${escapeHtml(escapeJsString(u.open_id))}', false)" class="btn btn-sm table-action">启用</button>`
                             : `<button onclick="toggleUserDisabled('${escapeHtml(escapeJsString(u.open_id))}', true)" class="btn btn-sm table-action danger">禁用</button>`);
-                    const adminBtn = u.is_system || u.system_admin_bound
-                        ? '<span class="status-pill success">不可变更</span>'
-                        : (u.is_admin
-                            ? `<button onclick="toggleUserAdmin('${escapeHtml(escapeJsString(u.open_id))}', false)" class="btn btn-sm table-action">取消管理员</button>`
-                            : `<button onclick="toggleUserAdmin('${escapeHtml(escapeJsString(u.open_id))}', true)" class="btn btn-sm table-action">设为管理员</button>`);
-                    const bindBtn = (!isSystemAdmin || u.is_system)
-                        ? ''
-                        : (u.system_admin_bound
-                            ? `<button onclick="toggleSystemAdminBinding('${escapeHtml(escapeJsString(u.open_id))}', false, '${escapeHtml(escapeJsString(name))}')" class="btn btn-sm table-action danger">解绑最高权限</button>`
-                            : `<button onclick="toggleSystemAdminBinding('${escapeHtml(escapeJsString(u.open_id))}', true, '${escapeHtml(escapeJsString(name))}')" class="btn btn-sm table-action" ${u.disabled ? 'disabled' : ''}>绑定最高权限</button>`);
 
                     html += `<tr>
                         <td><div class="user-cell">${avatar}<span class="user-name">${escapeHtml(name)}</span></div></td>
                         <td class="mono-muted">${escapeHtml(u.open_id) || '-'}</td>
                         <td style="color:#64748b;">${escapeHtml(formatDateTime(u.created_at))}</td>
                         <td style="color:#64748b;">${escapeHtml(formatDateTime(u.last_login_at))}</td>
+                        <td>${roleCell}</td>
                         <td>${statusTag}</td>
-                        <td><div style="display:flex; gap:6px; flex-wrap:wrap;">${toggleBtn}${adminBtn}${bindBtn}</div></td>
+                        <td>${toggleBtn}</td>
                     </tr>`;
                 }
             }
@@ -2912,38 +2937,38 @@
             });
         }
 
-        function toggleUserAdmin(openId, isAdmin) {
-            fetch('/api/admin/users/set-admin', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ open_id: openId, is_admin: isAdmin })
-            }).then(r => r.json()).then(res => {
-                if (res.status === 'ok') {
-                    loadUsers();
-                } else {
-                    alert(res.message || '操作失败');
-                }
-            }).catch(e => {
-                alert('请求错误: ' + e.message);
-            });
-        }
+        function changeUserRole(openId, name, select) {
+            const previousRole = select.dataset.originalRole;
+            const role = select.value;
+            if (role === previousRole) return;
 
-        function toggleSystemAdminBinding(openId, bound, name) {
-            const prompt = bound
-                ? `确定将“${name}”绑定到内置管理员并授予最高权限吗？现有绑定会被替换。`
-                : `确定解除“${name}”的最高权限绑定吗？`;
-            if (!confirm(prompt)) return;
-            fetch('/api/admin/users/bind-system-admin', {
+            let prompt = '';
+            if (role === 'system_admin') {
+                prompt = `确定将“${name}”设为系统管理员吗？系统管理员拥有运营管理员的全部权限，并且不能被禁用。`;
+            } else if (previousRole === 'system_admin') {
+                prompt = `确定取消“${name}”的系统管理员角色吗？`;
+            }
+            if (prompt && !confirm(prompt)) {
+                select.value = previousRole;
+                return;
+            }
+
+            select.disabled = true;
+            fetch('/api/admin/users/set-role', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ open_id: openId, bound: bound })
+                body: JSON.stringify({ open_id: openId, role: role })
             }).then(r => r.json()).then(res => {
                 if (res.status === 'ok') {
                     loadUsers();
                 } else {
+                    select.disabled = false;
+                    select.value = previousRole;
                     alert(res.message || '操作失败');
                 }
             }).catch(e => {
+                select.disabled = false;
+                select.value = previousRole;
                 alert('请求错误: ' + e.message);
             });
         }

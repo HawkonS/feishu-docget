@@ -115,7 +115,7 @@
             disabled: '您的账号已被禁用，请联系管理员',
             user_info: '获取用户信息失败，请重试',
             oauth_failed: '飞书登录失败，请重试或联系管理员',
-            not_admin: '该飞书账号没有后台管理员权限'
+            not_admin: '该飞书账号没有系统管理员或运营管理员权限'
         };
         const errorCode = new URLSearchParams(window.location.search).get('error');
         if (errorCode && errorMessages[errorCode]) {
