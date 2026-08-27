@@ -216,6 +216,17 @@ def _login_enabled():
     return ConfigLoader.get_bool('login.enabled', False)
 
 
+def _feishu_oauth_configured():
+    """是否已配置足以完成飞书 OAuth 的应用凭据。
+
+    普通用户登录仍由 ``login.enabled`` 控制；后台管理员可以在不强制
+    开启前台登录的情况下使用飞书 OAuth，因此这里单独检查应用凭据。
+    """
+    app_id = str(config.get('feishu.app_id') or '').strip()
+    app_secret = str(config.get('feishu.app_secret') or '').strip()
+    return bool(app_id and app_secret)
+
+
 def _is_admin_session():
     """当前会话是否具备后台管理员权限。
 
@@ -1006,17 +1017,22 @@ def user_login_page():
         html = f.read()
     html = html.replace('[/* page_title */]', escape(config.get('page.title', '飞书文档下载工具')))
     copyright_text = escape(config.get('copyright.text', 'Hawkon 2025 -2026'))
-    html = html.replace('Hawkon 2025 -2026', copyright_text)
-    html = html.replace('Hawkon 2025', copyright_text)
+    html = html.replace('[/* copyright_text */]', copyright_text)
     return html
 
 @app.route('/auth/feishu/authorize', methods=['GET'])
 def auth_feishu_authorize():
-    if not _login_enabled():
+    oauth_target = 'admin' if request.args.get('next') == 'admin' else 'home'
+    # 前台 OAuth 仍服从 login.enabled；后台管理员 OAuth 只要求已配置飞书应用，
+    # 这样可以单独给管理员提供飞书登录，而不改变公开首页的访问策略。
+    if oauth_target != 'admin' and not _login_enabled():
         return redirect('/')
+    if not _feishu_oauth_configured():
+        error_target = _safe_admin_path(config.get('admin.path', '/admin')) if oauth_target == 'admin' else '/login'
+        return redirect(f'{error_target}?error=oauth_unavailable')
     state = secrets.token_urlsafe(16)
     session['oauth_state'] = state
-    session['oauth_target'] = 'admin' if request.args.get('next') == 'admin' else 'home'
+    session['oauth_target'] = oauth_target
     return redirect(feishu_oauth.build_authorize_url(config.get('feishu.app_id'), _get_redirect_uri(), state))
 
 @app.route(f'{OAUTH_CALLBACK_PATH}', methods=['GET'])
@@ -1109,9 +1125,8 @@ def admin_page():
     with open(os.path.join(HTML_DIR, 'login.html'), 'r', encoding='utf-8') as f:
         html = f.read()
     copyright_text = escape(config.get('copyright.text', 'Hawkon 2025 -2026'))
-    html = html.replace('Hawkon 2025 -2026', copyright_text)
-    html = html.replace('Hawkon 2025', copyright_text)
-    html = html.replace('[/* feishu_login_hidden */]', '' if _login_enabled() else 'hidden')
+    html = html.replace('[/* copyright_text */]', copyright_text)
+    html = html.replace('[/* feishu_login_hidden */]', '' if _feishu_oauth_configured() else 'hidden')
     response = make_response(_inject_csrf(html))
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
     return response
