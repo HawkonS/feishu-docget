@@ -1941,7 +1941,10 @@
                 <!-- Tab: Projects -->
                 <div id="tab-projects" class="tab-pane active">
                     <div class="data-toolbar">
-                        <div class="toolbar-meta">已生成项目 <strong id="projectCount">0</strong></div>
+                        <div class="toolbar-fields">
+                            <span class="toolbar-meta">已生成项目 <strong id="projectCount">0</strong></span>
+                            <span class="toolbar-meta">总占用空间 <strong id="projectTotalSize">0 B</strong></span>
+                        </div>
                         <div class="toolbar-fields">
                             <input type="search" id="projectSearch" placeholder="搜索项目名称" oninput="searchProjects()" class="md-search-input form-control form-control-sm" style="width:180px;">
                             <span class="toolbar-meta" style="font-size:12px;">点击项目名称展开文件树</span>
@@ -2028,7 +2031,7 @@
                 <div id="tab-logs" class="tab-pane" style="height:100%;">
                     <div class="log-layout" style="display: flex; height: 100%; overflow: hidden;">
                         <div class="log-sidebar" style="overflow-y: auto; display: flex; flex-direction: column;">
-                             <div class="log-sidebar-title">日志文件列表</div>
+                             <div class="log-sidebar-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><span>日志文件列表</span><span id="logTotalSize" style="font-size:11px;color:#8e98a8;font-weight:600;white-space:nowrap;">0 B</span></div>
                              <div id="logList" style="flex: 1; overflow-y: auto;"></div>
                         </div>
                         <div class="log-main" style="flex: 1; display: flex; flex-direction: column; height: 100%;">
@@ -3269,8 +3272,15 @@
 
         async function loadLogs() {
             try {
-                const res = await fetch('/api/admin/logs');
-                const files = await res.json();
+                const res = await fetch('/api/admin/logs?summary=1');
+                const payload = await res.json();
+                // 兼容旧服务返回数组，同时使用新接口提供的日志总占用空间。
+                const files = Array.isArray(payload) ? payload : (payload.items || []);
+                const totalSize = Array.isArray(payload)
+                    ? files.reduce((sum, item) => sum + (Number(item.size) || 0), 0)
+                    : (Number(payload.total_size_bytes ?? payload.total_size) || 0);
+                const totalSizeEl = document.getElementById('logTotalSize');
+                if (totalSizeEl) totalSizeEl.textContent = formatSize(totalSize);
                 const list = document.getElementById('logList');
                 list.innerHTML = '';
                 
@@ -3753,6 +3763,8 @@
                 tbody.innerHTML = "";
                 const count = document.getElementById('projectCount');
                 if (count) count.textContent = res.total || 0;
+                const totalSize = document.getElementById('projectTotalSize');
+                if (totalSize) totalSize.textContent = formatSize(Number(res.total_size_bytes ?? res.total_size) || 0);
                 if (!projectCache.length) {
                     tbody.innerHTML = '<tr><td colspan="4" class="table-empty">暂无项目，完成一次下载任务后会显示在这里</td></tr>';
                     updateProjectPagination();
