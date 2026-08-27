@@ -5,108 +5,70 @@
     <title>文档下载管理后台 - 登录</title>
     <link rel="icon" href="/favicon.ico">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/static/vendor/bootstrap.min.css?v=5.3.3">
     <style>
+        :root { --login-blue: #356df3; --login-ink: #172033; --login-muted: #7c8798; }
+        html, body { min-height: 100%; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            min-height: 100vh;
             margin: 0;
-            background: #f8f9ff;
-            color: #1f2a44;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
+            color: var(--login-ink);
+            background: radial-gradient(circle at 15% 10%, #eaf3ff 0, #f5f7ff 38%, #fff 78%);
         }
-        .login-box {
-            width: 320px;
-            background: white;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-        .login-box h3 { margin-top: 0; margin-bottom: 20px; }
-        .password-field {
-            position: relative;
-            margin: 10px 0 20px;
-        }
-        .password-field input {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            box-sizing: border-box;
-        }
-        button.login-btn {
-            width: 100%;
-            padding: 10px;
-            background: #3b82f6;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 14px;
-        }
-        button.login-btn:hover { background: #2563eb; }
-        .login-divider {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin: 20px 0;
-            color: #94a3b8;
-            font-size: 12px;
-        }
-        .login-divider::before, .login-divider::after {
-            content: '';
-            flex: 1;
-            height: 1px;
-            background: #e2e8f0;
-        }
-        .feishu-login-btn {
-            width: 100%;
-            padding: 10px;
-            background: #3370ff;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        }
-        .feishu-login-btn:hover { background: #2357d6; }
-        .footer-copyright {
-            position: fixed;
-            bottom: 10px;
-            right: 20px;
-            color: #94a3b8;
-            font-size: 12px;
-        }
+        .login-shell { min-height: 100vh; padding: 24px 16px 68px; }
+        .login-card { width: min(100%, 420px); border: 1px solid rgba(219, 228, 242, .9) !important; border-radius: 16px; box-shadow: 0 18px 50px rgba(32, 55, 97, .1) !important; }
+        .login-brand { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; margin-bottom: 15px; padding: 6px; border: 1px solid #dbe5f5; border-radius: 14px; background: #fff; box-shadow: 0 8px 18px rgba(53, 109, 243, .14); overflow: hidden; }
+        .login-brand img { display: block; width: 100%; height: 100%; object-fit: contain; }
+        .login-card h1 { color: var(--login-ink); font-size: 22px; letter-spacing: -.02em; }
+        .login-subtitle { color: var(--login-muted); font-size: 12px; }
+        .login-card .form-label { color: #3d4b61; font-size: 12px; font-weight: 700; }
+        .login-card .form-control { min-height: 44px; border-color: #dfe5ef; border-radius: 9px; font-size: 14px; }
+        .login-card .form-control:focus { border-color: #8ca6ec; box-shadow: 0 0 0 3px rgba(53, 109, 243, .1); }
+        .login-card .btn { min-height: 44px; border-radius: 9px; font-size: 13px; font-weight: 700; }
+        .login-card .btn-primary { border-color: var(--login-blue); background: var(--login-blue); }
+        .login-card .btn-primary:hover { border-color: #2859d7; background: #2859d7; }
+        .feishu-login-btn { border: 0; background: #3370ff; }
+        .feishu-login-btn:hover { border-color: #2357d6; background: #2357d6; }
+        .login-divider { display: flex; align-items: center; gap: 10px; margin: 22px 0; color: #a0aabd; font-size: 11px; }
+        .login-divider::before, .login-divider::after { content: ''; flex: 1; height: 1px; background: #e7ebf2; }
+        .login-error { margin: 14px 0 0; padding: 9px 11px; border-radius: 8px; font-size: 12px; }
+        .footer-copyright { position: fixed; right: 18px; bottom: 12px; color: #a0aabd; font-size: 11px; }
+        @media (max-width: 575.98px) { .login-shell { padding: 16px 12px 58px; } .login-card .card-body { padding: 28px 22px !important; } .footer-copyright { right: 12px; } }
     </style>
 </head>
 <body>
-    <div class="login-box">
-        <h3>管理后台登录</h3>
-        <div class="password-field">
-            <input type="password" id="adminPass" placeholder="请输入密码" onkeypress="if(event.key==='Enter') doLogin()" />
-        </div>
-        <button class="login-btn" onclick="doLogin()">登录</button>
-        <div [/* feishu_login_hidden */]>
-            <div class="login-divider">或</div>
-            <button class="feishu-login-btn" onclick="window.location.href='/auth/feishu/authorize?next=admin'">
-                <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                    <path d="M3 5.5c6.5 0 12 2.5 15.5 7-3.5 1.2-7 1.2-10.5 0C5.2 11.3 3.8 8.8 3 5.5z" fill="#ffffff"/>
-                    <path d="M21 9.5c-1.8 6-6.8 9.8-13.5 9.8 2.2-3.2 5-5.2 8.3-6.3 2-.7 3.8-1.9 5.2-3.5z" fill="#ffffff" opacity="0.85"/>
-                </svg>
-                使用飞书登录
-            </button>
-        </div>
-        <div id="loginMsg" style="color:red; margin-top:10px; font-size:12px;"></div>
-    </div>
-    <div class="footer-copyright">© Hawkon 2025</div>
+    <main class="container-fluid login-shell d-flex align-items-center justify-content-center">
+        <section class="card login-card border-0">
+            <div class="card-body p-4 p-md-5">
+                <div class="text-center">
+                    <div class="login-brand"><img src="/favicon.ico" alt="站点图标"></div>
+                    <h1 class="h4 mb-2">管理后台登录</h1>
+                    <p class="login-subtitle mb-4">使用管理员凭据进入系统管理工作区</p>
+                </div>
+
+                <form id="adminLoginForm" onsubmit="event.preventDefault(); doLogin();">
+                    <div class="mb-3">
+                        <label for="adminPass" class="form-label">管理员密码</label>
+                        <input type="password" id="adminPass" class="form-control" placeholder="请输入密码" autocomplete="current-password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100" id="adminLoginButton">登录后台</button>
+                </form>
+
+                <div [/* feishu_login_hidden */]>
+                    <div class="login-divider">或</div>
+                    <button type="button" class="btn feishu-login-btn text-white w-100 d-flex align-items-center justify-content-center gap-2" onclick="window.location.href='/auth/feishu/authorize?next=admin'">
+                        <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                            <path d="M3 5.5c6.5 0 12 2.5 15.5 7-3.5 1.2-7 1.2-10.5 0C5.2 11.3 3.8 8.8 3 5.5z" fill="#ffffff"/>
+                            <path d="M21 9.5c-1.8 6-6.8 9.8-13.5 9.8 2.2-3.2 5-5.2 8.3-6.3 2-.7 3.8-1.9 5.2-3.5z" fill="#ffffff" opacity="0.85"/>
+                        </svg>
+                        使用飞书登录
+                    </button>
+                </div>
+                <div id="loginMsg" class="alert alert-danger login-error d-none" role="alert" aria-live="polite"></div>
+            </div>
+        </section>
+    </main>
+    <div class="footer-copyright">© [/* copyright_text */]</div>
 
     <script>
         const errorMessages = {
@@ -115,30 +77,37 @@
             disabled: '您的账号已被禁用，请联系管理员',
             user_info: '获取用户信息失败，请重试',
             oauth_failed: '飞书登录失败，请重试或联系管理员',
-            not_admin: '该飞书账号没有系统管理员或运营管理员权限'
+            not_admin: '该飞书账号没有系统管理员或运营管理员权限',
+            oauth_unavailable: '飞书登录尚未配置，请联系系统管理员'
         };
         const errorCode = new URLSearchParams(window.location.search).get('error');
-        if (errorCode && errorMessages[errorCode]) {
-            document.getElementById('loginMsg').innerText = errorMessages[errorCode];
+
+        function showLoginMessage(message) {
+            const messageEl = document.getElementById('loginMsg');
+            messageEl.innerText = message || '';
+            messageEl.classList.toggle('d-none', !message);
         }
 
+        if (errorCode && errorMessages[errorCode]) showLoginMessage(errorMessages[errorCode]);
+
         function doLogin() {
-            const pwd = document.getElementById("adminPass").value;
-            if (!pwd) return;
-            
-            fetch("/api/admin/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
+            const pwdInput = document.getElementById('adminPass');
+            const button = document.getElementById('adminLoginButton');
+            const pwd = pwdInput.value;
+            if (!pwd) {
+                pwdInput.focus();
+                return;
+            }
+            button.disabled = true;
+            showLoginMessage('');
+            fetch('/api/admin/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ password: pwd })
             }).then(r => r.json()).then(res => {
-                if (res.status === "ok") {
-                    window.location.reload(); // 登录成功刷新页面进入后台
-                } else {
-                    document.getElementById("loginMsg").innerText = res.message;
-                }
-            }).catch(e => {
-                document.getElementById("loginMsg").innerText = "登录请求失败";
-            });
+                if (res.status === 'ok') window.location.reload();
+                else showLoginMessage(res.message || '登录失败');
+            }).catch(() => showLoginMessage('登录请求失败')).finally(() => { button.disabled = false; });
         }
     </script>
 </body>

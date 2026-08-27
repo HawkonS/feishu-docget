@@ -207,19 +207,70 @@ class SecurityRegressionTests(unittest.TestCase):
         finally:
             config['login.enabled'] = previous_login_enabled
 
-    def test_admin_login_page_shows_feishu_entry_only_when_login_enabled(self):
+    def test_admin_login_page_shows_feishu_entry_when_oauth_configured(self):
         previous_login_enabled = config.get('login.enabled')
+        previous_app_id = config.get('feishu.app_id')
+        previous_app_secret = config.get('feishu.app_secret')
         try:
-            config['login.enabled'] = 'true'
-            enabled_html = self.client.get('/admin').get_data(as_text=True)
-            self.assertIn('/auth/feishu/authorize?next=admin', enabled_html)
-            self.assertNotIn('<div hidden>', enabled_html)
-
             config['login.enabled'] = 'false'
-            disabled_html = self.client.get('/admin').get_data(as_text=True)
-            self.assertIn('<div hidden>', disabled_html)
+            config['feishu.app_id'] = 'test-app-id'
+            config['feishu.app_secret'] = 'test-app-secret'
+            configured_html = self.client.get('/admin').get_data(as_text=True)
+            self.assertIn('/auth/feishu/authorize?next=admin', configured_html)
+            self.assertNotIn('<div hidden>', configured_html)
+
+            config['feishu.app_id'] = ''
+            unconfigured_html = self.client.get('/admin').get_data(as_text=True)
+            self.assertIn('<div hidden>', unconfigured_html)
         finally:
             config['login.enabled'] = previous_login_enabled
+            config['feishu.app_id'] = previous_app_id
+            config['feishu.app_secret'] = previous_app_secret
+
+    def test_admin_oauth_authorize_is_available_when_front_login_disabled(self):
+        previous_login_enabled = config.get('login.enabled')
+        previous_app_id = config.get('feishu.app_id')
+        previous_app_secret = config.get('feishu.app_secret')
+        config['login.enabled'] = 'false'
+        config['feishu.app_id'] = 'test-app-id'
+        config['feishu.app_secret'] = 'test-app-secret'
+        try:
+            with patch('src.app.feishu_oauth.build_authorize_url', return_value='https://example.com/auth'):
+                response = self.client.get('/auth/feishu/authorize?next=admin')
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(response.location, 'https://example.com/auth')
+            with self.client.session_transaction() as session:
+                self.assertEqual(session['oauth_target'], 'admin')
+                self.assertTrue(session.get('oauth_state'))
+        finally:
+            config['login.enabled'] = previous_login_enabled
+            config['feishu.app_id'] = previous_app_id
+            config['feishu.app_secret'] = previous_app_secret
+
+    def test_login_pages_use_bootstrap_cards_and_local_assets(self):
+        previous_login_enabled = config.get('login.enabled')
+        config['login.enabled'] = 'true'
+        try:
+            with self.client.session_transaction() as session:
+                session.pop('is_admin', None)
+                session.pop('user', None)
+            admin_html = self.client.get('/admin').get_data(as_text=True)
+            user_html = self.client.get('/login?error=disabled').get_data(as_text=True)
+        finally:
+            config['login.enabled'] = previous_login_enabled
+
+        for html in (admin_html, user_html):
+            self.assertIn('/static/vendor/bootstrap.min.css?v=5.3.3', html)
+            self.assertIn('class="card login-card border-0"', html)
+            self.assertIn('class="card-body p-4 p-md-5"', html)
+            self.assertIn('class="alert alert-danger login-error d-none"', html)
+            self.assertNotIn('cdn.jsdelivr.net/npm/bootstrap', html)
+            self.assertNotIn('class="login-box"', html)
+        self.assertIn('id="adminLoginForm"', admin_html)
+        self.assertIn('<img src="/favicon.ico" alt="站点图标">', admin_html)
+        self.assertIn('id="errorMsg"', user_html)
+        self.assertIn('<img src="/favicon.ico" alt="站点图标">', user_html)
+        self.assertIn('errorEl.classList.remove(\'d-none\')', user_html)
 
     def test_dashboard_uses_system_and_operator_role_labels_only(self):
         with self.client.session_transaction() as session:

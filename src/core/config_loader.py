@@ -59,7 +59,7 @@ CONFIG_SCHEMA = [
             {
                 'key': 'login.oauth.redirect_uri', 'label': 'OAuth 回调地址', 'type': 'str',
                 'default': '',
-                'desc': '飞书 OAuth 回调地址（选填，留空时按访问域名自动生成，启用 server.https.enabled 时自动使用 https）。仅在启用登录时生效；手动填写必须与飞书开放平台『安全设置-重定向 URL』及授权时使用的地址完全一致',
+                'desc': '飞书 OAuth 回调地址（选填，留空时按访问域名自动生成，启用 server.https.enabled 时自动使用 https）。普通用户登录受 login.enabled 控制，后台管理员 OAuth 可单独使用；手动填写必须与飞书开放平台『安全设置-重定向 URL』及授权时使用的地址完全一致',
                 'depends_on': 'login.enabled',
                 'sensitive': False, 'restart_required': False,
             },
