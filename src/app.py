@@ -109,6 +109,25 @@ _start_attempts = {}  # {ip: [timestamps]} 任务提交接口的滑动窗口限�
 _attempts_lock = threading.RLock()
 START_RATE_LIMIT = 10  # 单 IP 每分钟最多提交任务数
 
+# 磁盘用量统计缓存：项目和日志目录可能持续增长，避免每次打开管理 Tab 都递归扫描。
+# 删除/生成操作会主动失效缓存；外部变更最多在 TTL 后反映到页面。
+DISK_USAGE_CACHE_TTL = 30
+_project_usage_cache_lock = threading.RLock()
+_project_usage_cache = {
+    'root': None,
+    'updated_at': 0.0,
+    'total_size': 0,
+    'project_sizes': {},
+    'project_file_counts': {},
+}
+_log_usage_cache_lock = threading.RLock()
+_log_usage_cache = {
+    'root': None,
+    'updated_at': 0.0,
+    'files': [],
+    'total_size': 0,
+}
+
 
 def _check_login_lock(attempts, client_ip):
     """检查 IP 是否处于锁定状态。返回 (是否锁定, 剩余秒数)，锁定期过期时自动清理记录"""
@@ -601,6 +620,7 @@ def check_cleanup_output():
                 try:
                     shutil.rmtree(item['path'])
                     _cleanup_broken_project_links(output_dir)
+                    _invalidate_project_usage_cache()
                     total_size -= item['size']
                     logger.info(f"已清理: {item['path']}")
                 except Exception as e:
@@ -682,6 +702,78 @@ def _resolve_template_path(name, allow_empty=False):
     if not os.path.isfile(candidate):
         return None
     return candidate
+
+
+def _invalidate_project_usage_cache():
+    with _project_usage_cache_lock:
+        _project_usage_cache['root'] = None
+        _project_usage_cache['updated_at'] = 0.0
+
+
+def _get_project_usage(output_dir):
+    """汇总项目目录占用空间和文件数，并在短时间内复用结果。
+
+    只统计真实文件，跳过软链接/Junction，避免共享图片目录被重复计数。
+    """
+    root = os.path.realpath(output_dir)
+    now = time.monotonic()
+    with _project_usage_cache_lock:
+        if (_project_usage_cache['root'] == root and
+                now - _project_usage_cache['updated_at'] < DISK_USAGE_CACHE_TTL):
+            return {
+                'total_size': _project_usage_cache['total_size'],
+                'project_sizes': dict(_project_usage_cache['project_sizes']),
+                'project_file_counts': dict(_project_usage_cache['project_file_counts']),
+            }
+
+        project_sizes = {}
+        project_file_counts = {}
+        total_size = 0
+        if os.path.isdir(root):
+            try:
+                entries = list(os.scandir(root))
+            except OSError:
+                entries = []
+            for entry in entries:
+                path = entry.path
+                try:
+                    is_dir = entry.is_dir(follow_symlinks=False)
+                except OSError:
+                    continue
+                if not is_dir or _is_project_link(path):
+                    continue
+                size = 0
+                file_count = 0
+                for dirpath, dirnames, filenames in os.walk(path, topdown=True, followlinks=False):
+                    dirnames[:] = [dirname for dirname in dirnames
+                                   if not _is_project_link(os.path.join(dirpath, dirname))]
+                    for filename in filenames:
+                        file_path = os.path.join(dirpath, filename)
+                        if _is_project_link(file_path):
+                            continue
+                        try:
+                            size += os.path.getsize(file_path)
+                            file_count += 1
+                        except OSError:
+                            continue
+                project_key = os.path.realpath(path)
+                project_sizes[project_key] = size
+                project_file_counts[project_key] = file_count
+                total_size += size
+
+        _project_usage_cache.update({
+            'root': root,
+            'updated_at': now,
+            'total_size': total_size,
+            'project_sizes': project_sizes,
+            'project_file_counts': project_file_counts,
+        })
+        return {
+            'total_size': total_size,
+            'project_sizes': dict(project_sizes),
+            'project_file_counts': dict(project_file_counts),
+        }
+
 
 def list_projects(include_files=True):
     output_dir = os.path.join(base_dir, config['output.dir'])
@@ -783,16 +875,18 @@ def list_project_files(path):
 def list_project_summaries(page=1, page_size=20, query=''):
     """分页读取项目摘要。
 
-    先只扫描项目目录本身完成排序/分页，再为当前页计算大小和文件数，
-    这样不会因为历史项目文件树越来越大而拖慢每次 Tab 切换。
+    项目大小和文件数由带 TTL 的目录汇总缓存提供，分页请求不会重复递归扫描
+    历史项目；缓存失效后最多扫描一次并复用到后续请求。
     """
     output_dir = os.path.join(base_dir, config['output.dir'])
+    usage = _get_project_usage(output_dir)
     candidates = []
     query = str(query or '').strip().lower()
     if os.path.isdir(output_dir):
         for name in os.listdir(output_dir):
             path = os.path.join(output_dir, name)
-            if not os.path.isdir(path) or (query and query not in name.lower()):
+            if (not os.path.isdir(path) or _is_project_link(path) or
+                    (query and query not in name.lower())):
                 continue
             try:
                 ctime = os.path.getctime(path)
@@ -819,24 +913,14 @@ def list_project_summaries(page=1, page_size=20, query=''):
     selected = candidates[start:start + page_size]
     items = []
     for ctime, name, path in selected:
-        size = 0
-        file_count = 0
-        for root, dirnames, filenames in os.walk(path, topdown=True, followlinks=False):
-            dirnames[:] = [dirname for dirname in dirnames
-                           if not _is_project_link(os.path.join(root, dirname))]
-            for fname in filenames:
-                fp = os.path.join(root, fname)
-                if _is_project_link(fp):
-                    continue
-                try:
-                    size += os.path.getsize(fp)
-                    file_count += 1
-                except OSError:
-                    pass
+        project_key = os.path.realpath(path)
+        size = usage['project_sizes'].get(project_key, 0)
+        file_count = usage['project_file_counts'].get(project_key, 0)
         items.append({'name': name, 'path': path,
                       'ctime': datetime.fromtimestamp(ctime).isoformat(timespec='minutes'),
                       'ctime_ts': ctime, 'size': size, 'file_count': file_count, 'files': []})
-    return {'items': items, 'total': total, 'page': page,
+    return {'items': items, 'total': total, 'total_size': usage['total_size'],
+            'total_size_bytes': usage['total_size'], 'page': page,
             'page_size': page_size, 'total_pages': total_pages,
             'has_more': start + len(items) < total}
 
@@ -902,6 +986,7 @@ def run_job(job_id, doc_url, template_name, table_style, delete_template=False, 
                     pass
         update_job(job_id, status='done', progress=100, message='已完成', docx_path=result['docx_path'], folder=result['folder'])
         update_download_stat(base_dir, config, job_id, '已完成', doc_url, result['docx_path'], title=result.get('title', os.path.basename(result['docx_path'])), ip_address=client_ip, user_name=user_name)
+        _invalidate_project_usage_cache()
         threading.Thread(target=check_cleanup_output).start()
     except Exception as e:
         is_stopped = isinstance(e, InterruptedError) or (check_stop_func and check_stop_func())
@@ -1337,6 +1422,7 @@ def api_admin_delete_project():
     try:
         shutil.rmtree(real_path)
         _cleanup_broken_project_links(real_output)
+        _invalidate_project_usage_cache()
         return jsonify({'status': 'ok'})
     except Exception as e:
         logger.error(f'删除项目失败: {e}', exc_info=True)
@@ -1388,6 +1474,7 @@ def api_admin_delete_file():
         return jsonify({'status': 'error', 'message': '无效文件'})
     try:
         os.remove(real_path)
+        _invalidate_project_usage_cache()
         return jsonify({'status': 'ok'})
     except Exception as e:
         logger.error(f'删除文件失败: {e}', exc_info=True)
@@ -1919,22 +2006,79 @@ def download_all_api():
                 zipf.write(abs_path, rel_path)
     return send_file(zip_path, as_attachment=True, download_name='all_downloads.zip')
 
+
+def _invalidate_log_usage_cache():
+    with _log_usage_cache_lock:
+        _log_usage_cache['root'] = None
+        _log_usage_cache['updated_at'] = 0.0
+
+
+def _get_log_usage(log_dir):
+    """返回日志文件清单与总大小，短时间内复用目录扫描结果。"""
+    root = os.path.realpath(log_dir)
+    now = time.monotonic()
+    with _log_usage_cache_lock:
+        if (_log_usage_cache['root'] == root and
+                now - _log_usage_cache['updated_at'] < DISK_USAGE_CACHE_TTL):
+            return {
+                'files': [dict(item) for item in _log_usage_cache['files']],
+                'total_size': _log_usage_cache['total_size'],
+            }
+
+        excluded = {
+            'download_stats.jsonl', DATABASE_FILENAME,
+            DATABASE_FILENAME + '-wal', DATABASE_FILENAME + '-shm',
+        }
+        files = []
+        total_size = 0
+        if os.path.isdir(root):
+            try:
+                entries = os.scandir(root)
+            except OSError:
+                entries = None
+            if entries is not None:
+                with entries:
+                    for entry in entries:
+                        if entry.name in excluded:
+                            continue
+                        try:
+                            is_file = entry.is_file(follow_symlinks=False)
+                        except OSError:
+                            continue
+                        if not is_file:
+                            continue
+                        try:
+                            stat_result = entry.stat(follow_symlinks=False)
+                            size = stat_result.st_size
+                            mtime = stat_result.st_mtime
+                        except OSError:
+                            continue
+                        files.append({'name': entry.name, 'size': size, 'mtime': mtime})
+                        total_size += size
+        files.sort(key=lambda item: item['mtime'], reverse=True)
+        _log_usage_cache.update({
+            'root': root,
+            'updated_at': now,
+            'files': files,
+            'total_size': total_size,
+        })
+        return {'files': [dict(item) for item in files], 'total_size': total_size}
+
+
 @app.route('/api/admin/logs', methods=['GET'])
 @admin_required
 def api_admin_logs():
     log_dir = os.path.join(base_dir, config.get('log.dir', 'logs'))
-    if not os.path.exists(log_dir):
-        return jsonify([])
-    files = []
-    for f in os.listdir(log_dir):
-        if f in {'download_stats.jsonl', DATABASE_FILENAME,
-                 DATABASE_FILENAME + '-wal', DATABASE_FILENAME + '-shm'}:
-            continue
-        path = os.path.join(log_dir, f)
-        if os.path.isfile(path):
-            files.append({'name': f, 'size': os.path.getsize(path), 'mtime': os.path.getmtime(path)})
-    files.sort(key=lambda x: x['mtime'], reverse=True)
-    return jsonify(files)
+    usage = _get_log_usage(log_dir)
+    # 默认保持历史数组响应；管理后台通过 summary=1 获取汇总字段，避免破坏已有调用方。
+    if request.args.get('summary') != '1':
+        return jsonify(usage['files'])
+    return jsonify({
+        'items': usage['files'],
+        'total': len(usage['files']),
+        'total_size': usage['total_size'],
+        'total_size_bytes': usage['total_size'],
+    })
 
 @app.route('/api/admin/logs/<filename>', methods=['GET'])
 @admin_required
@@ -2068,6 +2212,7 @@ def api_admin_delete_log(filename):
     path = real_path
     try:
         os.remove(path)
+        _invalidate_log_usage_cache()
         return jsonify({'status': 'ok'})
     except Exception as e:
         logger.error(f'删除日志文件失败: {e}', exc_info=True)

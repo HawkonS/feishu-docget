@@ -80,6 +80,30 @@ class ProjectManagementRegressionTests(unittest.TestCase):
                 ['document.docx'],
             )
 
+    def test_project_api_reports_total_disk_usage(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            output_dir = os.path.join(workspace, 'output')
+            first = os.path.join(output_dir, 'first')
+            second = os.path.join(output_dir, 'second')
+            os.makedirs(first)
+            os.makedirs(second)
+            with open(os.path.join(first, 'a.docx'), 'wb') as handle:
+                handle.write(b'a' * 5)
+            with open(os.path.join(second, 'b.docx'), 'wb') as handle:
+                handle.write(b'b' * 7)
+
+            with self.client.session_transaction() as session:
+                session['is_admin'] = True
+            with patch('src.app.base_dir', workspace), \
+                    patch.dict(config, {'output.dir': 'output'}):
+                response = self.client.get('/api/admin/projects')
+
+            self.assertEqual(response.status_code, 200)
+            payload = response.get_json()
+            self.assertEqual(payload['total'], 2)
+            self.assertEqual(payload['total_size_bytes'], 12)
+            self.assertEqual(sum(item['size'] for item in payload['items']), 12)
+
 
 if __name__ == '__main__':
     unittest.main()

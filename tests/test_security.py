@@ -300,6 +300,9 @@ class SecurityRegressionTests(unittest.TestCase):
 
         self.assertIn('id="uploadTemplateModal" class="modal fade admin-modal"', html)
         self.assertIn('id="renameTemplateModal" class="modal fade admin-modal"', html)
+        self.assertIn('id="projectTotalSize"', html)
+        self.assertIn('id="logTotalSize"', html)
+        self.assertIn("/api/admin/logs?summary=1", html)
         self.assertIn('modal-dialog-centered modal-dialog-scrollable', html)
         self.assertGreaterEqual(html.count('data-bs-dismiss="modal"'), 4)
         self.assertIn('/static/vendor/bootstrap.min.css', html)
@@ -358,6 +361,32 @@ class SecurityRegressionTests(unittest.TestCase):
         finally:
             css_response.close()
             js_response.close()
+
+    def test_admin_logs_reports_total_disk_usage(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            log_dir = os.path.join(workspace, 'logs')
+            os.makedirs(log_dir)
+            with open(os.path.join(log_dir, 'app.log'), 'wb') as handle:
+                handle.write(b'a' * 5)
+            with open(os.path.join(log_dir, 'worker.log'), 'wb') as handle:
+                handle.write(b'b' * 7)
+            # These are deliberately excluded from the log total.
+            with open(os.path.join(log_dir, 'download_stats.jsonl'), 'wb') as handle:
+                handle.write(b'x' * 100)
+
+            with self.client.session_transaction() as session:
+                session['is_admin'] = True
+            with patch('src.app.base_dir', workspace), \
+                    patch.dict(config, {'log.dir': 'logs'}):
+                response = self.client.get('/api/admin/logs?summary=1')
+
+            self.assertEqual(response.status_code, 200)
+            payload = response.get_json()
+            self.assertEqual(payload['total'], 2)
+            self.assertEqual(payload['total_size_bytes'], 12)
+            self.assertEqual(sum(item['size'] for item in payload['items']), 12)
+            legacy_response = self.client.get('/api/admin/logs')
+            self.assertIsInstance(legacy_response.get_json(), list)
 
     def test_admin_oauth_target_is_preserved_and_requires_admin_role(self):
         previous_login_enabled = config.get('login.enabled')
