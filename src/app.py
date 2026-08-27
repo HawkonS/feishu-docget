@@ -173,6 +173,9 @@ def _get_csrf_token():
 @app.before_request
 def ensure_csrf_token_and_protect_unsafe_requests():
     """为每个会话生成 CSRF token，并保护所有状态修改请求。"""
+    # 静态资源不需要会话；避免为可长期缓存的 vendor 文件设置 Cookie/Vary。
+    if request.endpoint == 'static':
+        return None
     _get_csrf_token()
     if request.method not in {'POST', 'PUT', 'PATCH', 'DELETE'}:
         return None
@@ -2136,7 +2139,12 @@ def set_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
-    if request.path in {'/', '/login', admin_path} or request.path.startswith('/api/admin/'):
+    if request.path in {
+        '/static/vendor/bootstrap.min.css',
+        '/static/vendor/bootstrap.bundle.min.js',
+    }:
+        response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    elif request.path in {'/', '/login', admin_path} or request.path.startswith('/api/admin/'):
         response.headers['Cache-Control'] = 'no-store'
     # HSTS 仅在 HTTPS 模式下启用
     if app.config.get('SESSION_COOKIE_SECURE'):

@@ -276,6 +276,38 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertNotIn('margin-top: auto; margin-bottom: 4px', html)
         self.assertNotIn("wrap.appendChild(descEl)", html)
 
+    def test_frontend_modals_use_local_bootstrap_structure_and_lifecycle(self):
+        previous_login_enabled = config.get('login.enabled')
+        config['login.enabled'] = 'false'
+        try:
+            html = self.client.get('/').get_data(as_text=True)
+        finally:
+            config['login.enabled'] = previous_login_enabled
+
+        self.assertIn('/static/vendor/bootstrap.min.css', html)
+        self.assertIn('/static/vendor/bootstrap.bundle.min.js', html)
+        self.assertIn('id="uploadModal" class="modal fade frontend-modal"', html)
+        self.assertIn('id="advancedModal" class="modal fade frontend-modal"', html)
+        self.assertGreaterEqual(html.count('modal-dialog-centered modal-dialog-scrollable'), 2)
+        self.assertGreaterEqual(html.count('data-bs-dismiss="modal"'), 5)
+        self.assertIn('bootstrap.Modal.getOrCreateInstance', html)
+        self.assertNotIn('document.getElementById("uploadModal").style.display', html)
+        self.assertNotIn('document.getElementById("advancedModal").style.display', html)
+        self.assertNotIn('cdn.jsdelivr.net/npm/bootstrap', html)
+
+        css_response = self.client.get('/static/vendor/bootstrap.min.css?v=5.3.3')
+        js_response = self.client.get('/static/vendor/bootstrap.bundle.min.js?v=5.3.3')
+        try:
+            self.assertEqual(css_response.status_code, 200)
+            self.assertEqual(js_response.status_code, 200)
+            self.assertEqual(css_response.headers.get('Cache-Control'), 'public, max-age=31536000, immutable')
+            self.assertEqual(js_response.headers.get('Cache-Control'), 'public, max-age=31536000, immutable')
+            self.assertNotIn('Set-Cookie', css_response.headers)
+            self.assertNotIn('Set-Cookie', js_response.headers)
+        finally:
+            css_response.close()
+            js_response.close()
+
     def test_admin_oauth_target_is_preserved_and_requires_admin_role(self):
         previous_login_enabled = config.get('login.enabled')
         config['login.enabled'] = 'true'
