@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>文档下载管理后台</title>
     <link rel="icon" href="/favicon.ico">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/static/vendor/bootstrap.min.css">
     <script src="/static/vendor/jszip.min.js"></script>
     <script src="/static/vendor/docx-preview.min.js"></script>
     <style>
@@ -383,51 +383,43 @@
             color: #3b82f6;
         }
 
-        /* Modals */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5);
-            align-items: center;
-            justify-content: center;
-            z-index: 2000;
-        }
-        .modal-content {
-            background: white;
-            padding: 0;
+        /* Bootstrap modal surface */
+        .admin-modal .modal-dialog { width: min(560px, calc(100% - 2rem)); }
+        .admin-modal .modal-content {
+            border: 1px solid #e5e9ef;
             border-radius: 14px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
-            width: 560px;
-            max-width: 95vw;
-            max-height: 90vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
+            box-shadow: 0 24px 64px rgba(22, 31, 48, .2);
         }
-        .modal-header {
-            padding: 16px 24px;
-            border-bottom: 1px solid #f1f5f9;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-shrink: 0;
+        .admin-modal .modal-header {
+            padding: 18px 22px;
+            border-bottom-color: #e5e9ef;
         }
-        .modal-body {
-            flex: 1;
-            overflow-y: auto;
-            display: flex;
-            min-height: 0;
+        .admin-modal .modal-body { padding: 22px; }
+        .admin-modal .modal-footer {
+            padding: 14px 22px;
+            border-top-color: #e5e9ef;
+            background: #fafbfc;
         }
-        .modal-footer {
-            padding: 16px 24px;
-            border-top: 1px solid #f1f5f9;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #f8fafc;
-            flex-shrink: 0;
+        .admin-modal .modal-title { color: #202a3a; font-size: 17px; font-weight: 700; }
+        .admin-modal .modal-subtitle { margin: 4px 0 0; color: #7c8798; font-size: 11px; }
+        .admin-modal .btn-close { opacity: .45; }
+        .admin-modal .btn-close:hover { opacity: .8; }
+        .admin-modal .btn-secondary {
+            min-height: 38px;
+            padding: 8px 17px;
+            border: 1px solid #d8dee8;
+            border-radius: 8px;
+            background: #fff;
+            color: #5f6d82;
+            font-size: 12px;
+            font-weight: 650;
         }
+        .admin-modal .btn-secondary:hover { border-color: #c4ccda; background: #f6f8fb; color: #445167; }
+        .admin-modal .btn-primary { min-height: 38px; padding: 8px 18px; border-radius: 8px; font-size: 12px; font-weight: 700; }
+        .admin-modal .form-control,
+        .admin-modal .form-select { border-color: #dfe4ec; border-radius: 8px; }
+        .admin-modal .form-control:focus,
+        .admin-modal .form-select:focus { border-color: #9aa8ed; box-shadow: 0 0 0 3px rgba(74,91,213,.1); }
         .modal-tabs {
             display: flex;
             gap: 8px;
@@ -536,34 +528,14 @@
             grid-template-columns: 1fr 1fr;
             gap: 10px;
         }
-        .upload-modal-content {
-            width: min(500px, 95vw);
-        }
+        .upload-modal-dialog { width: min(520px, calc(100% - 2rem)) !important; }
         .upload-template-form {
             display: flex;
             flex-direction: column;
             flex: 1;
             min-height: 0;
         }
-        .modal-close-btn {
-            background: none;
-            border: none;
-            cursor: pointer;
-            color: #94a3b8;
-            padding: 4px;
-            width: 32px;
-            height: 32px;
-            border-radius: 8px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal-close-btn:hover {
-            background: #f1f5f9;
-            color: #475569;
-        }
         .upload-modal-body {
-            padding: 24px;
             display: block;
         }
         .upload-form-stack {
@@ -697,40 +669,7 @@
         }
         .upload-modal-footer {
             justify-content: flex-end;
-            gap: 12px;
-            border-bottom-left-radius: 14px;
-            border-bottom-right-radius: 14px;
-        }
-        .btn-secondary {
-            padding: 8px 20px;
-            border: 1px solid #cbd5e1;
-            background: #fff;
-            color: #475569;
-            border-radius: 6px;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: background 0.2s, border-color 0.2s;
-        }
-        .btn-secondary:hover {
-            background: #f8fafc;
-            border-color: #94a3b8;
-        }
-        .btn-primary {
-            padding: 8px 24px;
-            background: #3b82f6;
-            color: #fff;
-            border: none;
-            border-radius: 6px;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: background 0.2s, box-shadow 0.2s;
-            box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
-        }
-        .btn-primary:hover {
-            background: #2563eb;
-            box-shadow: 0 4px 10px rgba(59, 130, 246, 0.24);
+            gap: 9px;
         }
         .option-divider {
             border-top: 1px dashed #e2e8f0;
@@ -783,8 +722,10 @@
             padding: 18px;
         }
         .cfg-item { padding: 10px 0; border-bottom: 1px dashed #f1f5f9; }
-        .cfg-label-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-        .cfg-label { font-weight: 600; font-size: 14px; color: #1f2a44; }
+        .cfg-item-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; min-width: 0; min-height: 43px; }
+        .cfg-title-stack { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+        .cfg-label-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .cfg-label { font-weight: 600; font-size: 14px; color: #1f2a44; line-height: 1.35; }
         .cfg-badge {
             font-size: 11px;
             color: #b45309;
@@ -794,7 +735,25 @@
             border-radius: 999px;
             white-space: nowrap;
         }
-        .cfg-control-row { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
+        .cfg-item-meta { display: inline-flex; align-items: center; justify-content: flex-end; gap: 7px; flex: 0 0 auto; }
+        .cfg-note-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            border: 1px solid #dbe4f2;
+            border-radius: 50%;
+            background: #f8fafc;
+            color: #718096;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1;
+            cursor: help;
+        }
+        .cfg-note-btn:hover, .cfg-note-btn:focus-visible { border-color: #93b4ef; background: #eff6ff; color: #2563eb; outline: none; }
+        .cfg-control-row { display: flex; gap: 8px; align-items: center; min-height: 40px; margin-top: 7px; margin-bottom: 4px; }
         .cfg-input {
             flex: 1;
             min-width: 0;
@@ -809,10 +768,9 @@
         .cfg-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12); }
         .cfg-masked { color: #94a3b8; background: #f8fafc; }
         .cfg-unit { color: #64748b; font-size: 13px; white-space: nowrap; }
-        .cfg-key { font-size: 12px; color: #94a3b8; font-family: monospace; }
-        .cfg-hint { font-size: 12px; color: #94a3b8; margin: 2px 0 4px; }
-        .cfg-desc { font-size: 12px; color: #a8b3c5; line-height: 1.5; margin: -4px 0 6px; }
-        .cfg-preview { font-size: 12px; color: #64748b; margin: 2px 0 4px; word-break: break-all; }
+        .cfg-key { font-size: 11px; color: #94a3b8; font-family: monospace; line-height: 1.35; overflow-wrap: anywhere; word-break: break-word; }
+        .cfg-note-tooltip { --bs-tooltip-bg: #1f2937; --bs-tooltip-color: #fff; }
+        .cfg-note-tooltip .tooltip-inner { max-width: min(360px, calc(100vw - 32px)); padding: 9px 11px; text-align: left; line-height: 1.55; white-space: normal; }
         .cfg-error { display: none; font-size: 12px; color: #ef4444; margin-top: 4px; }
         .cfg-item.invalid .cfg-error { display: block; }
         .cfg-item.invalid .cfg-input { border-color: #ef4444; }
@@ -1553,10 +1511,14 @@
         .cfg-card-title { font-size: 13px; }
         .cfg-count { padding: 3px 7px; border-radius: 999px; background: #f3f5f9; color: #8d98a9; font-size: 10px; }
         .cfg-arrow { font-size: 11px; }
-        .cfg-card-body { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
-        .cfg-item { min-height: 126px; padding: 13px; }
+        .cfg-card-body { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px; padding: 12px; align-items: stretch; }
+        .cfg-item { min-height: 118px; padding: 11px 13px; display: flex; flex-direction: column; }
+        .cfg-item-head { min-height: 39px; }
         .cfg-label { font-size: 13px; }
-        .cfg-desc, .cfg-hint { font-size: 11px; }
+        .cfg-key { font-size: 10px; }
+        .cfg-note-btn { width: 23px; height: 23px; }
+        .cfg-control-row { height: 43px; min-height: 43px; flex: 0 0 43px; }
+        .cfg-error { min-height: 0; }
         .config-savebar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex: 0 0 auto; min-height: 58px; padding: 12px 0 0; border-top: 1px solid var(--workspace-border); color: #9aa4b4; font-size: 11px; }
         .config-savebar .btn { flex: 0 0 auto; padding: 9px 20px !important; }
         @media (max-width: 767.98px) {
@@ -2186,23 +2148,19 @@
         </div>
     </div>
 
-    <!-- Modals -->
-    <div id="uploadTemplateModal" class="modal">
-        <div class="modal-content upload-modal-content">
+    <!-- Bootstrap modals -->
+    <div id="uploadTemplateModal" class="modal fade admin-modal" tabindex="-1" aria-labelledby="uploadModalTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable upload-modal-dialog">
+            <div class="modal-content">
             <form id="uploadTemplateForm" class="upload-template-form" onsubmit="event.preventDefault(); submitUploadTemplate();">
                 <input type="hidden" id="uploadMode" value="new">
 
                 <div class="modal-header">
                     <div class="advanced-title">
-                        <h3 id="uploadModalTitle">上传模板</h3>
-                        <p id="uploadModalSubtitle">管理后台会永久保存模板文件</p>
+                        <h5 id="uploadModalTitle" class="modal-title">上传模板</h5>
+                        <p id="uploadModalSubtitle" class="modal-subtitle">管理后台会永久保存模板文件</p>
                     </div>
-                    <button type="button" onclick="closeUploadModal()" class="modal-close-btn" aria-label="关闭">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
-                    </button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
                 </div>
 
                 <div class="modal-body upload-modal-body">
@@ -2249,33 +2207,42 @@
                 </div>
 
                 <div class="modal-footer upload-modal-footer">
-                    <button type="button" onclick="closeUploadModal()" class="btn-secondary">取消</button>
-                    <button type="submit" id="uploadSubmitButton" class="btn-primary">上传模板</button>
+                    <button type="button" data-bs-dismiss="modal" class="btn btn-secondary">取消</button>
+                    <button type="submit" id="uploadSubmitButton" class="btn btn-primary">上传模板</button>
                 </div>
             </form>
+            </div>
         </div>
     </div>
 
-    <div id="renameTemplateModal" class="modal">
-        <div class="modal-content" style="width: 400px;">
-            <h3 style="margin-top:0;">重命名模板</h3>
+    <div id="renameTemplateModal" class="modal fade admin-modal" tabindex="-1" aria-labelledby="renameModalTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered rename-modal-dialog">
+            <div class="modal-content">
+            <div class="modal-header">
+                <div class="advanced-title">
+                    <h5 id="renameModalTitle" class="modal-title">重命名模板</h5>
+                    <p class="modal-subtitle">更新模板显示名称，文件格式会自动保留</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
             <form id="renameTemplateForm" onsubmit="event.preventDefault(); submitRenameTemplate();">
                 <input type="hidden" id="renameOldName">
-                <div style="margin-bottom:15px;">
-                    <label style="display:block; margin-bottom:5px; font-size:14px; font-weight:600;">新名称</label>
-                    <input type="text" id="renameNewName" class="form-select" required style="width:100%; box-sizing:border-box;">
-                    <div style="font-size:12px; color:#94a3b8; margin-top:4px;">无需包含 .docx 后缀</div>
+                <div class="modal-body">
+                    <label for="renameNewName" class="form-label">新名称</label>
+                    <input type="text" id="renameNewName" class="form-control" required>
+                    <div class="form-text">无需包含 .docx 后缀</div>
                 </div>
-                <div style="text-align:right; display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
-                    <button type="button" onclick="document.getElementById('renameTemplateModal').style.display='none'" class="magnify-btn" style="position:static; width:80px; background:#f1f5f9;">取消</button>
-                    <button type="submit" class="btn-start">确定</button>
+                <div class="modal-footer upload-modal-footer">
+                    <button type="button" data-bs-dismiss="modal" class="btn btn-secondary">取消</button>
+                    <button type="submit" class="btn btn-primary">保存名称</button>
                 </div>
             </form>
+            </div>
         </div>
     </div>
 
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/vendor/bootstrap.bundle.min.js"></script>
     <script>
         function escapeHtml(s) {
             const div = document.createElement('div');
@@ -2471,8 +2438,22 @@
             });
 
             groups.forEach(g => container.appendChild(buildCfgGroupCard(g)));
+            refreshConfigTooltips();
             applyCfgDependents();
             updateSaveBtnState();
+        }
+
+        // 配置表单会重复加载，先释放旧实例再初始化，避免 tooltip 节点和事件堆积。
+        function refreshConfigTooltips() {
+            if (!window.bootstrap || !bootstrap.Tooltip) return;
+            document.querySelectorAll('#configForm [data-bs-toggle="tooltip"]').forEach(el => {
+                const existing = bootstrap.Tooltip.getInstance(el);
+                if (existing) existing.dispose();
+                new bootstrap.Tooltip(el, {
+                    container: 'body',
+                    trigger: 'hover focus'
+                });
+            });
         }
 
         function buildCfgGroupCard(group) {
@@ -2515,18 +2496,51 @@
             wrap.dataset.key = item.key;
             if (item.depends_on) wrap.dataset.dependsOn = item.depends_on;
 
+            const itemHead = document.createElement('div');
+            itemHead.className = 'cfg-item-head';
+            const titleStack = document.createElement('div');
+            titleStack.className = 'cfg-title-stack';
             const labelRow = document.createElement('div');
             labelRow.className = 'cfg-label-row';
             const label = document.createElement('label');
             label.className = 'cfg-label';
             label.textContent = item.label || item.key;
             labelRow.appendChild(label);
+            titleStack.appendChild(labelRow);
+
+            const keyEl = document.createElement('div');
+            keyEl.className = 'cfg-key';
+            keyEl.textContent = item.key;
+            titleStack.appendChild(keyEl);
+
+            const noteParts = [];
+            const descText = String(item.desc || '').trim();
+            const labelText = String(item.label || '').trim();
+            if (descText && descText !== labelText) noteParts.push(descText);
+            if (item.hint) noteParts.push('填写提示：' + String(item.hint).trim());
+            if (item.preview) noteParts.push('留空时将使用：' + String(item.preview).trim() + '（按当前访问地址推导）');
+            const noteText = noteParts.join('\n') || labelText || item.key;
+
+            const itemMeta = document.createElement('div');
+            itemMeta.className = 'cfg-item-meta';
             if (item.restart_required) {
                 const badge = document.createElement('span');
                 badge.className = 'cfg-badge';
                 badge.textContent = '需重启生效';
-                labelRow.appendChild(badge);
+                itemMeta.appendChild(badge);
             }
+            const noteBtn = document.createElement('button');
+            noteBtn.type = 'button';
+            noteBtn.className = 'cfg-note-btn';
+            noteBtn.setAttribute('aria-label', '查看中文备注');
+            noteBtn.setAttribute('data-bs-toggle', 'tooltip');
+            noteBtn.setAttribute('data-bs-placement', 'top');
+            noteBtn.setAttribute('data-bs-custom-class', 'cfg-note-tooltip');
+            noteBtn.setAttribute('data-bs-title', noteText);
+            noteBtn.textContent = '?';
+            itemMeta.appendChild(noteBtn);
+            itemHead.appendChild(titleStack);
+            itemHead.appendChild(itemMeta);
 
             const controlRow = document.createElement('div');
             controlRow.className = 'cfg-control-row';
@@ -2673,34 +2687,11 @@
             control.dataset.key = item.key;
             control.dataset.type = item.type;
 
-            const keyEl = document.createElement('div');
-            keyEl.className = 'cfg-key';
-            keyEl.textContent = item.key;
             const errorEl = document.createElement('div');
             errorEl.className = 'cfg-error';
 
-            wrap.appendChild(labelRow);
-            // desc 说明文案：与 label 相同时不渲染，避免冗余
-            if (item.desc && item.desc.trim() !== (item.label || '').trim()) {
-                const descEl = document.createElement('div');
-                descEl.className = 'cfg-desc';
-                descEl.textContent = item.desc;
-                wrap.appendChild(descEl);
-            }
+            wrap.appendChild(itemHead);
             wrap.appendChild(controlRow);
-            if (item.hint) {
-                const hint = document.createElement('div');
-                hint.className = 'cfg-hint';
-                hint.textContent = item.hint;
-                wrap.appendChild(hint);
-            }
-            if (item.preview) {
-                const preview = document.createElement('div');
-                preview.className = 'cfg-preview';
-                preview.textContent = '留空时将使用：' + item.preview + '（按当前访问地址推导）';
-                wrap.appendChild(preview);
-            }
-            wrap.appendChild(keyEl);
             wrap.appendChild(errorEl);
             return wrap;
         }
@@ -2847,7 +2838,10 @@
             document.querySelectorAll('#configForm .cfg-item').forEach(wrap => {
                 const item = getCfgItemByKey(wrap.dataset.key);
                 if (!item) return;
-                const text = ((item.label || '') + ' ' + (item.desc || '') + ' ' + item.key).toLowerCase();
+                const text = [item.label, item.key, item.desc, item.hint, item.preview]
+                    .filter(value => value !== null && value !== undefined)
+                    .join(' ')
+                    .toLowerCase();
                 wrap.style.display = (!q || text.includes(q)) ? '' : 'none';
             });
             // 无匹配项的分组卡片整体隐藏；搜索时自动展开含匹配项的分组
@@ -4155,7 +4149,7 @@
                 nameHint.style.display = "none";
             }
             
-            modal.style.display = "flex";
+            bootstrap.Modal.getOrCreateInstance(modal).show();
         }
 
         function bindUploadModalInputs() {
@@ -4184,7 +4178,7 @@
              let showName = name;
              if (showName.toLowerCase().endsWith('.docx')) showName = showName.substring(0, showName.length - 5);
              document.getElementById("renameNewName").value = showName;
-             modal.style.display = "flex";
+             bootstrap.Modal.getOrCreateInstance(modal).show();
         }
         
         function submitRenameTemplate() {
@@ -4198,7 +4192,7 @@
                 body: JSON.stringify({ old_name: oldName, new_name: newName })
             }).then(r => r.json()).then(res => {
                 if (res.status === "ok") {
-                    document.getElementById("renameTemplateModal").style.display = "none";
+                    bootstrap.Modal.getOrCreateInstance(document.getElementById("renameTemplateModal")).hide();
                     loadTemplates();
                 } else {
                     alert("重命名失败: " + res.message);
@@ -4207,7 +4201,7 @@
         }
 
         function closeUploadModal() {
-            document.getElementById("uploadTemplateModal").style.display = "none";
+            bootstrap.Modal.getOrCreateInstance(document.getElementById("uploadTemplateModal")).hide();
         }
 
         function submitUploadTemplate() {

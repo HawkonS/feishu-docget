@@ -240,6 +240,42 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertNotIn('/api/admin/users/bind-system-admin', html)
         self.assertIn('no-store', response.headers.get('Cache-Control', ''))
 
+    def test_admin_modals_use_bootstrap_structure_and_lifecycle(self):
+        with self.client.session_transaction() as session:
+            session['is_admin'] = True
+            session['user'] = {'open_id': SYSTEM_ADMIN_OPEN_ID, 'name': SYSTEM_ADMIN_NAME}
+
+        html = self.client.get('/admin').get_data(as_text=True)
+
+        self.assertIn('id="uploadTemplateModal" class="modal fade admin-modal"', html)
+        self.assertIn('id="renameTemplateModal" class="modal fade admin-modal"', html)
+        self.assertIn('modal-dialog-centered modal-dialog-scrollable', html)
+        self.assertGreaterEqual(html.count('data-bs-dismiss="modal"'), 4)
+        self.assertIn('/static/vendor/bootstrap.min.css', html)
+        self.assertIn('/static/vendor/bootstrap.bundle.min.js', html)
+        self.assertIn('bootstrap.Modal.getOrCreateInstance', html)
+        self.assertNotIn('modal.style.display = "flex"', html)
+
+    def test_config_cards_use_consistent_title_stack_and_tooltip_notes(self):
+        with self.client.session_transaction() as session:
+            session['is_admin'] = True
+            session['user'] = {'open_id': SYSTEM_ADMIN_OPEN_ID, 'name': SYSTEM_ADMIN_NAME}
+
+        html = self.client.get('/admin').get_data(as_text=True)
+
+        self.assertIn('className = \'cfg-item-head\'', html)
+        self.assertIn('className = \'cfg-title-stack\'', html)
+        self.assertIn('data-bs-toggle', html)
+        self.assertIn('data-bs-custom-class', html)
+        self.assertIn('function refreshConfigTooltips()', html)
+        self.assertIn("new bootstrap.Tooltip(el", html)
+        self.assertIn("[item.label, item.key, item.desc, item.hint, item.preview]", html)
+        self.assertIn('.cfg-item { min-height: 118px;', html)
+        self.assertIn('margin-top: 7px', html)
+        self.assertIn('height: 43px; min-height: 43px; flex: 0 0 43px;', html)
+        self.assertNotIn('margin-top: auto; margin-bottom: 4px', html)
+        self.assertNotIn("wrap.appendChild(descEl)", html)
+
     def test_admin_oauth_target_is_preserved_and_requires_admin_role(self):
         previous_login_enabled = config.get('login.enabled')
         config['login.enabled'] = 'true'
