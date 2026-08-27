@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 
 
 DATABASE_FILENAME = 'feishu_docget.sqlite3'
-SCHEMA_VERSION = '1'
+SCHEMA_VERSION = '2'
 _schema_lock = threading.RLock()
 _initialized_paths = set()
 
@@ -77,6 +77,7 @@ def initialize_database(base_dir, config, db_path=None):
                 avatar TEXT NOT NULL DEFAULT '',
                 disabled INTEGER NOT NULL DEFAULT 0,
                 is_admin INTEGER NOT NULL DEFAULT 0,
+                system_admin_bound INTEGER NOT NULL DEFAULT 0,
                 access_token TEXT NOT NULL DEFAULT '',
                 refresh_token TEXT NOT NULL DEFAULT '',
                 token_expire_at INTEGER NOT NULL DEFAULT 0,
@@ -112,6 +113,20 @@ def initialize_database(base_dir, config, db_path=None):
             CREATE INDEX IF NOT EXISTS idx_stats_user ON download_stats(user COLLATE NOCASE);
             CREATE INDEX IF NOT EXISTS idx_stats_ip ON download_stats(ip COLLATE NOCASE);
                 """
+            )
+            # v2: a Feishu identity can be bound to the built-in administrator.
+            # CREATE TABLE IF NOT EXISTS does not add columns to an existing DB,
+            # so upgrade old installations explicitly before creating the index.
+            user_columns = {
+                row['name'] for row in connection.execute('PRAGMA table_info(users)').fetchall()
+            }
+            if 'system_admin_bound' not in user_columns:
+                connection.execute(
+                    'ALTER TABLE users ADD COLUMN system_admin_bound INTEGER NOT NULL DEFAULT 0'
+                )
+            connection.execute(
+                'CREATE UNIQUE INDEX IF NOT EXISTS idx_users_single_system_admin_bound '
+                'ON users(system_admin_bound) WHERE system_admin_bound = 1'
             )
             _set_meta(connection, 'schema_version', SCHEMA_VERSION)
             connection.commit()
@@ -157,7 +172,7 @@ def _normalise_user(record, open_id=None):
             record[field] = int(record.get(field) or 0)
         except (TypeError, ValueError):
             record[field] = 0
-    for field in ('disabled', 'is_admin', 'token_invalid'):
+    for field in ('disabled', 'is_admin', 'system_admin_bound', 'token_invalid'):
         record[field] = 1 if record.get(field) else 0
     values = {'open_id': open_id}
     for field in (
@@ -165,7 +180,7 @@ def _normalise_user(record, open_id=None):
         'scope', 'created_at', 'last_login_at',
     ):
         values[field] = str(record.get(field) or '')
-    for field in integer_fields + ('disabled', 'is_admin', 'token_invalid'):
+    for field in integer_fields + ('disabled', 'is_admin', 'system_admin_bound', 'token_invalid'):
         values[field] = record[field]
     return values
 
@@ -192,11 +207,11 @@ def upsert_user(base_dir, config, record):
         connection.execute(
             """
             INSERT INTO users(
-                open_id, union_id, user_id, name, avatar, disabled, is_admin,
+                open_id, union_id, user_id, name, avatar, disabled, is_admin, system_admin_bound,
                 access_token, refresh_token, token_expire_at,
                 refresh_token_expire_at, scope, token_invalid, created_at, last_login_at
             ) VALUES(
-                :open_id, :union_id, :user_id, :name, :avatar, :disabled, :is_admin,
+                :open_id, :union_id, :user_id, :name, :avatar, :disabled, :is_admin, :system_admin_bound,
                 :access_token, :refresh_token, :token_expire_at,
                 :refresh_token_expire_at, :scope, :token_invalid, :created_at, :last_login_at
             )
@@ -207,6 +222,7 @@ def upsert_user(base_dir, config, record):
                 avatar=excluded.avatar,
                 disabled=excluded.disabled,
                 is_admin=excluded.is_admin,
+                system_admin_bound=excluded.system_admin_bound,
                 access_token=excluded.access_token,
                 refresh_token=excluded.refresh_token,
                 token_expire_at=excluded.token_expire_at,
@@ -229,14 +245,14 @@ def upsert_user(base_dir, config, record):
 
 def update_user_fields(base_dir, config, open_id, **fields):
     allowed = {
-        'disabled', 'is_admin', 'access_token', 'refresh_token', 'token_expire_at',
+        'disabled', 'is_admin', 'system_admin_bound', 'access_token', 'refresh_token', 'token_expire_at',
         'refresh_token_expire_at', 'scope', 'token_invalid', 'name', 'avatar',
         'last_login_at', 'union_id', 'user_id',
     }
     fields = {key: value for key, value in fields.items() if key in allowed}
     if not open_id or not fields:
         return False
-    for field in ('disabled', 'is_admin', 'token_invalid'):
+    for field in ('disabled', 'is_admin', 'system_admin_bound', 'token_invalid'):
         if field in fields:
             fields[field] = 1 if fields[field] else 0
     for field in ('token_expire_at', 'refresh_token_expire_at'):
@@ -262,6 +278,40 @@ def update_user_fields(base_dir, config, open_id, **fields):
         connection.close()
 
 
+def set_system_admin_binding(base_dir, config, open_id, bound):
+    """Bind at most one Feishu user to the built-in administrator account."""
+    open_id = str(open_id or '').strip()
+    if not open_id or open_id == '__system_admin__':
+        return False
+    initialize_database(base_dir, config)
+    connection = connect(base_dir, config)
+    try:
+        connection.execute('BEGIN IMMEDIATE')
+        target = connection.execute(
+            'SELECT disabled FROM users WHERE open_id=?', (open_id,)
+        ).fetchone()
+        if not target or (bound and target['disabled']):
+            connection.rollback()
+            return False
+        if bound:
+            # Moving the binding is atomic: there is never more than one bound user.
+            connection.execute(
+                'UPDATE users SET system_admin_bound=0 '
+                'WHERE system_admin_bound=1 AND open_id<>?', (open_id,)
+            )
+        cursor = connection.execute(
+            'UPDATE users SET system_admin_bound=? WHERE open_id=?',
+            (1 if bound else 0, open_id),
+        )
+        connection.commit()
+        return cursor.rowcount > 0
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
 def list_users(base_dir, config, page=None, page_size=None, query=''):
     initialize_database(base_dir, config)
     connection = connect(base_dir, config)
@@ -276,11 +326,12 @@ def list_users(base_dir, config, page=None, page_size=None, query=''):
         where_sql = (' WHERE ' + ' AND '.join(where)) if where else ''
         total = connection.execute(f'SELECT COUNT(*) AS count FROM users{where_sql}', params).fetchone()['count']
         page_items_sql = (
-            'SELECT open_id, union_id, user_id, name, avatar, disabled, is_admin, '
+            'SELECT open_id, union_id, user_id, name, avatar, disabled, is_admin, system_admin_bound, '
             'token_expire_at, refresh_token_expire_at, scope, token_invalid, created_at, last_login_at '
             f'FROM users{where_sql} '
             'ORDER BY CASE WHEN open_id = \'__system_admin__\' THEN 0 '
-            'WHEN is_admin = 1 THEN 1 ELSE 2 END, last_login_at DESC, open_id ASC'
+            'WHEN system_admin_bound = 1 THEN 1 WHEN is_admin = 1 THEN 2 ELSE 3 END, '
+            'last_login_at DESC, open_id ASC'
         )
         page_params = list(params)
         if page is None and page_size is None:
@@ -306,6 +357,7 @@ def list_users(base_dir, config, page=None, page_size=None, query=''):
         for row in rows:
             row['disabled'] = bool(row.get('disabled'))
             row['is_admin'] = bool(row.get('is_admin'))
+            row['system_admin_bound'] = bool(row.get('system_admin_bound'))
             row['token_invalid'] = bool(row.get('token_invalid'))
             if not row.get('created_at') and row.get('last_login_at'):
                 row['created_at'] = row['last_login_at']
@@ -637,17 +689,18 @@ def migrate_legacy_data(base_dir, config, db_path=None, backup=True, dry_run=Fal
             connection.execute(
                 """
                 INSERT INTO users(
-                    open_id, union_id, user_id, name, avatar, disabled, is_admin,
+                    open_id, union_id, user_id, name, avatar, disabled, is_admin, system_admin_bound,
                     access_token, refresh_token, token_expire_at,
                     refresh_token_expire_at, scope, token_invalid, created_at, last_login_at
                 ) VALUES(
-                    :open_id, :union_id, :user_id, :name, :avatar, :disabled, :is_admin,
+                    :open_id, :union_id, :user_id, :name, :avatar, :disabled, :is_admin, :system_admin_bound,
                     :access_token, :refresh_token, :token_expire_at,
                     :refresh_token_expire_at, :scope, :token_invalid, :created_at, :last_login_at
                 )
                 ON CONFLICT(open_id) DO UPDATE SET
                     union_id=excluded.union_id, user_id=excluded.user_id, name=excluded.name,
                     avatar=excluded.avatar, disabled=excluded.disabled, is_admin=excluded.is_admin,
+                    system_admin_bound=excluded.system_admin_bound,
                     access_token=excluded.access_token, refresh_token=excluded.refresh_token,
                     token_expire_at=excluded.token_expire_at,
                     refresh_token_expire_at=excluded.refresh_token_expire_at,
