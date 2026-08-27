@@ -4,8 +4,12 @@ import json
 import tempfile
 import unittest
 from unittest.mock import patch
+from flask import session
 
-from src.app import app, config, _resolve_template_path, _script_json, paginate_items
+from src.app import (
+    app, config, _resolve_template_path, _script_json, paginate_items,
+    _is_system_admin_session,
+)
 from src.core.stats import _mask_url
 from src.core.sqlite_store import migrate_legacy_data, list_download_stats, list_users
 from src.core.user_store import SYSTEM_ADMIN_NAME, SYSTEM_ADMIN_OPEN_ID
@@ -201,6 +205,96 @@ class SecurityRegressionTests(unittest.TestCase):
             self.assertNotIn('user-card-name" id="userCardName">管理员</span>', html)
         finally:
             config['login.enabled'] = previous_login_enabled
+
+    def test_admin_login_page_shows_feishu_entry_only_when_login_enabled(self):
+        previous_login_enabled = config.get('login.enabled')
+        try:
+            config['login.enabled'] = 'true'
+            enabled_html = self.client.get('/admin').get_data(as_text=True)
+            self.assertIn('/auth/feishu/authorize?next=admin', enabled_html)
+            self.assertNotIn('<div hidden>', enabled_html)
+
+            config['login.enabled'] = 'false'
+            disabled_html = self.client.get('/admin').get_data(as_text=True)
+            self.assertIn('<div hidden>', disabled_html)
+        finally:
+            config['login.enabled'] = previous_login_enabled
+
+    def test_admin_oauth_target_is_preserved_and_requires_admin_role(self):
+        previous_login_enabled = config.get('login.enabled')
+        config['login.enabled'] = 'true'
+        try:
+            with patch('src.app.feishu_oauth.build_authorize_url', return_value='https://example.com/auth'):
+                response = self.client.get('/auth/feishu/authorize?next=admin')
+            self.assertEqual(response.status_code, 302)
+            with self.client.session_transaction() as session:
+                self.assertEqual(session['oauth_target'], 'admin')
+                state = session['oauth_state']
+
+            tokens = {
+                'access_token': 'access', 'refresh_token': 'refresh', 'expires_in': 7200,
+                'refresh_token_expires_in': 3600, 'scope': 'docx:document',
+            }
+            info = {'open_id': 'ou_not_admin', 'name': '普通用户'}
+            with patch('src.app.feishu_oauth.exchange_code', return_value=tokens), \
+                    patch('src.app.feishu_oauth.get_oauth_user_info', return_value=info), \
+                    patch('src.app.user_store.get_user', return_value=None), \
+                    patch('src.app.user_store.upsert_user', return_value=True), \
+                    patch('src.app.user_store.is_admin', return_value=False):
+                response = self.client.get(f'/auth/feishu/callback?state={state}&code=test')
+            self.assertEqual(response.status_code, 302)
+            self.assertTrue(response.location.endswith('/admin?error=not_admin'))
+            with self.client.session_transaction() as session:
+                self.assertEqual(session['user']['name'], '普通用户')
+
+        finally:
+            config['login.enabled'] = previous_login_enabled
+
+    def test_bound_feishu_user_gets_system_admin_rights_and_keeps_name(self):
+        previous_login_enabled = config.get('login.enabled')
+        config['login.enabled'] = 'true'
+        try:
+            with self.client.session_transaction() as session:
+                session['user'] = {'open_id': 'ou_bound_admin', 'name': '张三'}
+            with patch('src.app.user_store.is_system_admin_bound', return_value=True), \
+                    patch('src.app.user_store.is_admin', return_value=True), \
+                    patch('src.app.user_store.is_disabled', return_value=False), \
+                    patch('src.app.user_store.get_user', return_value={
+                        'open_id': 'ou_bound_admin', 'name': '张三', 'avatar': '',
+                        'disabled': False, 'system_admin_bound': True,
+                    }):
+                with app.test_request_context('/'):
+                    app.preprocess_request()
+                    session['user'] = {'open_id': 'ou_bound_admin', 'name': '张三'}
+                    self.assertTrue(_is_system_admin_session())
+                self.assertEqual(self.client.get('/api/config').status_code, 200)
+                html = self.client.get('/').get_data(as_text=True)
+            self.assertIn('user-card-name" id="userCardName">张三</span>', html)
+            self.assertNotIn('user-card-name" id="userCardName">管理员</span>', html)
+        finally:
+            config['login.enabled'] = previous_login_enabled
+
+    def test_system_admin_binding_is_unique_and_preserves_user_name(self):
+        from src.core import sqlite_store
+
+        with tempfile.TemporaryDirectory() as workspace:
+            migration_config = {'workspace.dir': workspace, 'log.dir': 'logs'}
+            for open_id, name in (('ou_first', '张三'), ('ou_second', '李四')):
+                sqlite_store.upsert_user(workspace, migration_config, {
+                    'open_id': open_id, 'name': name, 'disabled': False,
+                })
+
+            self.assertTrue(sqlite_store.set_system_admin_binding(
+                workspace, migration_config, 'ou_first', True,
+            ))
+            self.assertTrue(sqlite_store.set_system_admin_binding(
+                workspace, migration_config, 'ou_second', True,
+            ))
+            first = sqlite_store.get_user(workspace, migration_config, 'ou_first')
+            second = sqlite_store.get_user(workspace, migration_config, 'ou_second')
+            self.assertFalse(first['system_admin_bound'])
+            self.assertTrue(second['system_admin_bound'])
+            self.assertEqual(second['name'], '李四')
 
 
 if __name__ == '__main__':

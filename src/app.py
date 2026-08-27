@@ -215,7 +215,7 @@ def _login_enabled():
 def _is_admin_session():
     """当前会话是否具备后台管理员权限。
 
-    ``is_admin`` 是管理员密码登录标志；飞书用户管理员权限持久化在用户库中，
+    密码会话直接具备权限；飞书用户的管理员/最高权限持久化在用户库中，
     因此每次请求都重新读取，管理员被取消或禁用后立即失效。
     """
     if session.get('is_admin'):
@@ -224,13 +224,21 @@ def _is_admin_session():
     return user_store.is_admin(user.get('open_id', ''))
 
 
-def _is_system_admin_session():
-    """密码登录的系统管理员会话；飞书管理员不会命中该标志。"""
+def _is_builtin_admin_identity_session():
+    """当前身份是否为密码登录的内置管理员，而非飞书用户。"""
     if not session.get('is_admin'):
         return False
     user = session.get('user') or {}
-    # 兼容早期只写入 is_admin 的密码会话；若会话同时带有飞书用户身份，保留其真实姓名。
+    # 兼容早期只写入 is_admin 的密码会话。
     return not user or user_store.is_system_admin(user.get('open_id', ''))
+
+
+def _is_system_admin_session():
+    """是否拥有内置管理员的最高权限（密码身份或与其绑定的飞书用户）。"""
+    if _is_builtin_admin_identity_session():
+        return True
+    user = session.get('user') or {}
+    return user_store.is_system_admin_bound(user.get('open_id', ''))
 
 
 def _get_redirect_uri():
@@ -895,7 +903,7 @@ def index():
     # 登录状态标志：管理员和普通飞书用户都需要显示首页右上角用户卡片。
     # 密码管理员 session 不带 user/open_id，不能只依赖普通用户的登录标志判断。
     is_admin = _is_admin_session()
-    is_system_admin = _is_system_admin_session()
+    is_builtin_admin = _is_builtin_admin_identity_session()
     user_logged_in = 'true' if is_admin else 'false'
     if _login_enabled() and (session.get('user') or {}).get('open_id'):
         user_logged_in = 'true'
@@ -903,7 +911,7 @@ def index():
     html = html.replace('[/* user_is_admin */]', 'true' if is_admin else 'false')
     # 登录用户 open_id：用户名缺失时前端作为兜底展示文案；同样转义防注入
     user_open_id = ''
-    if _login_enabled() and not is_system_admin:
+    if _login_enabled() and not is_builtin_admin:
         user_open_id = (session.get('user') or {}).get('open_id', '') or ''
     html = html.replace('[/* user_open_id */]', escape(user_open_id))
     # 登录用户头像 URL：从 user_store 读取（会话中不含头像）；未登录/无头像时注入空串，前端回退首字母样式
@@ -914,8 +922,8 @@ def index():
             user_avatar = record.get('avatar', '') or ''
     html = html.replace('[/* user_avatar */]', escape(user_avatar))
     # 登录用户名：仅作展示，HTML 转义防止注入；必须保持为最后一个替换，避免注入内容被二次替换
-    user_name = SYSTEM_ADMIN_NAME if is_system_admin else ''
-    if _login_enabled() and not is_system_admin:
+    user_name = SYSTEM_ADMIN_NAME if is_builtin_admin else ''
+    if _login_enabled() and not is_builtin_admin:
         user_name = (session.get('user') or {}).get('name', '') or ''
     html = html.replace('[/* user_name */]', escape(user_name))
     html = html.replace('[/* admin_url */]', escape(_safe_admin_path(admin_path), quote=True))
@@ -944,25 +952,28 @@ def auth_feishu_authorize():
         return redirect('/')
     state = secrets.token_urlsafe(16)
     session['oauth_state'] = state
+    session['oauth_target'] = 'admin' if request.args.get('next') == 'admin' else 'home'
     return redirect(feishu_oauth.build_authorize_url(config.get('feishu.app_id'), _get_redirect_uri(), state))
 
 @app.route(f'{OAUTH_CALLBACK_PATH}', methods=['GET'])
 def auth_feishu_callback():
+    oauth_target = session.pop('oauth_target', 'home')
+    error_target = _safe_admin_path(config.get('admin.path', '/admin')) if oauth_target == 'admin' else '/login'
     expected_state = session.pop('oauth_state', None)
     if not expected_state or not secrets.compare_digest(request.args.get('state') or '', expected_state):
-        return redirect('/login?error=state_invalid')
+        return redirect(f'{error_target}?error=state_invalid')
     if request.args.get('error') or not request.args.get('code'):
-        return redirect('/login?error=auth_denied')
+        return redirect(f'{error_target}?error=auth_denied')
     code = request.args.get('code')
     try:
         tokens = feishu_oauth.exchange_code(code, _get_redirect_uri())
         info = feishu_oauth.get_oauth_user_info(tokens['access_token'])
         open_id = info.get('open_id')
         if not open_id:
-            return redirect('/login?error=user_info')
+            return redirect(f'{error_target}?error=user_info')
         if user_store.is_system_admin(open_id):
             logger.warning('OAuth 返回了保留的系统管理员 open_id，拒绝登录')
-            return redirect('/login?error=user_info')
+            return redirect(f'{error_target}?error=user_info')
         profile = {
             'open_id': open_id,
             'union_id': info.get('union_id', ''),
@@ -978,17 +989,22 @@ def auth_feishu_callback():
         # 仅对“已存在且被禁用”的记录拦截；is_disabled 对不存在用户返回 True，首次登录不能在此拦截
         existing = user_store.get_user(open_id)
         if existing and existing.get('disabled'):
-            return redirect('/login?error=disabled')
+            return redirect(f'{error_target}?error=disabled')
         if not user_store.upsert_user(profile):
             logger.warning(f'用户信息落库失败 open_id={open_id}，不阻断本次登录')
         # OAuth 登录切换回飞书用户身份时，清除密码管理员标志。
         session.pop('is_admin', None)
         session['user'] = {'open_id': open_id, 'name': profile['name']}
         session.permanent = True
+        if oauth_target == 'admin':
+            admin_target = _safe_admin_path(config.get('admin.path', '/admin'))
+            if user_store.is_admin(open_id):
+                return redirect(admin_target)
+            return redirect(f'{admin_target}?error=not_admin')
         return redirect('/')
     except Exception as e:
         logger.error(f'飞书 OAuth 登录失败: {e}', exc_info=True)
-        return redirect('/login?error=oauth_failed')
+        return redirect(f'{error_target}?error=oauth_failed')
 
 admin_path = config.get('admin.path', '/admin')
 
@@ -1029,6 +1045,7 @@ def admin_page():
     copyright_text = escape(config.get('copyright.text', 'Hawkon 2025 -2026'))
     html = html.replace('Hawkon 2025 -2026', copyright_text)
     html = html.replace('Hawkon 2025', copyright_text)
+    html = html.replace('[/* feishu_login_hidden */]', '' if _login_enabled() else 'hidden')
     return _inject_csrf(html)
 
 @app.route('/api/admin/login', methods=['POST'])
@@ -1111,6 +1128,24 @@ def api_admin_users_set_admin():
     if user_store.is_system_admin(open_id) and not bool(data.get('is_admin')):
         return jsonify({'status': 'error', 'message': '系统管理员不能取消管理员权限'})
     if not user_store.set_admin(open_id, bool(data.get('is_admin'))):
+        return jsonify({'status': 'error', 'message': '保存失败，请检查服务器磁盘与权限'})
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/api/admin/users/bind-system-admin', methods=['POST'])
+@system_admin_required
+def api_admin_users_bind_system_admin():
+    data = request.get_json(silent=True) or {}
+    open_id = str(data.get('open_id') or '').strip()
+    bound = bool(data.get('bound'))
+    if not open_id:
+        return jsonify({'status': 'error', 'message': '缺少 open_id'})
+    record = user_store.get_user(open_id)
+    if not record or user_store.is_system_admin(open_id):
+        return jsonify({'status': 'error', 'message': '只能绑定飞书用户'})
+    if bound and record.get('disabled'):
+        return jsonify({'status': 'error', 'message': '请先启用该用户再绑定'})
+    if not user_store.set_system_admin_binding(open_id, bound):
         return jsonify({'status': 'error', 'message': '保存失败，请检查服务器磁盘与权限'})
     return jsonify({'status': 'ok'})
 
@@ -1454,10 +1489,10 @@ def api_admin_set_default_template():
 def api_start():
     client_ip = request.remote_addr or 'unknown'
     user = session.get('user') or {}
-    is_system_admin = _is_system_admin_session()
+    is_builtin_admin = _is_builtin_admin_identity_session()
     # 系统账号没有飞书 access_token，任务应继续使用系统机器人，但统计显示固定名称。
-    user_open_id = '' if is_system_admin else user.get('open_id', '')
-    user_name = SYSTEM_ADMIN_NAME if is_system_admin else user.get('name', '')  # 姓名快照，随任务链路传递
+    user_open_id = '' if is_builtin_admin else user.get('open_id', '')
+    user_name = SYSTEM_ADMIN_NAME if is_builtin_admin else user.get('name', '')  # 姓名快照，随任务链路传递
     if not _check_start_rate_limit(client_ip):
         return jsonify({'status': 'error', 'message': '提交过于频繁，请稍后再试'})
     data = request.get_json(silent=True) or {}

@@ -48,6 +48,36 @@
             font-size: 14px;
         }
         button.login-btn:hover { background: #2563eb; }
+        .login-divider {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 20px 0;
+            color: #94a3b8;
+            font-size: 12px;
+        }
+        .login-divider::before, .login-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: #e2e8f0;
+        }
+        .feishu-login-btn {
+            width: 100%;
+            padding: 10px;
+            background: #3370ff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .feishu-login-btn:hover { background: #2357d6; }
         .footer-copyright {
             position: fixed;
             bottom: 10px;
@@ -64,11 +94,34 @@
             <input type="password" id="adminPass" placeholder="请输入密码" onkeypress="if(event.key==='Enter') doLogin()" />
         </div>
         <button class="login-btn" onclick="doLogin()">登录</button>
+        <div [/* feishu_login_hidden */]>
+            <div class="login-divider">或</div>
+            <button class="feishu-login-btn" onclick="window.location.href='/auth/feishu/authorize?next=admin'">
+                <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <path d="M3 5.5c6.5 0 12 2.5 15.5 7-3.5 1.2-7 1.2-10.5 0C5.2 11.3 3.8 8.8 3 5.5z" fill="#ffffff"/>
+                    <path d="M21 9.5c-1.8 6-6.8 9.8-13.5 9.8 2.2-3.2 5-5.2 8.3-6.3 2-.7 3.8-1.9 5.2-3.5z" fill="#ffffff" opacity="0.85"/>
+                </svg>
+                使用飞书登录
+            </button>
+        </div>
         <div id="loginMsg" style="color:red; margin-top:10px; font-size:12px;"></div>
     </div>
     <div class="footer-copyright">© Hawkon 2025</div>
 
     <script>
+        const errorMessages = {
+            state_invalid: '登录状态校验失败，请重试',
+            auth_denied: '授权被拒绝或已取消',
+            disabled: '您的账号已被禁用，请联系管理员',
+            user_info: '获取用户信息失败，请重试',
+            oauth_failed: '飞书登录失败，请重试或联系管理员',
+            not_admin: '该飞书账号没有后台管理员权限'
+        };
+        const errorCode = new URLSearchParams(window.location.search).get('error');
+        if (errorCode && errorMessages[errorCode]) {
+            document.getElementById('loginMsg').innerText = errorMessages[errorCode];
+        }
+
         function doLogin() {
             const pwd = document.getElementById("adminPass").value;
             if (!pwd) return;

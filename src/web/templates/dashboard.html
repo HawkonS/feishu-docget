@@ -2844,7 +2844,7 @@
 
         function renderUsersTable(users) {
             let html = '<table class="project-table table table-hover align-middle mb-0">';
-            html += '<thead><tr><th>姓名</th><th>open_id</th><th style="width:150px">创建日期</th><th style="width:150px">最近登录</th><th style="width:120px">状态</th><th style="width:180px">操作</th></tr></thead><tbody>';
+            html += '<thead><tr><th>姓名</th><th>open_id</th><th style="width:150px">创建日期</th><th style="width:150px">最近登录</th><th style="width:120px">状态</th><th style="width:280px">操作</th></tr></thead><tbody>';
 
             if (users.length === 0) {
                 html += '<tr><td colspan="6" class="table-empty">暂无登录用户</td></tr>';
@@ -2858,20 +2858,29 @@
 
                     const statusTag = u.disabled
                         ? '<span class="status-pill danger">已禁用</span>'
-                        : (u.is_admin
+                        : (u.system_admin_bound
+                            ? '<span class="status-pill success">最高权限</span>'
+                            : u.is_admin
                             ? '<span class="status-pill success">管理员</span>'
                             : '<span class="status-pill success">正常</span>');
 
                     const toggleBtn = u.is_system
                         ? '<span class="status-pill success">系统账号</span>'
+                        : u.system_admin_bound
+                        ? '<span class="status-pill success">不可禁用</span>'
                         : (u.disabled
                             ? `<button onclick="toggleUserDisabled('${escapeHtml(escapeJsString(u.open_id))}', false)" class="btn btn-sm table-action">启用</button>`
                             : `<button onclick="toggleUserDisabled('${escapeHtml(escapeJsString(u.open_id))}', true)" class="btn btn-sm table-action danger">禁用</button>`);
-                    const adminBtn = u.is_system
+                    const adminBtn = u.is_system || u.system_admin_bound
                         ? '<span class="status-pill success">不可变更</span>'
                         : (u.is_admin
                             ? `<button onclick="toggleUserAdmin('${escapeHtml(escapeJsString(u.open_id))}', false)" class="btn btn-sm table-action">取消管理员</button>`
                             : `<button onclick="toggleUserAdmin('${escapeHtml(escapeJsString(u.open_id))}', true)" class="btn btn-sm table-action">设为管理员</button>`);
+                    const bindBtn = (!isSystemAdmin || u.is_system)
+                        ? ''
+                        : (u.system_admin_bound
+                            ? `<button onclick="toggleSystemAdminBinding('${escapeHtml(escapeJsString(u.open_id))}', false, '${escapeHtml(escapeJsString(name))}')" class="btn btn-sm table-action danger">解绑最高权限</button>`
+                            : `<button onclick="toggleSystemAdminBinding('${escapeHtml(escapeJsString(u.open_id))}', true, '${escapeHtml(escapeJsString(name))}')" class="btn btn-sm table-action" ${u.disabled ? 'disabled' : ''}>绑定最高权限</button>`);
 
                     html += `<tr>
                         <td><div class="user-cell">${avatar}<span class="user-name">${escapeHtml(name)}</span></div></td>
@@ -2879,7 +2888,7 @@
                         <td style="color:#64748b;">${escapeHtml(formatDateTime(u.created_at))}</td>
                         <td style="color:#64748b;">${escapeHtml(formatDateTime(u.last_login_at))}</td>
                         <td>${statusTag}</td>
-                        <td><div style="display:flex; gap:6px; flex-wrap:wrap;">${toggleBtn}${adminBtn}</div></td>
+                        <td><div style="display:flex; gap:6px; flex-wrap:wrap;">${toggleBtn}${adminBtn}${bindBtn}</div></td>
                     </tr>`;
                 }
             }
@@ -2908,6 +2917,26 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ open_id: openId, is_admin: isAdmin })
+            }).then(r => r.json()).then(res => {
+                if (res.status === 'ok') {
+                    loadUsers();
+                } else {
+                    alert(res.message || '操作失败');
+                }
+            }).catch(e => {
+                alert('请求错误: ' + e.message);
+            });
+        }
+
+        function toggleSystemAdminBinding(openId, bound, name) {
+            const prompt = bound
+                ? `确定将“${name}”绑定到内置管理员并授予最高权限吗？现有绑定会被替换。`
+                : `确定解除“${name}”的最高权限绑定吗？`;
+            if (!confirm(prompt)) return;
+            fetch('/api/admin/users/bind-system-admin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ open_id: openId, bound: bound })
             }).then(r => r.json()).then(res => {
                 if (res.status === 'ok') {
                     loadUsers();
