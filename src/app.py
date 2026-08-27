@@ -23,7 +23,7 @@ import zipfile
 import hmac
 from html import escape
 from urllib.parse import urlsplit
-from flask import Flask, jsonify, request, send_file, send_from_directory, session, redirect, url_for
+from flask import Flask, jsonify, request, send_file, send_from_directory, session, redirect, url_for, make_response
 from src.services.doc_service import process_document
 from src.core.bot_store import normalize_bot_config
 from src.core import user_store, feishu_oauth
@@ -215,7 +215,7 @@ def _login_enabled():
 def _is_admin_session():
     """当前会话是否具备后台管理员权限。
 
-    密码会话直接具备权限；飞书用户的管理员/最高权限持久化在用户库中，
+    密码会话直接具备权限；飞书用户的管理员角色持久化在用户库中，
     因此每次请求都重新读取，管理员被取消或禁用后立即失效。
     """
     if session.get('is_admin'):
@@ -234,11 +234,12 @@ def _is_builtin_admin_identity_session():
 
 
 def _is_system_admin_session():
-    """是否拥有内置管理员的最高权限（密码身份或与其绑定的飞书用户）。"""
+    """是否拥有系统管理员角色（密码身份或飞书账号）。"""
     if _is_builtin_admin_identity_session():
         return True
     user = session.get('user') or {}
-    return user_store.is_system_admin_bound(user.get('open_id', ''))
+    open_id = user.get('open_id', '')
+    return user_store.is_system_admin_role(open_id) and not user_store.is_disabled(open_id)
 
 
 def _get_redirect_uri():
@@ -335,7 +336,7 @@ def admin_required(f):
 
 
 def system_admin_required(f):
-    """仅允许密码登录的固定系统管理员访问系统级配置。"""
+    """仅允许系统管理员访问系统级配置。"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not _is_system_admin_session():
@@ -355,7 +356,7 @@ def system_admin_mutation_required(f):
 
 
 def non_system_admin_mutation_blocked(message):
-    """Return a response when a Feishu administrator attempts a system-only mutation."""
+    """Return a response when an operator administrator attempts a system-only mutation."""
     if _is_admin_session() and not _is_system_admin_session():
         return jsonify({'status': 'error', 'message': message}), 403
     return None
@@ -1039,14 +1040,18 @@ def admin_page():
         html = html.replace('[/* is_system_admin */]', 'true' if _is_system_admin_session() else 'false')
         html = html.replace('/* [style_css] */', TableStyleManager.get_frontend_css())
         html = _inject_csrf(html)
-        return html
+        response = make_response(html)
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+        return response
     with open(os.path.join(HTML_DIR, 'login.html'), 'r', encoding='utf-8') as f:
         html = f.read()
     copyright_text = escape(config.get('copyright.text', 'Hawkon 2025 -2026'))
     html = html.replace('Hawkon 2025 -2026', copyright_text)
     html = html.replace('Hawkon 2025', copyright_text)
     html = html.replace('[/* feishu_login_hidden */]', '' if _login_enabled() else 'hidden')
-    return _inject_csrf(html)
+    response = make_response(_inject_csrf(html))
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+    return response
 
 @app.route('/api/admin/login', methods=['POST'])
 def api_admin_login():
@@ -1109,9 +1114,39 @@ def api_admin_users_toggle():
         return jsonify({'status': 'error', 'message': '缺少 open_id'})
     if not user_store.get_user(open_id):
         return jsonify({'status': 'error', 'message': '用户不存在'})
-    if user_store.is_system_admin(open_id):
-        return jsonify({'status': 'error', 'message': '系统管理员不能被禁用'})
+    target_is_system = user_store.is_system_admin_role(open_id)
+    if not _is_system_admin_session() and target_is_system:
+        return jsonify({'status': 'error', 'message': '运营管理员不能管理系统管理员'}), 403
+    if target_is_system:
+        return jsonify({'status': 'error', 'message': '系统管理员不能被禁用'}), 400
     if not user_store.set_disabled(open_id, bool(data.get('disabled'))):
+        return jsonify({'status': 'error', 'message': '保存失败，请检查服务器磁盘与权限'})
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/api/admin/users/set-role', methods=['POST'])
+@admin_required
+def api_admin_users_set_role():
+    data = request.get_json(silent=True) or {}
+    open_id = str(data.get('open_id') or '').strip()
+    role = str(data.get('role') or '').strip()
+    if not open_id:
+        return jsonify({'status': 'error', 'message': '缺少 open_id'})
+    if role not in user_store.USER_ROLES:
+        return jsonify({'status': 'error', 'message': '无效的用户角色'}), 400
+    record = user_store.get_user(open_id)
+    if not record or user_store.is_system_admin(open_id):
+        return jsonify({'status': 'error', 'message': '只能设置飞书用户角色'}), 400
+
+    actor_is_system_admin = _is_system_admin_session()
+    target_is_system_admin = user_store.is_system_admin_role(open_id)
+    if target_is_system_admin and not actor_is_system_admin:
+        return jsonify({'status': 'error', 'message': '运营管理员不能管理系统管理员'}), 403
+    if role == user_store.SYSTEM_ADMIN_ROLE and not actor_is_system_admin:
+        return jsonify({'status': 'error', 'message': '仅系统管理员可设置系统管理员'}), 403
+    if role == user_store.SYSTEM_ADMIN_ROLE and record.get('disabled'):
+        return jsonify({'status': 'error', 'message': '请先启用该用户再设置为系统管理员'}), 400
+    if not user_store.set_role(open_id, role):
         return jsonify({'status': 'error', 'message': '保存失败，请检查服务器磁盘与权限'})
     return jsonify({'status': 'ok'})
 
@@ -1125,29 +1160,33 @@ def api_admin_users_set_admin():
         return jsonify({'status': 'error', 'message': '缺少 open_id'})
     if not user_store.get_user(open_id):
         return jsonify({'status': 'error', 'message': '用户不存在'})
-    if user_store.is_system_admin(open_id) and not bool(data.get('is_admin')):
-        return jsonify({'status': 'error', 'message': '系统管理员不能取消管理员权限'})
+    target_is_system = user_store.is_system_admin_role(open_id)
+    if target_is_system and not _is_system_admin_session():
+        return jsonify({'status': 'error', 'message': '运营管理员不能管理系统管理员'}), 403
+    if target_is_system:
+        return jsonify({'status': 'error', 'message': '请通过系统管理员角色操作系统管理员'}), 400
     if not user_store.set_admin(open_id, bool(data.get('is_admin'))):
         return jsonify({'status': 'error', 'message': '保存失败，请检查服务器磁盘与权限'})
     return jsonify({'status': 'ok'})
 
 
-@app.route('/api/admin/users/bind-system-admin', methods=['POST'])
+@app.route('/api/admin/users/set-system-admin', methods=['POST'])
 @system_admin_required
-def api_admin_users_bind_system_admin():
+def api_admin_users_set_system_admin():
     data = request.get_json(silent=True) or {}
     open_id = str(data.get('open_id') or '').strip()
-    bound = bool(data.get('bound'))
+    is_system_admin = bool(data.get('is_system_admin'))
     if not open_id:
         return jsonify({'status': 'error', 'message': '缺少 open_id'})
     record = user_store.get_user(open_id)
     if not record or user_store.is_system_admin(open_id):
-        return jsonify({'status': 'error', 'message': '只能绑定飞书用户'})
-    if bound and record.get('disabled'):
-        return jsonify({'status': 'error', 'message': '请先启用该用户再绑定'})
-    if not user_store.set_system_admin_binding(open_id, bound):
+        return jsonify({'status': 'error', 'message': '只能设置飞书用户角色'})
+    if is_system_admin and record.get('disabled'):
+        return jsonify({'status': 'error', 'message': '请先启用该用户再设置为系统管理员'})
+    if not user_store.set_system_admin(open_id, is_system_admin):
         return jsonify({'status': 'error', 'message': '保存失败，请检查服务器磁盘与权限'})
     return jsonify({'status': 'ok'})
+
 
 @app.route('/api/admin/projects', methods=['GET'])
 @admin_required
@@ -1948,7 +1987,7 @@ def api_admin_delete_log(filename):
         return jsonify({'status': 'error', 'message': '删除日志文件失败，请稍后重试'})
 
 @app.route('/api/admin/system', methods=['POST'])
-@admin_required
+@system_admin_required
 def api_admin_system():
     data = request.get_json(silent=True) or {}
     action = data.get('action')

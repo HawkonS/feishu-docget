@@ -15,7 +15,11 @@ _refresh_token_default_ttl = 30 * 24 * 3600  # 飞书未返回 refresh_token 有
 
 # 密码登录对应的固定系统账号。它不代表任何飞书用户，因此不会覆盖飞书用户的真实姓名。
 SYSTEM_ADMIN_OPEN_ID = '__system_admin__'
-SYSTEM_ADMIN_NAME = '管理员'
+SYSTEM_ADMIN_NAME = '系统管理员'
+USER_ROLE = 'user'
+OPERATOR_ADMIN_ROLE = 'operator_admin'
+SYSTEM_ADMIN_ROLE = 'system_admin'
+USER_ROLES = {USER_ROLE, OPERATOR_ADMIN_ROLE, SYSTEM_ADMIN_ROLE}
 
 
 def get_users_file():
@@ -49,16 +53,16 @@ def ensure_system_admin():
                 'open_id': SYSTEM_ADMIN_OPEN_ID,
                 'name': SYSTEM_ADMIN_NAME,
                 'disabled': False,
-                'is_admin': True,
-                'system_admin_bound': False,
+                'is_admin': False,
+                'is_system_admin': True,
                 'created_at': now,
                 'last_login_at': now,
             }
         else:
             record['name'] = SYSTEM_ADMIN_NAME
             record['disabled'] = False
-            record['is_admin'] = True
-            record['system_admin_bound'] = False
+            record['is_admin'] = False
+            record['is_system_admin'] = True
             record.setdefault('created_at', now)
         return sqlite_store.upsert_user(_base_dir(), config, record)
 
@@ -91,7 +95,7 @@ def upsert_user(profile):
                 'avatar': profile.get('avatar', ''),
                 'disabled': False,
                 'is_admin': False,
-                'system_admin_bound': False,
+                'is_system_admin': False,
                 'access_token': profile.get('access_token', ''),
                 'refresh_token': profile.get('refresh_token', ''),
                 'token_expire_at': profile.get('token_expire_at', 0),
@@ -124,6 +128,8 @@ def get_user(open_id):
         record = sqlite_store.get_user(_base_dir(), config, open_id)
     if record is not None:
         record['is_system'] = is_system_admin(record.get('open_id'))
+        record['is_system_admin'] = bool(record.get('is_system_admin')) or record['is_system']
+        record['is_operator_admin'] = bool(record.get('is_admin')) and not record['is_system_admin']
     return record
 
 
@@ -133,6 +139,8 @@ def list_users(page=None, page_size=None, query=''):
         result = sqlite_store.list_users(_base_dir(), config, page=page, page_size=page_size, query=query)
     for record in result['items']:
         record['is_system'] = is_system_admin(record.get('open_id'))
+        record['is_system_admin'] = bool(record.get('is_system_admin')) or record['is_system']
+        record['is_operator_admin'] = bool(record.get('is_admin')) and not record['is_system_admin']
     if page is None and page_size is None:
         return result['items']
     return result
@@ -144,39 +152,48 @@ def set_disabled(open_id, disabled):
         return False
     with _lock:
         record = sqlite_store.get_user(_base_dir(), config, open_id)
-        if disabled and record and record.get('system_admin_bound'):
+        if disabled and record and record.get('is_system_admin'):
             return False
         return sqlite_store.update_user_fields(_base_dir(), config, open_id, disabled=disabled)
 
 
 def set_admin(open_id, is_admin):
-    """设置用户的后台管理员权限；用户不存在或落盘失败时返回 False"""
+    """设置运营管理员权限；系统管理员不能被运营管理员降级。"""
     if is_system_admin(open_id):
         return bool(is_admin)
     with _lock:
         record = sqlite_store.get_user(_base_dir(), config, open_id)
-        if not is_admin and record and record.get('system_admin_bound'):
+        if record and record.get('is_system_admin'):
             return False
-        return sqlite_store.update_user_fields(_base_dir(), config, open_id, is_admin=is_admin)
+        return sqlite_store.set_user_role(
+            _base_dir(), config, open_id,
+            OPERATOR_ADMIN_ROLE if is_admin else USER_ROLE,
+        )
 
 
-def set_system_admin_binding(open_id, bound):
-    """将一个飞书用户绑定到内置管理员；任一时刻最多绑定一个用户。"""
-    if not open_id or is_system_admin(open_id):
+def set_role(open_id, role):
+    """设置用户角色；三个角色互斥，系统管理员权限包含运营管理员权限。"""
+    role = str(role or '').strip()
+    if not open_id or is_system_admin(open_id) or role not in USER_ROLES:
         return False
     with _lock:
-        return sqlite_store.set_system_admin_binding(_base_dir(), config, open_id, bool(bound))
+        return sqlite_store.set_user_role(_base_dir(), config, open_id, role)
 
 
-def is_system_admin_bound(open_id):
-    """返回飞书用户是否绑定了内置管理员且账号可用。"""
-    if not open_id or is_system_admin(open_id):
+def set_system_admin(open_id, system_admin):
+    """设置系统管理员角色；系统管理员数量不设上限。"""
+    return set_role(open_id, SYSTEM_ADMIN_ROLE if system_admin else USER_ROLE)
+
+
+def is_system_admin_role(open_id):
+    """返回用户是否拥有系统管理员角色（固定账号或飞书账号）。"""
+    if not open_id:
         return False
+    if is_system_admin(open_id):
+        return True
     with _lock:
         record = sqlite_store.get_user(_base_dir(), config, open_id)
-    return bool(
-        record and record.get('system_admin_bound', False) and not record.get('disabled', False)
-    )
+    return bool(record and record.get('is_system_admin', False))
 
 
 def is_admin(open_id):
@@ -187,7 +204,7 @@ def is_admin(open_id):
         record = sqlite_store.get_user(_base_dir(), config, open_id)
     return bool(
         record
-        and (record.get('is_admin', False) or record.get('system_admin_bound', False))
+        and (record.get('is_admin', False) or record.get('is_system_admin', False))
         and not record.get('disabled', False)
     )
 

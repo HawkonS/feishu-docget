@@ -1,11 +1,10 @@
 import os
 import stat
 import json
+import sqlite3
 import tempfile
 import unittest
 from unittest.mock import patch
-from flask import session
-
 from src.app import (
     app, config, _resolve_template_path, _script_json, paginate_items,
     _is_system_admin_session,
@@ -182,14 +181,16 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertTrue(user_store.ensure_system_admin())
         system = user_store.get_user(SYSTEM_ADMIN_OPEN_ID)
         self.assertEqual(system['name'], SYSTEM_ADMIN_NAME)
-        self.assertTrue(system['is_admin'])
+        self.assertFalse(system['is_admin'])
+        self.assertTrue(system['is_system_admin'])
         self.assertFalse(system['disabled'])
         self.assertTrue(system['is_system'])
         self.assertFalse(user_store.set_disabled(SYSTEM_ADMIN_OPEN_ID, True))
         self.assertFalse(user_store.set_admin(SYSTEM_ADMIN_OPEN_ID, False))
         system = user_store.get_user(SYSTEM_ADMIN_OPEN_ID)
         self.assertFalse(system['disabled'])
-        self.assertTrue(system['is_admin'])
+        self.assertFalse(system['is_admin'])
+        self.assertTrue(system['is_system_admin'])
 
     def test_feishu_admin_keeps_real_name_on_homepage(self):
         previous_login_enabled = config.get('login.enabled')
@@ -219,6 +220,25 @@ class SecurityRegressionTests(unittest.TestCase):
             self.assertIn('<div hidden>', disabled_html)
         finally:
             config['login.enabled'] = previous_login_enabled
+
+    def test_dashboard_uses_system_and_operator_role_labels_only(self):
+        with self.client.session_transaction() as session:
+            session['is_admin'] = True
+            session['user'] = {'open_id': SYSTEM_ADMIN_OPEN_ID, 'name': SYSTEM_ADMIN_NAME}
+        response = self.client.get('/admin')
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('系统管理员', html)
+        self.assertIn('运营管理员', html)
+        self.assertIn('普通用户', html)
+        self.assertIn('/api/admin/users/set-role', html)
+        self.assertIn('>角色</th>', html)
+        self.assertNotIn('toggleUserAdmin', html)
+        self.assertNotIn('toggleSystemAdmin', html)
+        self.assertNotIn('最高权限', html)
+        self.assertNotIn('绑定最高权限', html)
+        self.assertNotIn('/api/admin/users/bind-system-admin', html)
+        self.assertIn('no-store', response.headers.get('Cache-Control', ''))
 
     def test_admin_oauth_target_is_preserved_and_requires_admin_role(self):
         previous_login_enabled = config.get('login.enabled')
@@ -250,18 +270,18 @@ class SecurityRegressionTests(unittest.TestCase):
         finally:
             config['login.enabled'] = previous_login_enabled
 
-    def test_bound_feishu_user_gets_system_admin_rights_and_keeps_name(self):
+    def test_feishu_system_admin_gets_system_rights_and_keeps_name(self):
         previous_login_enabled = config.get('login.enabled')
         config['login.enabled'] = 'true'
         try:
             with self.client.session_transaction() as session:
                 session['user'] = {'open_id': 'ou_bound_admin', 'name': '张三'}
-            with patch('src.app.user_store.is_system_admin_bound', return_value=True), \
+            with patch('src.app.user_store.is_system_admin_role', return_value=True), \
                     patch('src.app.user_store.is_admin', return_value=True), \
                     patch('src.app.user_store.is_disabled', return_value=False), \
                     patch('src.app.user_store.get_user', return_value={
                         'open_id': 'ou_bound_admin', 'name': '张三', 'avatar': '',
-                        'disabled': False, 'system_admin_bound': True,
+                        'disabled': False, 'is_system_admin': True,
                     }):
                 with app.test_request_context('/'):
                     app.preprocess_request()
@@ -274,7 +294,7 @@ class SecurityRegressionTests(unittest.TestCase):
         finally:
             config['login.enabled'] = previous_login_enabled
 
-    def test_system_admin_binding_is_unique_and_preserves_user_name(self):
+    def test_system_admin_role_allows_multiple_users_and_preserves_user_name(self):
         from src.core import sqlite_store
 
         with tempfile.TemporaryDirectory() as workspace:
@@ -284,17 +304,156 @@ class SecurityRegressionTests(unittest.TestCase):
                     'open_id': open_id, 'name': name, 'disabled': False,
                 })
 
-            self.assertTrue(sqlite_store.set_system_admin_binding(
+            self.assertTrue(sqlite_store.set_system_admin(
                 workspace, migration_config, 'ou_first', True,
             ))
-            self.assertTrue(sqlite_store.set_system_admin_binding(
+            self.assertTrue(sqlite_store.set_system_admin(
                 workspace, migration_config, 'ou_second', True,
             ))
             first = sqlite_store.get_user(workspace, migration_config, 'ou_first')
             second = sqlite_store.get_user(workspace, migration_config, 'ou_second')
-            self.assertFalse(first['system_admin_bound'])
-            self.assertTrue(second['system_admin_bound'])
+            self.assertTrue(first['is_system_admin'])
+            self.assertTrue(second['is_system_admin'])
             self.assertEqual(second['name'], '李四')
+
+    def test_operator_admin_cannot_manage_system_admin(self):
+        with self.client.session_transaction() as session:
+            session['user'] = {'open_id': 'ou_operator', 'name': '运营'}
+            session['_csrf_token'] = 'operator-csrf'
+        with patch('src.app.user_store.is_admin', return_value=True), \
+                patch('src.app.user_store.is_system_admin_role', side_effect=lambda open_id: open_id == 'ou_system'), \
+                patch('src.app.user_store.get_user', return_value={'open_id': 'ou_system'}), \
+                patch('src.app.user_store.is_system_admin', return_value=False):
+            response = self.client.post(
+                '/api/admin/users/set-role',
+                json={'open_id': 'ou_system', 'role': 'operator_admin'},
+                headers={'X-CSRF-Token': 'operator-csrf'},
+            )
+        self.assertEqual(response.status_code, 403)
+        self.assertIn('运营管理员不能管理系统管理员', response.get_json()['message'])
+
+    def test_operator_admin_cannot_grant_system_admin_role(self):
+        with self.client.session_transaction() as session:
+            session['user'] = {'open_id': 'ou_operator', 'name': '运营'}
+            session['_csrf_token'] = 'operator-csrf'
+        with patch('src.app.user_store.is_admin', return_value=True), \
+                patch('src.app.user_store.is_system_admin_role', return_value=False), \
+                patch('src.app.user_store.get_user', return_value={
+                    'open_id': 'ou_user', 'disabled': False,
+                }), \
+                patch('src.app.user_store.is_system_admin', return_value=False):
+            response = self.client.post(
+                '/api/admin/users/set-role',
+                json={'open_id': 'ou_user', 'role': 'system_admin'},
+                headers={'X-CSRF-Token': 'operator-csrf'},
+            )
+        self.assertEqual(response.status_code, 403)
+        self.assertIn('仅系统管理员可设置系统管理员', response.get_json()['message'])
+
+    def test_operator_admin_cannot_access_system_controls(self):
+        with self.client.session_transaction() as session:
+            session['user'] = {'open_id': 'ou_operator', 'name': '运营'}
+            session['_csrf_token'] = 'operator-csrf'
+        with patch('src.app.user_store.is_admin', return_value=True), \
+                patch('src.app.user_store.is_system_admin_role', return_value=False):
+            response = self.client.post(
+                '/api/admin/system',
+                json={'action': 'status'},
+                headers={'X-CSRF-Token': 'operator-csrf'},
+            )
+        self.assertEqual(response.status_code, 403)
+
+    def test_system_admin_role_allows_multiple_users(self):
+        from src.core import sqlite_store
+
+        with tempfile.TemporaryDirectory() as workspace:
+            migration_config = {'workspace.dir': workspace, 'log.dir': 'logs'}
+            for open_id in ('ou_system_one', 'ou_system_two'):
+                sqlite_store.upsert_user(workspace, migration_config, {
+                    'open_id': open_id, 'name': open_id, 'disabled': False,
+                })
+            self.assertTrue(sqlite_store.set_system_admin(
+                workspace, migration_config, 'ou_system_one', True,
+            ))
+            self.assertTrue(sqlite_store.set_system_admin(
+                workspace, migration_config, 'ou_system_two', True,
+            ))
+            self.assertTrue(sqlite_store.get_user(
+                workspace, migration_config, 'ou_system_one',
+            )['is_system_admin'])
+            self.assertTrue(sqlite_store.get_user(
+                workspace, migration_config, 'ou_system_two',
+            )['is_system_admin'])
+            self.assertFalse(sqlite_store.get_user(
+                workspace, migration_config, 'ou_system_one',
+            )['is_admin'])
+
+    def test_system_admin_inherits_operator_admin_permissions(self):
+        from src.core import user_store
+
+        previous_workspace = config.get('workspace.dir')
+        previous_log_dir = config.get('log.dir')
+        with tempfile.TemporaryDirectory() as workspace:
+            try:
+                config['workspace.dir'] = workspace
+                config['log.dir'] = 'logs'
+                self.assertTrue(user_store.upsert_user({
+                    'open_id': 'ou_inherited', 'name': '继承权限用户',
+                }))
+                self.assertTrue(user_store.set_role(
+                    'ou_inherited', user_store.SYSTEM_ADMIN_ROLE,
+                ))
+                self.assertTrue(user_store.is_system_admin_role('ou_inherited'))
+                self.assertTrue(user_store.is_admin('ou_inherited'))
+            finally:
+                config['workspace.dir'] = previous_workspace
+                config['log.dir'] = previous_log_dir
+
+    def test_old_single_binding_schema_migrates_to_multi_system_admin_roles(self):
+        from src.core import sqlite_store
+
+        with tempfile.TemporaryDirectory() as workspace:
+            log_dir = os.path.join(workspace, 'logs')
+            os.makedirs(log_dir)
+            db_path = os.path.join(log_dir, sqlite_store.DATABASE_FILENAME)
+            connection = sqlite3.connect(db_path)
+            connection.executescript(
+                """
+                CREATE TABLE users (
+                    open_id TEXT PRIMARY KEY,
+                    union_id TEXT NOT NULL DEFAULT '', user_id TEXT NOT NULL DEFAULT '',
+                    name TEXT NOT NULL DEFAULT '', avatar TEXT NOT NULL DEFAULT '',
+                    disabled INTEGER NOT NULL DEFAULT 0, is_admin INTEGER NOT NULL DEFAULT 0,
+                    system_admin_bound INTEGER NOT NULL DEFAULT 0,
+                    access_token TEXT NOT NULL DEFAULT '', refresh_token TEXT NOT NULL DEFAULT '',
+                    token_expire_at INTEGER NOT NULL DEFAULT 0,
+                    refresh_token_expire_at INTEGER NOT NULL DEFAULT 0,
+                    scope TEXT NOT NULL DEFAULT '', token_invalid INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL DEFAULT '', last_login_at TEXT NOT NULL DEFAULT ''
+                );
+                CREATE UNIQUE INDEX idx_users_single_system_admin_bound
+                    ON users(system_admin_bound) WHERE system_admin_bound = 1;
+                INSERT INTO users(open_id, name, system_admin_bound)
+                    VALUES('ou_old_system', '旧系统管理员', 1);
+                INSERT INTO users(open_id, name) VALUES('ou_new_system', '新系统管理员');
+                """
+            )
+            connection.commit()
+            connection.close()
+
+            migration_config = {'workspace.dir': workspace, 'log.dir': 'logs'}
+            sqlite_store.initialize_database(workspace, migration_config)
+            old_system = sqlite_store.get_user(
+                workspace, migration_config, 'ou_old_system',
+            )
+            self.assertTrue(old_system['is_system_admin'])
+            self.assertEqual(old_system['system_admin_bound'], 0)
+            self.assertTrue(sqlite_store.set_system_admin(
+                workspace, migration_config, 'ou_new_system', True,
+            ))
+            self.assertTrue(sqlite_store.get_user(
+                workspace, migration_config, 'ou_new_system',
+            )['is_system_admin'])
 
 
 if __name__ == '__main__':
