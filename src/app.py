@@ -21,6 +21,7 @@ import secrets
 import tempfile
 import zipfile
 import hmac
+import stat
 from html import escape
 from urllib.parse import urlsplit
 from flask import Flask, jsonify, request, send_file, send_from_directory, session, redirect, url_for, make_response
@@ -568,10 +569,12 @@ def check_cleanup_output():
             path = os.path.join(output_dir, name)
             if os.path.isdir(path):
                 size = 0
-                for dirpath, dirnames, filenames in os.walk(path):
+                for dirpath, dirnames, filenames in os.walk(path, topdown=True, followlinks=False):
+                    dirnames[:] = [dirname for dirname in dirnames
+                                   if not _is_project_link(os.path.join(dirpath, dirname))]
                     for f in filenames:
                         fp = os.path.join(dirpath, f)
-                        if not os.path.islink(fp):
+                        if not _is_project_link(fp):
                             size += os.path.getsize(fp)
                 items.append({'path': path, 'size': size, 'ctime': os.path.getctime(path)})
                 total_size += size
@@ -583,6 +586,7 @@ def check_cleanup_output():
                     break
                 try:
                     shutil.rmtree(item['path'])
+                    _cleanup_broken_project_links(output_dir)
                     total_size -= item['size']
                     logger.info(f"已清理: {item['path']}")
                 except Exception as e:
@@ -675,10 +679,12 @@ def list_projects(include_files=True):
                 try:
                     ctime = os.path.getctime(path)
                     size = 0
-                    for root, _, filenames in os.walk(path):
+                    for root, dirnames, filenames in os.walk(path, topdown=True, followlinks=False):
+                        dirnames[:] = [dirname for dirname in dirnames
+                                       if not _is_project_link(os.path.join(root, dirname))]
                         for f in filenames:
                             fp = os.path.join(root, f)
-                            if not os.path.islink(fp):
+                            if not _is_project_link(fp):
                                 size += os.path.getsize(fp)
                 except Exception:
                     ctime = 0
@@ -689,19 +695,70 @@ def list_projects(include_files=True):
     return sorted(items, key=lambda x: x.get('ctime_ts', 0), reverse=True)
 
 
+def _is_project_link(path):
+    """同时识别 Unix 软链接和 Windows 目录联接（Junction）。"""
+    if os.path.islink(path):
+        return True
+    is_junction = getattr(os.path, 'isjunction', None)
+    if is_junction and is_junction(path):
+        return True
+    if os.name == 'nt':
+        try:
+            attributes = getattr(os.lstat(path), 'st_file_attributes', 0)
+            return bool(attributes & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0))
+        except OSError:
+            pass
+    return False
+
+
+def _cleanup_broken_project_links(output_dir):
+    """删除项目目录中因共享资源项目被移除而悬空的软链接。"""
+    removed = []
+    if not output_dir or not os.path.isdir(output_dir):
+        return removed
+    for root, dirnames, filenames in os.walk(output_dir, topdown=True, followlinks=False):
+        for name in list(dirnames) + filenames:
+            link_path = os.path.join(root, name)
+            if not _is_project_link(link_path) or os.path.exists(link_path):
+                continue
+            try:
+                try:
+                    os.unlink(link_path)
+                except (IsADirectoryError, PermissionError):
+                    # Windows Junction 需要按目录入口删除，不能使用 unlink。
+                    os.rmdir(link_path)
+                removed.append(link_path)
+            except OSError as e:
+                logger.warning(f'清理悬空项目链接失败: {link_path}: {e}')
+        # 防止旧版 Python 在 Windows 上继续进入 Junction。
+        dirnames[:] = [name for name in dirnames
+                       if not _is_project_link(os.path.join(root, name))]
+    if removed:
+        logger.info(f'已清理 {len(removed)} 个悬空项目链接')
+    return removed
+
+
 def list_project_files(path):
     """按需读取单个项目的文件树，避免项目列表接口返回全部文件明细。"""
     files = []
     if not path or not os.path.isdir(path):
         return files
-    for root, _, filenames in os.walk(path):
+    for root, dirnames, filenames in os.walk(path, topdown=True, followlinks=False):
+        # Unix 上 followlinks=False 已足够；显式过滤可同时兼容 Windows Junction。
+        dirnames[:] = [name for name in dirnames
+                       if not _is_project_link(os.path.join(root, name))]
         for fname in filenames:
             abs_path = os.path.join(root, fname)
+            # 指向已删除图片目录的悬空链接会被 os.walk 当成普通文件。
+            # 这类条目没有可读取的时间，旧逻辑会因此展示 Unix epoch（1970）。
+            if _is_project_link(abs_path):
+                continue
             rel_path = os.path.relpath(abs_path, path).replace('\\', '/')
             try:
                 fctime = os.path.getctime(abs_path)
-            except Exception:
-                fctime = 0
+            except OSError:
+                # 扫描期间文件可能被其他请求删除，不返回一个伪造的 1970 时间。
+                continue
             files.append({'name': fname, 'rel_path': rel_path, 'path': abs_path,
                           'ctime': datetime.fromtimestamp(fctime).isoformat(timespec='minutes'),
                           'is_md': fname.endswith('.md')})
@@ -750,15 +807,18 @@ def list_project_summaries(page=1, page_size=20, query=''):
     for ctime, name, path in selected:
         size = 0
         file_count = 0
-        for root, _, filenames in os.walk(path):
-            file_count += len(filenames)
+        for root, dirnames, filenames in os.walk(path, topdown=True, followlinks=False):
+            dirnames[:] = [dirname for dirname in dirnames
+                           if not _is_project_link(os.path.join(root, dirname))]
             for fname in filenames:
                 fp = os.path.join(root, fname)
-                if not os.path.islink(fp):
-                    try:
-                        size += os.path.getsize(fp)
-                    except OSError:
-                        pass
+                if _is_project_link(fp):
+                    continue
+                try:
+                    size += os.path.getsize(fp)
+                    file_count += 1
+                except OSError:
+                    pass
         items.append({'name': name, 'path': path,
                       'ctime': datetime.fromtimestamp(ctime).isoformat(timespec='minutes'),
                       'ctime_ts': ctime, 'size': size, 'file_count': file_count, 'files': []})
@@ -1227,9 +1287,13 @@ def api_admin_download_project():
         fd, tmp_zip = tempfile.mkstemp(suffix='.zip')
         os.close(fd)
         with zipfile.ZipFile(tmp_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for root, dirs, files in os.walk(path):
+            for root, dirs, files in os.walk(path, topdown=True, followlinks=False):
+                dirs[:] = [dirname for dirname in dirs
+                           if not _is_project_link(os.path.join(root, dirname))]
                 for file in files:
                     abs_path = os.path.join(root, file)
+                    if _is_project_link(abs_path):
+                        continue
                     rel_path = os.path.relpath(abs_path, path)
                     zipf.write(abs_path, rel_path)
         _cleanup_temp(tmp_zip)
@@ -1254,6 +1318,7 @@ def api_admin_delete_project():
         return jsonify({'status': 'error', 'message': '无效路径'})
     try:
         shutil.rmtree(real_path)
+        _cleanup_broken_project_links(real_output)
         return jsonify({'status': 'ok'})
     except Exception as e:
         logger.error(f'删除项目失败: {e}', exc_info=True)
@@ -1276,9 +1341,13 @@ def api_admin_download_folder():
         fd, tmp_zip = tempfile.mkstemp(suffix='.zip')
         os.close(fd)
         with zipfile.ZipFile(tmp_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for root, dirs, files in os.walk(path):
+            for root, dirs, files in os.walk(path, topdown=True, followlinks=False):
+                dirs[:] = [dirname for dirname in dirs
+                           if not _is_project_link(os.path.join(root, dirname))]
                 for file in files:
                     abs_path = os.path.join(root, file)
+                    if _is_project_link(abs_path):
+                        continue
                     rel_path = os.path.relpath(abs_path, path)
                     zipf.write(abs_path, rel_path)
         _cleanup_temp(tmp_zip)
