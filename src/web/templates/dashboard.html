@@ -2224,7 +2224,7 @@
             <div class="modal-header">
                 <div class="advanced-title">
                     <h5 id="renameModalTitle" class="modal-title">重命名模板</h5>
-                    <p class="modal-subtitle">更新模板显示名称，文件格式会自动保留</p>
+                    <p id="renameModalSubtitle" class="modal-subtitle">更新模板显示名称，文件格式会自动保留</p>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
             </div>
@@ -2233,7 +2233,7 @@
                 <div class="modal-body">
                     <label for="renameNewName" class="form-label">新名称</label>
                     <input type="text" id="renameNewName" class="form-control" required>
-                    <div class="form-text">无需包含 .docx 后缀</div>
+                    <div id="renameNameHint" class="form-text">无需包含 .docx 后缀</div>
                 </div>
                 <div class="modal-footer upload-modal-footer">
                     <button type="button" data-bs-dismiss="modal" class="btn btn-secondary">取消</button>
@@ -2279,6 +2279,7 @@
         }
 
         const isSystemAdmin = '[/* is_system_admin */]' === 'true';
+        const fixedStorageTemplate = [/* storage_template_json */];
         let adminData = null;
         let selectedTemplate = "";
         let selectedStyle = "1";
@@ -3492,24 +3493,34 @@
         function prevTemplatesPage() { if (templatesPage > 1) { templatesPage--; loadTemplates(); } }
         function nextTemplatesPage() { if (templatesPage < templatesTotalPages) { templatesPage++; loadTemplates(); } }
 
+        function moveTemplate(name, direction) {
+            fetch('/api/admin/reorder_templates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name, direction: direction })
+            }).then(r => r.json()).then(res => {
+                if (res.status === 'ok') {
+                    loadTemplates();
+                } else {
+                    alert('调整顺序失败: ' + (res.message || '未知错误'));
+                }
+            }).catch(e => alert('请求错误: ' + e.message));
+        }
+
     function renderTemplates(list) {
             const select = document.getElementById("templateSelect");
             if (!select) return; // 容错处理
             select.innerHTML = "";
             
             const defaultTemplate = [/* default_template_json */];
-            list.sort((a, b) => {
-                if (a.name === defaultTemplate) return -1;
-                if (b.name === defaultTemplate) return 1;
-                return a.name.localeCompare(b.name);
-            });
+            // 后端已按 template.order 排好序，保留该顺序。
             
             let defaultFound = false;
 
             list.forEach(t => {
                 const opt = document.createElement("option");
                 opt.value = t.name;
-                opt.innerText = t.name;
+                opt.innerText = t.display_name || t.name;
                 select.appendChild(opt);
                 
                 if (t.name === defaultTemplate) {
@@ -4004,7 +4015,7 @@
                 if (t.has_png) {
                     const img = document.createElement("img");
                     img.src = `/api/template_preview/${encodeURIComponent(t.name)}`;
-                    img.alt = `${t.name} 预览`;
+                    img.alt = `${t.display_name || t.name} 预览`;
                     imgContainer.appendChild(img);
                 } else {
                     imgContainer.innerHTML = `<div class="template-no-preview"><span class="template-no-preview-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-4.5-4.5L7 20"/></svg></span><span>暂无预览图</span></div>`;
@@ -4023,7 +4034,7 @@
 
                 const name = document.createElement("div");
                 name.className = "template-card-title";
-                name.innerText = t.name;
+                name.innerText = t.display_name || t.name;
                 info.appendChild(name);
 
                 const meta = document.createElement("div");
@@ -4047,12 +4058,14 @@
                     const editTrigger = document.createElement("button");
                     editTrigger.type = "button";
                     editTrigger.className = "template-icon-btn";
-                    editTrigger.setAttribute("aria-label", `编辑 ${t.name}`);
+                    editTrigger.setAttribute("aria-label", `编辑 ${t.display_name || t.name}`);
                     editTrigger.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/></svg>';
                     const dropdownContent = document.createElement("div");
                     dropdownContent.className = "dropdown-content template-menu";
                     [
-                        ['重命名', () => openRenameModal(t.name)],
+                        ['重命名', () => openRenameModal(t.name, t.name === fixedStorageTemplate ? t.display_name : '')],
+                        ['上移', () => moveTemplate(t.name, 'up')],
+                        ['下移', () => moveTemplate(t.name, 'down')],
                         ['更换文件', () => openUploadModal('file', t.name)],
                         ['更换图片', () => openUploadModal('image', t.name)],
                         ...(t.is_default ? [] : [['设为默认', () => setDefaultTemplate(t.name)]]),
@@ -4183,12 +4196,25 @@
             target.style.display = file ? "block" : "none";
         }
         
-        function openRenameModal(name) {
+        function openRenameModal(name, displayName) {
              const modal = document.getElementById("renameTemplateModal");
              document.getElementById("renameOldName").value = name;
-             // 去掉后缀显示给用户
-             let showName = name;
-             if (showName.toLowerCase().endsWith('.docx')) showName = showName.substring(0, showName.length - 5);
+             const isFixedStorage = name === fixedStorageTemplate;
+             const subtitle = document.getElementById("renameModalSubtitle");
+             const hint = document.getElementById("renameNameHint");
+             if (subtitle) subtitle.innerText = isFixedStorage
+                 ? "固定存储模板只更新前台显示名，不会移动真实文件"
+                 : "更新模板显示名称，文件格式会自动保留";
+             if (hint) hint.innerText = isFixedStorage
+                 ? "此名称只用于前台展示，不会改变真实模板文件"
+                 : "无需包含 .docx 后缀";
+             // 固定存储模板的名称是展示名，不再根据真实文件名回填，避免 Git 恢复
+             // Hawkon.docx 后用户刚设置的前台名称又被覆盖。
+             const hasCustomDisplayName = isFixedStorage && displayName && displayName !== name;
+             let showName = hasCustomDisplayName ? displayName : name;
+             if (!hasCustomDisplayName && showName.toLowerCase().endsWith('.docx')) {
+                 showName = showName.substring(0, showName.length - 5);
+             }
              document.getElementById("renameNewName").value = showName;
              bootstrap.Modal.getOrCreateInstance(modal).show();
         }

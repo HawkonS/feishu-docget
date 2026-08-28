@@ -1639,13 +1639,8 @@
             const tList = document.getElementById("templateList");
             const tSelect = document.getElementById("templateSelectMobile");
             
-            // 将默认模板排序到第一位
+            // 后端已按 template.order 排好序；这里保持服务端顺序，避免前台重新排序覆盖后台设置。
             const defaultTemplate = [/* default_template_json */];
-            templates.sort((a, b) => {
-                if (a.name === defaultTemplate) return -1;
-                if (b.name === defaultTemplate) return 1;
-                return a.name.localeCompare(b.name);
-            });
             
             let defaultFound = false;
             

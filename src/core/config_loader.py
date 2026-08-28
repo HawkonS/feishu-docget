@@ -187,6 +187,24 @@ CONFIG_SCHEMA = [
                 'sensitive': False, 'restart_required': False,
             },
             {
+                'key': 'template.storage_name', 'label': '固定存储模板文件名', 'type': 'str',
+                'default': 'Hawkon.docx',
+                'desc': '需要保持真实文件名不变的模板；留空表示不启用固定存储名。适合被 Git 跟踪的模板文件',
+                'sensitive': False, 'restart_required': False,
+            },
+            {
+                'key': 'template.display_name', 'label': '前台模板显示名称', 'type': 'str',
+                'default': '',
+                'desc': '固定存储模板在前台展示的名称；留空时使用实际文件名。仅影响显示，不会改动模板目录中的真实文件名',
+                'sensitive': False, 'restart_required': False,
+            },
+            {
+                'key': 'template.order', 'label': '模板显示顺序', 'type': 'str',
+                'default': '',
+                'desc': '模板文件名顺序（由后台模板维护中的上移/下移自动维护）；留空时默认模板优先，其余按文件名排序',
+                'sensitive': False, 'restart_required': False,
+            },
+            {
                 'key': 'image.max_height', 'label': '图片最大高度', 'type': 'float',
                 'default': '23', 'min': 0.1, 'unit': 'cm',
                 'desc': '图片最大高度 (cm)',

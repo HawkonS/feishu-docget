@@ -628,6 +628,46 @@ def check_cleanup_output():
     except Exception as e:
         logger.error(f'清理错误: {str(e)}')
 
+def _template_display_name(storage_name, current_config=None):
+    """返回模板在前台展示的名称，同时保留 storage_name 作为真实文件名。
+
+    ``template.display_name`` 只用于 ``template.storage_name`` 指定的模板。
+    这样被 Git 跟踪的 ``Hawkon.docx`` 可以始终作为稳定的存储文件，即使
+    它不是当前默认模板，管理员修改展示名时也不会触发文件重命名。
+    """
+    current_config = current_config or ConfigLoader.load_config()
+    configured = str(current_config.get('template.display_name') or '').strip()
+    fixed_storage_name = str(current_config.get('template.storage_name') or '').strip()
+    if configured and fixed_storage_name and storage_name == fixed_storage_name:
+        # 配置来自管理员输入，清洗控制字符和文件名分隔符，避免前台展示异常。
+        return sanitize_name(configured)
+    return storage_name
+
+
+def _get_template_order(current_config=None):
+    """读取模板排序配置，返回按存储文件名排列的有效名称。"""
+    current_config = current_config or ConfigLoader.load_config()
+    raw = str(current_config.get('template.order') or '').strip()
+    if not raw:
+        return []
+    try:
+        value = json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        # 兼容早期手工配置的逗号分隔格式。
+        value = [item.strip() for item in raw.split(',')]
+    if not isinstance(value, list):
+        return []
+    result = []
+    seen = set()
+    for item in value:
+        name = os.path.basename(str(item or '').strip())
+        if (name and name.lower().endswith('.docx') and name not in seen and
+                name not in {'.', '..'}):
+            result.append(name)
+            seen.add(name)
+    return result
+
+
 def list_templates():
     # 重新加载配置以确保获取最新默认值
     current_config = ConfigLoader.load_config()
@@ -652,8 +692,15 @@ def list_templates():
             has_pdf = os.path.exists(pdf_path)
             is_default = name == default_template
             
-            items.append({'name': name, 'display_name': name, 'size': size, 'has_png': has_png, 'png_name': png_name if has_png else None, 'has_pdf': has_pdf, 'pdf_name': pdf_name if has_pdf else None, 'is_default': is_default, 'is_temp': False})
-    items.sort(key=lambda x: (not x['is_default'], x['name']))
+            items.append({'name': name, 'display_name': _template_display_name(name, current_config), 'size': size, 'has_png': has_png, 'png_name': png_name if has_png else None, 'has_pdf': has_pdf, 'pdf_name': pdf_name if has_pdf else None, 'is_default': is_default, 'is_temp': False})
+    configured_order = _get_template_order(current_config)
+    if configured_order:
+        order_index = {name: index for index, name in enumerate(configured_order)}
+        # 已配置的文件严格按顺序展示；新上传/未列入配置的模板追加在末尾。
+        items.sort(key=lambda x: (order_index.get(x['name'], len(configured_order)),
+                                  x['name'].lower()))
+    else:
+        items.sort(key=lambda x: (not x['is_default'], x['name']))
     return items
 
 
@@ -1198,6 +1245,7 @@ def admin_page():
         html = html.replace('[/* page_title */]', escape(config.get('page.title', '飞书文档下载工具')))
         html = html.replace('[/* default_template */]', escape(config.get('template.default', 'template.docx'), quote=True))
         html = html.replace('[/* default_template_json */]', _script_json(config.get('template.default', 'template.docx')))
+        html = html.replace('[/* storage_template_json */]', _script_json(config.get('template.storage_name', 'Hawkon.docx')))
         html = html.replace('[/* usage_url */]', escape(_safe_http_url(config.get('usage.url', 'https://github.com/HawkonS/feishu-docget'))))
         html = html.replace('[/* image_max_width */]', str(config.get('image.max_width', '16')))
         html = html.replace('[/* image_max_height */]', str(config.get('image.max_height', '23')))
@@ -1603,6 +1651,20 @@ def api_admin_rename_template():
     safe_new = os.path.basename(str(new_name).strip())
     if safe_new != str(new_name).strip() or safe_new in {'.', '..'} or not safe_new:
         return jsonify({'status': 'error', 'message': '无效文件名'})
+
+    # 固定存储模板的真实文件名可以被 Git 固定（例如 Hawkon.docx）。
+    # 对它只保存前台展示名，不移动磁盘文件，避免下次更新时文件名被还原。
+    fixed_storage_name = str(config.get('template.storage_name') or '').strip()
+    if fixed_storage_name and safe_old == fixed_storage_name:
+        display_name = sanitize_name(safe_new)
+        try:
+            if not ConfigLoader.save_config_from_admin({'template.display_name': display_name}):
+                return jsonify({'status': 'error', 'message': '保存前台显示名失败，请检查配置文件权限或磁盘空间'})
+            return jsonify({'status': 'ok', 'storage_name': safe_old, 'display_name': display_name})
+        except Exception as e:
+            logger.error(f'保存模板显示名失败: {e}', exc_info=True)
+            return jsonify({'status': 'error', 'message': '保存前台显示名失败，请稍后重试'})
+
     # 如果用户没输后缀，后端逻辑通常是加上，但这里 old_name 已经是带后缀的文件名吗？
     # 前端传过来的 name 通常是不带后缀的显示名，还是带后缀的？
     # list_templates 返回的 name 是带 .docx 的 (e.g. "template.docx")
@@ -1629,12 +1691,6 @@ def api_admin_rename_template():
         new_png = os.path.splitext(new_path)[0] + '.png'
         if os.path.exists(old_png):
             os.rename(old_png, new_png)
-            
-        # 如果是默认模板，更新配置
-        default_template = config.get('template.default', 'template.docx')
-        # default_template 是带后缀的
-        if safe_old == default_template:
-            ConfigLoader.save_config_from_admin({'template.default': safe_new_filename})
             
         return jsonify({'status': 'ok'})
     except Exception as e:
@@ -1874,9 +1930,44 @@ def api_admin_templates():
     templates = list_templates()
     query = str(request.args.get('q') or '').strip().lower()
     if query:
-        templates = [t for t in templates if query in str(t.get('name') or '').lower()]
+        templates = [t for t in templates if query in str(t.get('name') or '').lower() or query in str(t.get('display_name') or '').lower()]
     paged = paginate_items(templates, request.args.get('page', 1), request.args.get('page_size', 12))
     return jsonify({'status': 'ok', **paged, 'templates': paged['items']})
+
+
+@app.route('/api/admin/reorder_templates', methods=['POST'])
+@system_admin_mutation_required
+def api_admin_reorder_templates():
+    """将一个模板在当前全量顺序中上移或下移，并持久化到配置。"""
+    data = request.get_json(silent=True) or {}
+    raw_name = str(data.get('name') or '').strip()
+    name = os.path.basename(raw_name)
+    direction = str(data.get('direction') or '').strip().lower()
+    if (not name or name != raw_name or name in {'.', '..'} or
+            not name.lower().endswith('.docx')):
+        return jsonify({'status': 'error', 'message': '无效模板名称'})
+    if direction not in {'up', 'down'}:
+        return jsonify({'status': 'error', 'message': '无效排序方向'})
+    if not _resolve_template_path(name):
+        return jsonify({'status': 'error', 'message': '模板不存在'})
+
+    templates = list_templates()
+    names = [item['name'] for item in templates]
+    if name not in names:
+        return jsonify({'status': 'error', 'message': '模板不存在'})
+    index = names.index(name)
+    target = index - 1 if direction == 'up' else index + 1
+    if target < 0 or target >= len(names):
+        return jsonify({'status': 'ok', 'order': names, 'moved': False})
+    names[index], names[target] = names[target], names[index]
+    order_value = json.dumps(names, ensure_ascii=False, separators=(',', ':'))
+    try:
+        if not ConfigLoader.save_config_from_admin({'template.order': order_value}):
+            return jsonify({'status': 'error', 'message': '保存模板顺序失败，请检查配置文件权限或磁盘空间'})
+        return jsonify({'status': 'ok', 'order': names, 'moved': True})
+    except Exception as e:
+        logger.error(f'保存模板顺序失败: {e}', exc_info=True)
+        return jsonify({'status': 'error', 'message': '保存模板顺序失败，请稍后重试'})
 
 
 @app.route('/api/admin/table-styles', methods=['GET'])

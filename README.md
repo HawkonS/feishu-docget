@@ -98,6 +98,7 @@ server.port=7800
 admin.path=/admin
 admin.password=change-me
 template.default=Hawkon.docx
+template.storage_name=Hawkon.docx
 workspace.dir=.
 template.dir=template
 output.dir=output
@@ -308,6 +309,12 @@ admin.password=change-me
 
 # 模板
 template.default=Hawkon.docx
+# Git 跟踪的固定真实文件名；可与 template.default 不同
+template.storage_name=Hawkon.docx
+# 固定存储模板在前台展示的名称；留空时使用真实文件名，不会改动磁盘上的模板文件
+template.display_name=
+# 模板显示顺序（由后台模板维护中的上移/下移自动维护）
+template.order=
 template.dir=template
 template.password.long_term=
 template.password.one_time=
@@ -330,6 +337,14 @@ log.max_size=20M
 ```
 
 `ConfigLoader` 会在启动时补齐缺失配置项，并创建日志、输出和模板目录。
+
+模板支持存储名与展示名分离：`template.storage_name` 指定需要保持不变的真实文件名
+（默认是 `Hawkon.docx`），`template.display_name` 只控制它在前台的显示；`template.default`
+可以是另一个模板。管理后台对固定存储模板执行“重命名”时不会移动或改写模板文件，因此即使
+更新时 Git 恢复 `Hawkon.docx`，前台自定义名称也不会丢失。
+
+模板维护页中的“上移/下移”会保存 `template.order`，后台和前台都会按该顺序显示；新上传但尚未
+排序的模板会自动追加到列表末尾。
 
 启用 `login.enabled=true` 后，使用个人飞书账号提交的任务会按 `open_id` 分组，
 每个账号分别受 `max.concurrent.downloads` 限制；机器人或未登录任务仍共享该配置的并发上限。

@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 from src.app import (
-    app, config, _resolve_template_path, _script_json, paginate_items,
+    app, config, _resolve_template_path, _script_json, paginate_items, list_templates,
     _is_system_admin_session,
 )
 from src.core.stats import _mask_url
@@ -105,6 +105,106 @@ class SecurityRegressionTests(unittest.TestCase):
         finally:
             if os.path.lexists(link_path):
                 os.unlink(link_path)
+
+    def test_default_template_rename_only_changes_frontend_display_name(self):
+        """Git-tracked default template keeps its stable storage filename."""
+        with tempfile.TemporaryDirectory() as workspace:
+            template_dir = os.path.join(workspace, 'template')
+            os.makedirs(template_dir)
+            storage_path = os.path.join(template_dir, 'Hawkon.docx')
+            with open(storage_path, 'wb') as handle:
+                handle.write(b'placeholder')
+
+            previous_values = {
+                'workspace.dir': config.get('workspace.dir'),
+                'template.dir': config.get('template.dir'),
+                'template.default': config.get('template.default'),
+                'template.storage_name': config.get('template.storage_name'),
+                'template.display_name': config.get('template.display_name'),
+            }
+            try:
+                config.update({
+                    'workspace.dir': workspace,
+                    'template.dir': 'template',
+                    'template.default': 'Other.docx',
+                    'template.storage_name': 'Hawkon.docx',
+                    'template.display_name': '',
+                })
+                with patch('src.app.base_dir', workspace):
+                    with self.client.session_transaction() as session:
+                        session['is_admin'] = True
+                        session['_csrf_token'] = 'test-csrf-token'
+
+                    with patch('src.app.ConfigLoader.save_config_from_admin', return_value=True) as save_config, \
+                            patch('src.app.os.rename') as rename:
+                        response = self.client.post(
+                            '/api/admin/rename_template',
+                            json={'old_name': 'Hawkon.docx', 'new_name': '我的固定模板'},
+                            headers={'X-CSRF-Token': 'test-csrf-token'},
+                        )
+
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.get_json()['storage_name'], 'Hawkon.docx')
+                    self.assertEqual(response.get_json()['display_name'], '我的固定模板')
+                    save_config.assert_called_once_with({'template.display_name': '我的固定模板'})
+                    rename.assert_not_called()
+                    self.assertTrue(os.path.isfile(storage_path))
+
+                config['template.display_name'] = '我的固定模板'
+                with patch('src.app.base_dir', workspace):
+                    item = next(t for t in list_templates() if t['name'] == 'Hawkon.docx')
+                self.assertEqual(item['display_name'], '我的固定模板')
+            finally:
+                config.update(previous_values)
+
+    def test_template_order_is_persisted_and_used_by_frontend_listing(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            template_dir = os.path.join(workspace, 'template')
+            os.makedirs(template_dir)
+            for name in ('first.docx', 'second.docx', 'third.docx'):
+                with open(os.path.join(template_dir, name), 'wb') as handle:
+                    handle.write(b'placeholder')
+
+            previous_values = {
+                'workspace.dir': config.get('workspace.dir'),
+                'template.dir': config.get('template.dir'),
+                'template.default': config.get('template.default'),
+                'template.storage_name': config.get('template.storage_name'),
+                'template.display_name': config.get('template.display_name'),
+                'template.order': config.get('template.order'),
+            }
+            try:
+                config.update({
+                    'workspace.dir': workspace,
+                    'template.dir': 'template',
+                    'template.default': 'third.docx',
+                    'template.storage_name': 'Hawkon.docx',
+                    'template.display_name': '',
+                    'template.order': '["first.docx","second.docx","third.docx"]',
+                })
+                with patch('src.app.base_dir', workspace):
+                    with self.client.session_transaction() as session:
+                        session['is_admin'] = True
+                        session['_csrf_token'] = 'test-csrf-token'
+
+                    with patch('src.app.ConfigLoader.save_config_from_admin', return_value=True) as save_config:
+                        response = self.client.post(
+                            '/api/admin/reorder_templates',
+                            json={'name': 'second.docx', 'direction': 'up'},
+                            headers={'X-CSRF-Token': 'test-csrf-token'},
+                        )
+
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.get_json()['order'], ['second.docx', 'first.docx', 'third.docx'])
+                    save_config.assert_called_once_with({
+                        'template.order': '["second.docx","first.docx","third.docx"]',
+                    })
+
+                    config['template.order'] = '["second.docx","first.docx","third.docx"]'
+                    listed = list_templates()
+                self.assertEqual([item['name'] for item in listed], ['second.docx', 'first.docx', 'third.docx'])
+            finally:
+                config.update(previous_values)
 
     def test_stats_only_keeps_allowed_https_hosts(self):
         self.assertEqual(_mask_url('javascript:alert(1)'), '')
