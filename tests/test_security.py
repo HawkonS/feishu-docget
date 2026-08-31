@@ -234,6 +234,19 @@ class SecurityRegressionTests(unittest.TestCase):
             self.assertIn('total_pages', payload)
             self.assertLessEqual(len(payload[collection_key]), 1)
 
+    def test_admin_pagination_defaults_to_ten_items(self):
+        with self.client.session_transaction() as session:
+            session['is_admin'] = True
+        for path in (
+            '/api/admin/projects',
+            '/api/admin/templates',
+            '/api/admin/users',
+            '/api/stats',
+        ):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.get_json()['page_size'], 10)
+
     def test_paginate_items_does_not_return_other_pages(self):
         result = paginate_items([{'id': i} for i in range(5)], page=2, page_size=2)
         self.assertEqual([item['id'] for item in result['items']], [2, 3])

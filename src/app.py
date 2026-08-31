@@ -704,16 +704,16 @@ def list_templates():
     return items
 
 
-def paginate_items(items, page=1, page_size=20):
+def paginate_items(items, page=1, page_size=10):
     """返回管理后台统一使用的服务端分页结果。"""
     try:
         page = max(int(page or 1), 1)
     except (TypeError, ValueError):
         page = 1
     try:
-        page_size = min(max(int(page_size or 20), 1), 100)
+        page_size = min(max(int(page_size or 10), 1), 100)
     except (TypeError, ValueError):
-        page_size = 20
+        page_size = 10
     total = len(items)
     start = (page - 1) * page_size
     total_pages = (total + page_size - 1) // page_size if total else 0
@@ -919,7 +919,7 @@ def list_project_files(path):
     return files
 
 
-def list_project_summaries(page=1, page_size=20, query=''):
+def list_project_summaries(page=1, page_size=10, query=''):
     """分页读取项目摘要。
 
     项目大小和文件数由带 TTL 的目录汇总缓存提供，分页请求不会重复递归扫描
@@ -947,9 +947,9 @@ def list_project_summaries(page=1, page_size=20, query=''):
     except (TypeError, ValueError):
         page = 1
     try:
-        page_size = min(max(int(page_size or 20), 1), 100)
+        page_size = min(max(int(page_size or 10), 1), 100)
     except (TypeError, ValueError):
-        page_size = 20
+        page_size = 10
     start = (page - 1) * page_size
     total_pages = (total + page_size - 1) // page_size if total else 0
     if total_pages:
@@ -1311,7 +1311,7 @@ def api_user_logout():
 def api_admin_users():
     paged = user_store.list_users(
         page=request.args.get('page', 1),
-        page_size=request.args.get('page_size', 20),
+        page_size=request.args.get('page_size', 10),
         query=request.args.get('q', ''),
     )
     return jsonify({'status': 'ok', **paged, 'users': paged['items']})
@@ -1404,7 +1404,7 @@ def api_admin_users_set_system_admin():
 def api_admin_projects():
     return jsonify(list_project_summaries(
         page=request.args.get('page', 1),
-        page_size=request.args.get('page_size', 20),
+        page_size=request.args.get('page_size', 10),
         query=request.args.get('q', ''),
     ))
 
@@ -1931,7 +1931,7 @@ def api_admin_templates():
     query = str(request.args.get('q') or '').strip().lower()
     if query:
         templates = [t for t in templates if query in str(t.get('name') or '').lower() or query in str(t.get('display_name') or '').lower()]
-    paged = paginate_items(templates, request.args.get('page', 1), request.args.get('page_size', 12))
+    paged = paginate_items(templates, request.args.get('page', 1), request.args.get('page_size', 10))
     return jsonify({'status': 'ok', **paged, 'templates': paged['items']})
 
 

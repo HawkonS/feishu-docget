@@ -357,9 +357,9 @@ def list_users(base_dir, config, page=None, page_size=None, query=''):
                 page = 1
         if page is not None:
             try:
-                page_size = min(max(int(page_size or 20), 1), 100)
+                page_size = min(max(int(page_size or 10), 1), 100)
             except (TypeError, ValueError):
-                page_size = 20
+                page_size = 10
             total_pages = (total + page_size - 1) // page_size if total else 0
             if total_pages:
                 page = min(page, total_pages)
@@ -524,9 +524,9 @@ def list_download_stats(base_dir, config, limit=None, page=None, page_size=None,
             except (TypeError, ValueError):
                 current_page = 1
             try:
-                current_page_size = min(max(int(page_size or 20), 1), 100)
+                current_page_size = min(max(int(page_size or 10), 1), 100)
             except (TypeError, ValueError):
-                current_page_size = 20
+                current_page_size = 10
             total_pages = (total + current_page_size - 1) // current_page_size if total else 0
             current_page = min(current_page, total_pages) if total_pages else 1
             sql += ' LIMIT ? OFFSET ?'
