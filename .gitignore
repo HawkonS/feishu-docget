@@ -48,6 +48,7 @@ Thumbs.db
 .vercel/
 
 # 日志、输出及模板
+*.log
 logs/
 output/
 template/*
