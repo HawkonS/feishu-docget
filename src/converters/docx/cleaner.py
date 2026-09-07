@@ -22,7 +22,7 @@ except ImportError:
 logger = ConfigLoader.get_logger('format_cleaner')
 
 def _align_to_docx(align_value, default=1):
-    align_map = {'left': 0, 'center': 1, 'right': 2}
+    align_map = {'left': 0, 'center': 1, 'right': 2, 'justify': 3}
     if align_value is None:
         return default
     return align_map.get(str(align_value).lower(), default)
@@ -336,7 +336,7 @@ def _apply_table_layout(table, width_str, auto_fit, ns, min_col_width=120):
     return True
 
 
-def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=False, body_style=None, image_style=None, table_config=None, margin_config=None, code_block_config=None, document_info=None, ignore_template_heading_num=False):
+def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=False, body_style=None, image_style=None, table_config=None, margin_config=None, code_block_config=None, document_info=None, ignore_template_heading_num=False, title_align=None):
     logger.debug('开始清理文档...')
     doc = Document(docx_path)
     ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
@@ -386,6 +386,10 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
     
     heading_style_ids = _get_heading_style_ids(doc, ns)
     template_heading_numbering_indents = _get_template_heading_numbering_indents(template_path, heading_style_ids, ns)
+    # A selected title alignment is a direct paragraph override.  This keeps
+    # the default behavior (None/"none") template-driven while allowing the
+    # advanced option to take precedence over the copied heading styles.
+    forced_title_alignment = _align_to_docx(title_align, None)
 
     # Keep table body and header paragraphs on dedicated Word styles.  The
     # styles are created even when a document has no tables so the exported
@@ -860,6 +864,8 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
         
         if is_heading:
             _clean_text_indent(p, ns)
+            if forced_title_alignment is not None:
+                p.alignment = forced_title_alignment
         elif is_list:
             # 列表缩进已经在 numbering_part 中统一处理，此处不需要再修改段落上的 ind 属性
             # 但为防万一，清除段落上的 left 和 hanging 属性（保留 numbering 的效果）
