@@ -1054,7 +1054,7 @@ def update_job(job_id, **fields):
                 job['logs'] = logs[-200:]
         job.update(fields)
 
-def run_job(job_id, doc_url, template_name, table_style, delete_template=False, add_cover=False, client_ip='', check_stop_func=None, unordered_list_style='default', body_style=None, was_queued=False, image_style=None, ignore_mention=False, ignore_template_heading_num=False, table_config=None, margin_config=None, code_block_config=None, document_info=None, add_title=False, bot_config=None, user_open_id='', user_name=''):
+def run_job(job_id, doc_url, template_name, table_style, delete_template=False, add_cover=False, client_ip='', check_stop_func=None, unordered_list_style='default', body_style=None, was_queued=False, image_style=None, ignore_mention=False, ignore_template_heading_num=False, table_config=None, margin_config=None, code_block_config=None, document_info=None, add_title=False, bot_config=None, user_open_id='', user_name='', title_align=None):
     try:
         logger.info(f"开始执行任务 {job_id}: {doc_url}")
         user_token = ''
@@ -1078,7 +1078,7 @@ def run_job(job_id, doc_url, template_name, table_style, delete_template=False, 
         if template_path is None:
             raise ValueError('模板文件不存在或路径无效')
         output_root = os.path.join(base_dir, config['output.dir'])
-        result = process_document(doc_url=doc_url, template_path=template_path, table_style=table_style, base_dir=base_dir, output_root=output_root, progress_cb=lambda p, m, t='info': update_job(job_id, progress=p, message=m, log_type=t), add_cover=add_cover, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, body_style=body_style, image_style=image_style, ignore_mention=ignore_mention, ignore_template_heading_num=ignore_template_heading_num, table_config=table_config, margin_config=margin_config, code_block_config=code_block_config, document_info=document_info, add_title=add_title, bot_config=bot_config, user_access_token=user_token or None)
+        result = process_document(doc_url=doc_url, template_path=template_path, table_style=table_style, base_dir=base_dir, output_root=output_root, progress_cb=lambda p, m, t='info': update_job(job_id, progress=p, message=m, log_type=t), add_cover=add_cover, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, body_style=body_style, image_style=image_style, ignore_mention=ignore_mention, ignore_template_heading_num=ignore_template_heading_num, table_config=table_config, margin_config=margin_config, code_block_config=code_block_config, document_info=document_info, add_title=add_title, bot_config=bot_config, user_access_token=user_token or None, title_align=title_align)
         if delete_template and template_path:
             if os.path.exists(template_path):
                 try:
@@ -1840,6 +1840,9 @@ def api_start():
     code_block_config = data.get('codeBlockConfig') # dict or None
     document_info = data.get('documentInfo') # dict or None
     add_title = bool(data.get('addTitle'))
+    title_align = str(data.get('titleAlign') or 'none').strip().lower()
+    if title_align not in {'none', 'left', 'right', 'center', 'justify'}:
+        return jsonify({'status': 'error', 'message': '标题对齐方式无效'})
     if not doc_url:
         return jsonify({'status': 'error', 'message': '缺少文档链接'})
     template_path = _resolve_template_path(template, allow_empty=True)
@@ -1862,7 +1865,7 @@ def api_start():
     session.modified = True
     is_temp_template = template.startswith('temp_')
     with jobs_lock:
-        jobs[job_id] = {'status': 'pending', 'progress': 0, 'message': '等待中', 'job_id': job_id, 'created_at': datetime.now().isoformat(timespec='seconds'), 'doc_url': doc_url, 'template': template, 'table_style': table_style, 'unordered_list_style': unordered_list_style, 'body_style': body_style, 'image_style': image_style, 'table_config': table_config, 'margin_config': margin_config, 'code_block_config': code_block_config, 'document_info': document_info, 'custom_bot_enabled': bool(bot_config), 'client_ip': client_ip, 'user_open_id': user_open_id, 'user_name': user_name, 'logs': [{'ts': datetime.now().isoformat(timespec='seconds'), 'message': '任务已创建'}]}
+        jobs[job_id] = {'status': 'pending', 'progress': 0, 'message': '等待中', 'job_id': job_id, 'created_at': datetime.now().isoformat(timespec='seconds'), 'doc_url': doc_url, 'template': template, 'table_style': table_style, 'unordered_list_style': unordered_list_style, 'body_style': body_style, 'image_style': image_style, 'title_align': title_align, 'table_config': table_config, 'margin_config': margin_config, 'code_block_config': code_block_config, 'document_info': document_info, 'custom_bot_enabled': bool(bot_config), 'client_ip': client_ip, 'user_open_id': user_open_id, 'user_name': user_name, 'logs': [{'ts': datetime.now().isoformat(timespec='seconds'), 'message': '任务已创建'}]}
 
     def check_stop():
         with jobs_lock:
@@ -1886,7 +1889,7 @@ def api_start():
         update_download_stat(base_dir, config, job_id, '排队中', doc_url=doc_url, ip_address=client_ip, user_name=user_name)
     else:
         pass
-    download_queue.put((job_id, doc_url, template, table_style, is_temp_template, add_cover, client_ip, check_stop, unordered_list_style, body_style, is_queued, image_style, ignore_mention, ignore_template_heading_num, table_config, margin_config, code_block_config, document_info, add_title, bot_config, user_open_id, user_name))
+    download_queue.put((job_id, doc_url, template, table_style, is_temp_template, add_cover, client_ip, check_stop, unordered_list_style, body_style, is_queued, image_style, ignore_mention, ignore_template_heading_num, table_config, margin_config, code_block_config, document_info, add_title, bot_config, user_open_id, user_name, title_align))
     return jsonify({'status': 'ok', 'job_id': job_id})
 
 @app.route('/api/status/<job_id>', methods=['GET'])

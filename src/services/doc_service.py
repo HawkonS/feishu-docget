@@ -26,7 +26,7 @@ def _cleanup_doc_folder(doc_folder, logger, reason):
         logger.error(f'清理临时文件夹失败: {e}')
 
 
-def _process_document_with_client(client, doc_url, template_path=None, table_style=None, output_root='output', progress_cb=None, add_cover=False, check_stop_func=None, unordered_list_style='default', body_style=None, image_style=None, ignore_mention=False, ignore_template_heading_num=False, table_config=None, margin_config=None, code_block_config=None, document_info=None, add_title=False):
+def _process_document_with_client(client, doc_url, template_path=None, table_style=None, output_root='output', progress_cb=None, add_cover=False, check_stop_func=None, unordered_list_style='default', body_style=None, image_style=None, ignore_mention=False, ignore_template_heading_num=False, table_config=None, margin_config=None, code_block_config=None, document_info=None, add_title=False, title_align=None):
     logger = ConfigLoader.get_logger('service')
     _raise_if_stopped(check_stop_func)
 
@@ -121,7 +121,7 @@ def _process_document_with_client(client, doc_url, template_path=None, table_sty
         if progress_cb:
             progress_cb(80, '已完成样式应用', 'success')
         try:
-            clean_document(docx_path, progress_cb=progress_cb, template_path=template_path, add_cover=add_cover, body_style=body_style, image_style=image_style, table_config=table_config, margin_config=margin_config, code_block_config=code_block_config, document_info=document_info, ignore_template_heading_num=ignore_template_heading_num)
+            clean_document(docx_path, progress_cb=progress_cb, template_path=template_path, add_cover=add_cover, body_style=body_style, image_style=image_style, table_config=table_config, margin_config=margin_config, code_block_config=code_block_config, document_info=document_info, ignore_template_heading_num=ignore_template_heading_num, title_align=title_align)
             if document_info is not None:
                 apply_document_info(docx_path, document_info)
         except Exception as e:
@@ -138,7 +138,7 @@ def _process_document_with_client(client, doc_url, template_path=None, table_sty
         raise
 
 
-def process_document(doc_url, template_path=None, table_style=None, base_dir='.', output_root='output', progress_cb=None, add_cover=False, check_stop_func=None, unordered_list_style='default', body_style=None, image_style=None, ignore_mention=False, ignore_template_heading_num=False, table_config=None, margin_config=None, code_block_config=None, document_info=None, add_title=False, bot_config=None, user_access_token=None):
+def process_document(doc_url, template_path=None, table_style=None, base_dir='.', output_root='output', progress_cb=None, add_cover=False, check_stop_func=None, unordered_list_style='default', body_style=None, image_style=None, ignore_mention=False, ignore_template_heading_num=False, table_config=None, margin_config=None, code_block_config=None, document_info=None, add_title=False, bot_config=None, user_access_token=None, title_align=None):
     logger = ConfigLoader.get_logger('service')
     _raise_if_stopped(check_stop_func)
 
@@ -184,6 +184,7 @@ def process_document(doc_url, template_path=None, table_style=None, base_dir='.'
         'code_block_config': code_block_config,
         'document_info': document_info,
         'add_title': add_title,
+        'title_align': title_align,
     }
 
     user_error = None

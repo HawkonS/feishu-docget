@@ -23,6 +23,7 @@ except ImportError as e:
 
 BORDER_TYPES = ("single", "none", "double", "dotted", "dashed")
 ALIGN_TYPES = ("none", "center", "left", "right")
+TITLE_ALIGN_TYPES = ("none", "left", "right", "center", "justify")
 TEXT_UNITS = ("lines", "pt")
 MARGIN_PRESETS = {
     "normal": {"top": 2.54, "bottom": 2.54, "left": 3.18, "right": 3.18},
@@ -293,6 +294,7 @@ def build_effective_options(args):
         "addTitle": args.add_title,
         "ignoreMention": args.ignore_mention,
         "ignoreTemplateHeadingNum": args.ignore_template_heading_num,
+        "titleAlign": args.title_align,
         "unorderedListStyle": args.unordered_list_style,
         "bodyStyle": build_body_style(args),
         "imageStyle": build_image_style(args),
@@ -361,6 +363,7 @@ def create_parser():
     text = parser.add_argument_group("高级选项 - 文本设置")
     text.add_argument("--ignore-mention", action=argparse.BooleanOptionalAction, default=False, help="忽略文本中 @ 人员转换")
     text.add_argument("--ignore-template-heading-num", action=argparse.BooleanOptionalAction, default=False, help="强制移除模板标题自动编号")
+    text.add_argument("--title-align", choices=TITLE_ALIGN_TYPES, default="none", help="强制标题对齐方式；none 表示跟随模板")
     text.add_argument("--unordered-list-style", choices=("none", "default", "square", "diamond", "arrow"), default="default", help="无序列表样式")
     text.add_argument("--body-font-size", type=non_negative_float, help="正文字号，单位磅")
     text.add_argument("--body-line-spacing", type=non_negative_float, help="正文行间距")
@@ -517,6 +520,7 @@ def main():
             document_info=effective_options["documentInfo"],
             add_title=effective_options["addTitle"],
             bot_config=effective_options["botConfig"],
+            title_align=effective_options["titleAlign"],
         )
         duration = time.time() - start_time
 
