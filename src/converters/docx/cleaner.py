@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import os
 import io
+import math
 import re
 import zipfile
 import xml.etree.ElementTree as ET
@@ -47,7 +48,88 @@ def _resolve_image_style(style_config, fallback_width, fallback_height, fallback
         align = _align_to_docx(style_config.get('align'), fallback_align)
     return width, height, align
 
-def _apply_image_style_to_paragraph(paragraph, ns, ns_wp, max_height, max_width, align, clear_space_before=False):
+def _normalize_image_border(style_config):
+    """Return a validated explicit image border rule, or ``None`` when disabled."""
+    if not isinstance(style_config, dict):
+        return None
+    nested = style_config.get('border') if isinstance(style_config.get('border'), dict) else {}
+    enabled_value = style_config.get('borderEnabled', nested.get('enabled', True if nested else style_config.get('border')))
+    enabled = enabled_value is True or enabled_value == 1 or str(enabled_value).strip().lower() in {'true', '1', 'yes', 'on'}
+    if not enabled:
+        return None
+    color = str(style_config.get('borderColor', nested.get('color')) or 'D9D9D9').strip().lstrip('#')
+    if not re.fullmatch(r'[0-9a-fA-F]{6}', color):
+        color = 'D9D9D9'
+    try:
+        width_pt = float(style_config.get('borderWidth', nested.get('width', 1.5)))
+    except (TypeError, ValueError):
+        width_pt = 1.5
+    if not math.isfinite(width_pt):
+        width_pt = 1.5
+    width_pt = min(max(width_pt, 0.1), 20.0)
+    try:
+        shrink_percent = float(style_config.get('shrinkPercent', style_config.get('shrink', 0)) or 0)
+    except (TypeError, ValueError):
+        shrink_percent = 0.0
+    if not math.isfinite(shrink_percent):
+        shrink_percent = 0.0
+    shrink_percent = min(max(shrink_percent, 0.0), 50.0)
+    return {
+        'color': color.upper(),
+        'width_pt': width_pt,
+        'shrink_percent': shrink_percent,
+    }
+
+def _apply_image_border(drawing_element, border_config):
+    """Apply a picture shape border, replacing template line properties."""
+    if not border_config:
+        return False
+    ns_a = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+    ns_pic = 'http://schemas.openxmlformats.org/drawingml/2006/picture'
+    sp_pr = drawing_element.find(f'.//{{{ns_pic}}}spPr')
+    if sp_pr is None:
+        sp_pr = drawing_element.find(f'.//{{{ns_a}}}spPr')
+    if sp_pr is None:
+        return False
+    line = sp_pr.find(f'{{{ns_a}}}ln')
+    if line is None:
+        line = parse_xml(f'<a:ln xmlns:a="{ns_a}"/>')
+        sp_pr.append(line)
+    line.set('w', str(int(round(border_config['width_pt'] * 12700))))
+    # Keep only a solid RGB fill so a template's theme/gradient line cannot win.
+    for child in list(line):
+        if child.tag != f'{{{ns_a}}}prstDash':
+            line.remove(child)
+    solid_fill = parse_xml(
+        f'<a:solidFill xmlns:a="{ns_a}"><a:srgbClr val="{border_config["color"]}"/></a:solidFill>'
+    )
+    line.insert(0, solid_fill)
+    prst_dash = line.find(f'{{{ns_a}}}prstDash')
+    if prst_dash is None:
+        prst_dash = parse_xml(f'<a:prstDash xmlns:a="{ns_a}" val="solid"/>')
+        line.append(prst_dash)
+    else:
+        prst_dash.set('val', 'solid')
+    return True
+
+def _apply_vml_image_border(pict_element, border_config):
+    """Apply the equivalent border to legacy VML pictures from older templates."""
+    if not border_config:
+        return False
+    ns_v = 'urn:schemas-microsoft-com:vml'
+    shape = pict_element.find(f'.//{{{ns_v}}}shape')
+    if shape is None:
+        return False
+    shape.set('stroked', 't')
+    shape.set('strokecolor', f"#{border_config['color']}")
+    shape.set('strokeweight', f"{border_config['width_pt']}pt")
+    stroke = shape.find(f'{{{ns_v}}}stroke')
+    if stroke is not None:
+        stroke.set('color', f"#{border_config['color']}")
+        stroke.set('weight', f"{border_config['width_pt']}pt")
+    return True
+
+def _apply_image_style_to_paragraph(paragraph, ns, ns_wp, max_height, max_width, align, clear_space_before=False, border_config=None):
     resized = 0
     aligned = 0
     xml = paragraph._element.xml
@@ -61,13 +143,18 @@ def _apply_image_style_to_paragraph(paragraph, ns, ns_wp, max_height, max_width,
             inlines = drawing.findall(f'.//{{{ns_wp}}}inline')
             for inline in inlines:
                 is_image = True
-                if _resize_inline_image(inline, max_height, max_width):
+                if _resize_inline_image(inline, max_height, max_width, border_config, run.part):
                     resized += 1
+                _apply_image_border(inline, border_config)
             anchors = drawing.findall(f'.//{{{ns_wp}}}anchor')
             for anchor in anchors:
                 is_image = True
-                if _resize_inline_image(anchor, max_height, max_width):
+                if _resize_inline_image(anchor, max_height, max_width, border_config, run.part):
                     resized += 1
+                _apply_image_border(anchor, border_config)
+        for pict in run._element.findall(f'.//{{{ns}}}pict'):
+            is_image = True
+            _apply_vml_image_border(pict, border_config)
                     
     if is_image:
         _force_clear_indent(paragraph, ns, clear_space_before=clear_space_before)
@@ -402,6 +489,7 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
     default_max_w = ConfigLoader.get_float('image.max_width', 16.0)
 
     target_max_w, target_max_h, target_align = _resolve_image_style(image_style, default_max_w, default_max_h, 1)
+    image_border = _normalize_image_border(image_style)
     table_image_style = image_style.get('tableImageStyle') if isinstance(image_style, dict) else None
     table_target_max_w, table_target_max_h, table_target_align = _resolve_image_style(
         table_image_style,
@@ -409,6 +497,7 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
         target_max_h,
         target_align
     )
+    table_image_border = _normalize_image_border(table_image_style) or image_border
     max_height = Mm(target_max_h * 10)
     max_width = Mm(target_max_w * 10)
     table_max_height = Mm(table_target_max_h * 10)
@@ -615,7 +704,8 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
                         table_max_height,
                         table_max_width,
                         current_image_align,
-                        clear_space_before=force_clear_tbl_image_space
+                        clear_space_before=force_clear_tbl_image_space,
+                        border_config=table_image_border
                     )
                     count_table_image_resized += resized
                     count_table_image_aligned += aligned
@@ -786,7 +876,9 @@ def clean_document(docx_path, progress_cb=None, template_path=None, add_cover=Fa
         if i < cover_para_count:
             continue
         TableStyleManager.apply_image_paragraph_style(p, image_paragraph_style)
-        resized, aligned = _apply_image_style_to_paragraph(p, ns, ns_wp, max_height, max_width, target_align)
+        resized, aligned = _apply_image_style_to_paragraph(
+            p, ns, ns_wp, max_height, max_width, target_align, border_config=image_border
+        )
         count_resized += resized
         count_centered += aligned
     if progress_cb and (count_resized > 0 or count_centered > 0 or count_table_image_resized > 0 or count_table_image_aligned > 0):
@@ -1559,13 +1651,57 @@ def _prepend_first_page_from_template(doc, template_path):
         logger.debug(f'复制分节属性失败: {e}')
     return (count_paragraphs, count_tables)
 
-def _resize_inline_image(drawing_element, max_height, max_width=None):
+def _pad_image_relationship(drawing_element, source_part, shrink_percent):
+    """Replace a picture relation with a padded bitmap so the content visibly shrinks."""
+    if not source_part or shrink_percent <= 0:
+        return False
+    ns_a = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+    ns_r = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+    blip = drawing_element.find(f'.//{{{ns_a}}}blip')
+    if blip is None:
+        return False
+    rel_id = blip.get(f'{{{ns_r}}}embed')
+    if not rel_id or rel_id not in source_part.rels:
+        return False
+    rel = source_part.rels[rel_id]
+    if rel.is_external or 'image' not in rel.reltype:
+        return False
+    try:
+        from PIL import Image
+        image = Image.open(io.BytesIO(rel.target_part.blob))
+        image.load()
+        width, height = image.size
+        scale = 1.0 - (shrink_percent / 100.0)
+        inner_size = (max(1, int(round(width * scale))), max(1, int(round(height * scale))))
+        resampling = getattr(Image, 'Resampling', Image)
+        inner = image.convert('RGBA').resize(inner_size, resampling.LANCZOS)
+        canvas = Image.new('RGBA', (width, height), (255, 255, 255, 0))
+        canvas.alpha_composite(inner, ((width - inner_size[0]) // 2, (height - inner_size[1]) // 2))
+        output = io.BytesIO()
+        canvas.save(output, format='PNG')
+        output.seek(0)
+        new_rel_id = _add_image_to_part(source_part, output, 'image-padded.png')
+        if not new_rel_id:
+            return False
+        blip.set(f'{{{ns_r}}}embed', str(new_rel_id))
+        # SVG drawings carry a second relationship that would otherwise make
+        # Word render the unpadded vector and bypass the resized PNG fallback.
+        for ext_lst in list(blip.findall(f'{{{ns_a}}}extLst')):
+            blip.remove(ext_lst)
+        return True
+    except Exception as exc:
+        logger.debug(f'图片内容缩小失败，保留原图: {exc}')
+        return False
+
+
+def _resize_inline_image(drawing_element, max_height, max_width=None, border_config=None, source_part=None):
     ns_wp = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing'
     extent = drawing_element.find(f'{{{ns_wp}}}extent')
     resized = False
     if extent is not None:
         cy = int(extent.get('cy') or 0)
         cx = int(extent.get('cx') or 0)
+        original_cx, original_cy = cx, cy
         if cy > max_height:
             ratio = max_height / cy
             cy = int(max_height)
@@ -1580,6 +1716,33 @@ def _resize_inline_image(drawing_element, max_height, max_width=None):
             extent.set('cx', str(cx))
             extent.set('cy', str(cy))
             resized = True
+        shrink_percent = border_config.get('shrink_percent', 0) if border_config else 0
+        if shrink_percent > 0 and border_config:
+            # Keep the outer Drawing frame (and its border) at the selected
+            # size while replacing the bitmap with a padded canvas.
+            resized = _pad_image_relationship(drawing_element, source_part, shrink_percent) or resized
+        elif shrink_percent > 0 and cx > 1 and cy > 1:
+            scale = 1.0 - (shrink_percent / 100.0)
+            new_cx = max(1, int(round(cx * scale)))
+            new_cy = max(1, int(round(cy * scale)))
+            if new_cx != cx or new_cy != cy:
+                extent.set('cx', str(new_cx))
+                extent.set('cy', str(new_cy))
+                cx, cy = new_cx, new_cy
+                resized = True
+                # Keep the graphic transform in sync with wp:extent.  Word uses
+                # both values and otherwise may snap the image back to template size.
+                ns_a = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+                for graphic_ext in drawing_element.findall(f'.//{{{ns_a}}}xfrm/{{{ns_a}}}ext'):
+                    graphic_ext.set('cx', str(new_cx))
+                    graphic_ext.set('cy', str(new_cy))
+        if (cx, cy) != (original_cx, original_cy):
+            # Keep the DrawingML transform synchronized with wp:extent for
+            # consumers that prefer the shape transform when rendering.
+            ns_a = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+            for graphic_ext in drawing_element.findall(f'.//{{{ns_a}}}xfrm/{{{ns_a}}}ext'):
+                graphic_ext.set('cx', str(cx))
+                graphic_ext.set('cy', str(cy))
     return resized
 
 def _force_clear_indent(paragraph, ns, clear_space_before=False):

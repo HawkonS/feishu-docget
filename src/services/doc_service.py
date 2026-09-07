@@ -105,7 +105,7 @@ def _process_document_with_client(client, doc_url, template_path=None, table_sty
         docx_path = os.path.join(doc_folder, f'{base_title}.docx')
         _raise_if_stopped(check_stop_func)
 
-        converter = FeishuDocxConverter(blocks, client, master_img_dir, template_path=template_path, progress_cb=progress_cb, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, ignore_mention=ignore_mention, add_title=add_title)
+        converter = FeishuDocxConverter(blocks, client, master_img_dir, template_path=template_path, progress_cb=progress_cb, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, ignore_mention=ignore_mention, add_title=add_title, image_style=image_style)
         converter.process(docx_path)
 
         if progress_cb:

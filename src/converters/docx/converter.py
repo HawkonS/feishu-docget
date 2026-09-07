@@ -297,7 +297,7 @@ class NumberingInjector:
 
 class FeishuDocxConverter:
 
-    def __init__(self, blocks, client, img_dir, template_path=None, progress_cb=None, check_stop_func=None, unordered_list_style='default', ignore_mention=False, add_title=False):
+    def __init__(self, blocks, client, img_dir, template_path=None, progress_cb=None, check_stop_func=None, unordered_list_style='default', ignore_mention=False, add_title=False, image_style=None):
         self.blocks = blocks
         self.client = client
         self.img_dir = img_dir
@@ -307,6 +307,7 @@ class FeishuDocxConverter:
         self.unordered_list_style = unordered_list_style
         self.ignore_mention = ignore_mention
         self.add_title = add_title
+        self.image_style = image_style if isinstance(image_style, dict) else None
         self.block_map = {b['block_id']: b for b in blocks}
         self.tree = self._build_tree()
         self.doc = None
@@ -805,13 +806,23 @@ class FeishuDocxConverter:
         if os.path.exists(file_path):
             is_svg = _is_svg_file(file_path)
             try:
-                max_w_cm = ConfigLoader.get_float('image.max_width', 16)
+                configured_width = self.image_style.get('maxWidth') if self.image_style else None
+                try:
+                    configured_width = float(configured_width) if configured_width not in (None, '') else None
+                except (TypeError, ValueError):
+                    configured_width = None
+                if configured_width is not None and configured_width > 0:
+                    max_w_cm = configured_width
+                    width_for_insert = max_w_cm
+                else:
+                    max_w_cm = ConfigLoader.get_float('image.max_width', 16)
+                    width_for_insert = max_w_cm - 1 if max_w_cm > 1 else max_w_cm
                 p = container.add_paragraph()
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 run = p.add_run()
                 if is_svg:
                     logger.info(f'检测到 SVG 图片，直接嵌入 DOCX: {token}')
-                    _add_svg_to_docx(run, file_path, width_cm=max_w_cm - 1 if max_w_cm > 1 else max_w_cm)
+                    _add_svg_to_docx(run, file_path, width_cm=width_for_insert)
                     # SVG 内容可能变动，删除缓存确保下次重新下载
                     try:
                         os.remove(file_path)
@@ -819,7 +830,7 @@ class FeishuDocxConverter:
                     except Exception as e:
                         logger.warning(f'清除 SVG 缓存失败: {token}: {e}')
                 else:
-                    run.add_picture(file_path, width=Cm(max_w_cm - 1 if max_w_cm > 1 else max_w_cm))
+                    run.add_picture(file_path, width=Cm(width_for_insert))
             except Exception as e:
                 logger.error(f'添加图片失败 {token}: {e}')
         # 渲染图片描述（caption），按正文段落处理
@@ -852,7 +863,12 @@ class FeishuDocxConverter:
                 p = container.add_paragraph()
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 run = p.add_run()
-                run.add_picture(file_path, width=Cm(15))
+                configured_width = self.image_style.get('maxWidth') if self.image_style else None
+                try:
+                    configured_width = float(configured_width) if configured_width not in (None, '') else None
+                except (TypeError, ValueError):
+                    configured_width = None
+                run.add_picture(file_path, width=Cm(configured_width if configured_width and configured_width > 0 else 15))
             except Exception as e:
                 logger.error(f'添加画板失败 {wb_id}: {e}')
 
