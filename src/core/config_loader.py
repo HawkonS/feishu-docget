@@ -82,6 +82,13 @@ CONFIG_SCHEMA = [
                 'sensitive': False, 'restart_required': False,
             },
             {
+                'key': 'server.trusted_proxies', 'label': '可信反向代理', 'type': 'str',
+                'default': '127.0.0.1,::1',
+                'desc': '允许读取 X-Real-IP/X-Forwarded-For 的代理地址，逗号分隔 IP 或 CIDR；留空表示不信任代理头',
+                'placeholder': '127.0.0.1,::1',
+                'sensitive': False, 'restart_required': False,
+            },
+            {
                 'key': 'admin.path', 'label': '管理后台路径', 'type': 'str',
                 'default': '/admin', 'desc': '管理后台路径',
                 'sensitive': False, 'restart_required': True,

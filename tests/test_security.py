@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 from src.app import (
     app, config, _resolve_template_path, _script_json, paginate_items, list_templates,
-    _is_system_admin_session,
+    _is_system_admin_session, _get_client_ip,
 )
 from src.core.stats import _mask_url
 from src.core.sqlite_store import migrate_legacy_data, list_download_stats, list_users
@@ -210,6 +210,30 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertEqual(_mask_url('javascript:alert(1)'), '')
         self.assertEqual(_mask_url('https://evil.example/x'), '')
         self.assertEqual(_mask_url('https://foo.feishu.cn/wiki/abc?token=secret'), 'https://foo.feishu.cn/wiki/abc')
+
+    def test_client_ip_uses_forwarded_headers_only_from_trusted_proxy(self):
+        previous = config.get('server.trusted_proxies')
+        config['server.trusted_proxies'] = '127.0.0.1,::1'
+        try:
+            with app.test_request_context(
+                '/', environ_base={'REMOTE_ADDR': '127.0.0.1'},
+                headers={'X-Real-IP': '203.0.113.9'},
+            ):
+                self.assertEqual(_get_client_ip(), '203.0.113.9')
+
+            with app.test_request_context(
+                '/', environ_base={'REMOTE_ADDR': '198.51.100.4'},
+                headers={'X-Real-IP': '203.0.113.9'},
+            ):
+                self.assertEqual(_get_client_ip(), '198.51.100.4')
+
+            with app.test_request_context(
+                '/', environ_base={'REMOTE_ADDR': '127.0.0.1'},
+                headers={'X-Forwarded-For': '10.0.0.7, 198.51.100.2, 127.0.0.1'},
+            ):
+                self.assertEqual(_get_client_ip(), '198.51.100.2')
+        finally:
+            config['server.trusted_proxies'] = previous
 
     def test_script_json_escapes_html_breakout_characters(self):
         encoded = _script_json('</script><img src=x>')

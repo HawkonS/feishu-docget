@@ -22,6 +22,7 @@ import tempfile
 import zipfile
 import hmac
 import stat
+import ipaddress
 from html import escape
 from urllib.parse import urlsplit
 from flask import Flask, jsonify, request, send_file, send_from_directory, session, redirect, url_for, make_response
@@ -77,7 +78,8 @@ if https_enabled:
     # server.https.enabled 表示由一层可信反向代理终结 TLS；初始化阶段包装，
     # 确保通过 WSGI 导入 app 时同样正确识别客户端 IP 与 https scheme。
     from werkzeug.middleware.proxy_fix import ProxyFix
-    # 不信任 X-Forwarded-For，防止直接访问服务时伪造来源 IP 绕过限流。
+    # 不让 ProxyFix 直接改写客户端地址；来源 IP 由 _get_client_ip 按
+    # server.trusted_proxies 校验后读取转发头，防止直连伪造来源 IP 绕过限流。
     # scheme/host/prefix 仅接受最外层一跳代理提供的值。
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=0, x_proto=1, x_host=1, x_prefix=1)
     app.config['PREFERRED_URL_SCHEME'] = 'https'
@@ -108,6 +110,65 @@ _upload_attempts = {}  # {ip: {'count': N, 'locked_until': timestamp, 'ban_level
 _start_attempts = {}  # {ip: [timestamps]} 任务提交接口的滑动窗口限流
 _attempts_lock = threading.RLock()
 START_RATE_LIMIT = 10  # 单 IP 每分钟最多提交任务数
+
+
+def _trusted_proxy_networks():
+    """读取可信代理网段；配置错误时跳过该条目而不是信任所有请求。"""
+    raw = config.get('server.trusted_proxies', '127.0.0.1,::1')
+    networks = []
+    for item in str(raw or '').split(','):
+        value = item.strip()
+        if not value:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(value, strict=False))
+        except ValueError:
+            logger.warning('忽略无效的可信代理地址: %s', value)
+    return networks
+
+
+def _is_trusted_proxy(remote_addr):
+    try:
+        address = ipaddress.ip_address(str(remote_addr).strip())
+    except ValueError:
+        return False
+    return any(address in network for network in _trusted_proxy_networks())
+
+
+def _header_ip(value):
+    """从代理头中提取单个合法 IP，拒绝端口、空值和任意文本。"""
+    try:
+        address = ipaddress.ip_address(str(value).strip())
+    except ValueError:
+        return None
+    return str(address)
+
+
+def _get_client_ip():
+    """获取客户端 IP，仅对明确配置的可信反向代理读取转发头。"""
+    remote_addr = (request.remote_addr or '').strip()
+    if not _is_trusted_proxy(remote_addr):
+        return remote_addr or 'unknown'
+
+    # nginx/网关通常会覆盖 X-Real-IP；优先使用它，避免把客户端自带的
+    # X-Forwarded-For 中的伪造值当成真实地址。
+    real_ip = _header_ip(request.headers.get('X-Real-IP', ''))
+    if real_ip:
+        return real_ip
+
+    forwarded = []
+    for value in request.headers.getlist('X-Forwarded-For'):
+        for item in value.split(','):
+            parsed = _header_ip(item)
+            if parsed:
+                forwarded.append(parsed)
+    # 从代理链右侧剥离已知可信代理，取第一个非可信地址。
+    trusted_networks = _trusted_proxy_networks()
+    for candidate in reversed(forwarded):
+        address = ipaddress.ip_address(candidate)
+        if not any(address in network for network in trusted_networks):
+            return candidate
+    return forwarded[0] if forwarded else remote_addr or 'unknown'
 
 # 磁盘用量统计缓存：项目和日志目录可能持续增长，避免每次打开管理 Tab 都递归扫描。
 # 删除/生成操作会主动失效缓存；外部变更最多在 TTL 后反映到页面。
@@ -1266,7 +1327,7 @@ def admin_page():
 
 @app.route('/api/admin/login', methods=['POST'])
 def api_admin_login():
-    client_ip = request.remote_addr or 'unknown'
+    client_ip = _get_client_ip()
     locked, remaining = _admin_login_lock(client_ip)
     if locked:
         return jsonify({'status': 'error', 'message': f'账户已锁定，请 {remaining} 秒后重试'})
@@ -1546,7 +1607,7 @@ def api_upload_template():
         mode = 'long_term'
     else:
         # 非管理员的密码校验同样受速率限制保护，防止暴力破解
-        client_ip = request.remote_addr or 'unknown'
+        client_ip = _get_client_ip()
         locked, remaining = _check_login_lock(_upload_attempts, client_ip)
         if locked:
             return jsonify({'status': 'error', 'message': f'尝试次数过多，请 {remaining} 秒后重试'})
@@ -1756,7 +1817,7 @@ def api_admin_set_default_template():
 @app.route('/api/start', methods=['POST'])
 @login_required
 def api_start():
-    client_ip = request.remote_addr or 'unknown'
+    client_ip = _get_client_ip()
     user = session.get('user') or {}
     is_builtin_admin = _is_builtin_admin_identity_session()
     # 系统账号没有飞书 access_token，任务应继续使用系统机器人，但统计显示固定名称。
