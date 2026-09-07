@@ -9,7 +9,8 @@ from src.app import (
     app, config, _resolve_template_path, _script_json, paginate_items, list_templates,
     _is_system_admin_session, _get_client_ip,
 )
-from src.core.stats import _mask_url
+from src.core.stats import _mask_ip, _mask_url
+from src.core.sqlite_store import _mask_ip as _sqlite_mask_ip
 from src.core.sqlite_store import migrate_legacy_data, list_download_stats, list_users
 from src.core.user_store import SYSTEM_ADMIN_NAME, SYSTEM_ADMIN_OPEN_ID
 
@@ -210,6 +211,10 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertEqual(_mask_url('javascript:alert(1)'), '')
         self.assertEqual(_mask_url('https://evil.example/x'), '')
         self.assertEqual(_mask_url('https://foo.feishu.cn/wiki/abc?token=secret'), 'https://foo.feishu.cn/wiki/abc')
+
+    def test_stats_keep_full_client_ip(self):
+        self.assertEqual(_mask_ip('122.70.123.45'), '122.70.123.45')
+        self.assertEqual(_sqlite_mask_ip('122.70.123.45'), '122.70.123.45')
 
     def test_client_ip_uses_forwarded_headers_only_from_trusted_proxy(self):
         previous = config.get('server.trusted_proxies')

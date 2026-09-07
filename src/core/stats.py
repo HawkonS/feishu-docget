@@ -6,13 +6,8 @@ from urllib.parse import urlsplit
 from src.core import sqlite_store
 
 def _mask_ip(ip):
-    """IP 地址脱敏：保留前两段，后两段用 * 替换"""
-    if not ip:
-        return ''
-    parts = ip.split('.')
-    if len(parts) == 4:
-        return f'{parts[0]}.{parts[1]}.*.*'
-    return ip  # IPv6 等不做处理
+    """保存完整客户端 IP；空值保持为空。"""
+    return str(ip or '').strip()
 
 def _mask_url(url):
     """URL 脱敏：仅保留带主机的 HTTPS URL，去掉查询参数并截断。"""
