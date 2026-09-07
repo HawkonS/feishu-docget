@@ -169,11 +169,20 @@ def build_body_style(args):
 
 def build_image_style(args):
     image_style = None
-    if args.image_max_width is not None or args.image_max_height is not None or args.image_align != "none":
+    image_border = bool(getattr(args, "image_border", False))
+    image_border_color = getattr(args, "image_border_color", "#D9D9D9")
+    image_border_width = getattr(args, "image_border_width", 1.5)
+    image_shrink_percent = getattr(args, "image_shrink_percent", 0)
+    if (args.image_max_width is not None or args.image_max_height is not None
+            or args.image_align != "none" or image_border or image_shrink_percent > 0):
         image_style = {
             "maxWidth": args.image_max_width,
             "maxHeight": args.image_max_height,
             "align": None if args.image_align == "none" else args.image_align,
+            "borderEnabled": image_border,
+            "borderColor": image_border_color,
+            "borderWidth": image_border_width,
+            "shrinkPercent": image_shrink_percent,
         }
     if args.table_image_max_width is not None or args.table_image_max_height is not None:
         if image_style is None:
@@ -377,6 +386,10 @@ def create_parser():
     image.add_argument("--image-max-width", type=non_negative_float, help="普通图片最大宽度，单位 cm")
     image.add_argument("--image-max-height", type=non_negative_float, help="普通图片最大高度，单位 cm")
     image.add_argument("--image-align", choices=ALIGN_TYPES, default="center", help="普通图片对齐方式")
+    image.add_argument("--image-border", action=argparse.BooleanOptionalAction, default=False, help="启用普通图片边框")
+    image.add_argument("--image-border-color", type=color_value, default="#D9D9D9", help="图片边框颜色")
+    image.add_argument("--image-border-width", type=non_negative_float, default=1.5, help="图片边框粗细，单位磅")
+    image.add_argument("--image-shrink-percent", type=bounded_int(0, 50), default=0, help="图片缩小比例，单位百分比")
 
     table = parser.add_argument_group("高级选项 - 表格设置")
     table.add_argument("--table-force-clear-indent", action=argparse.BooleanOptionalAction, default=True, help="强制清除表格缩进")
