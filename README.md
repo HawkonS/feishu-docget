@@ -304,6 +304,8 @@ feishu.app_secret=
 
 # 服务
 server.port=7800
+# 反向代理（如 nginx）与应用同机时保持默认值；跨主机/容器部署请填写代理 IP 或 CIDR
+server.trusted_proxies=127.0.0.1,::1
 admin.path=/admin
 admin.password=change-me
 
