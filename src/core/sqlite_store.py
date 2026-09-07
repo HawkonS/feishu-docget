@@ -408,10 +408,8 @@ def _stat_values(entry):
 
 
 def _mask_ip(ip):
-    if not ip:
-        return ''
-    parts = str(ip).split('.')
-    return f'{parts[0]}.{parts[1]}.*.*' if len(parts) == 4 else str(ip)
+    """保存完整客户端 IP；空值保持为空。"""
+    return str(ip or '').strip()
 
 
 def _mask_url(url):
