@@ -1,6 +1,9 @@
 import os
 import concurrent.futures
 import traceback
+import json
+import math
+import re
 from urllib.parse import unquote
 from docx import Document
 from docx.shared import Pt, RGBColor, Cm
@@ -9,7 +12,12 @@ from docx.oxml import OxmlElement, parse_xml
 import docx.opc.constants
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
 from src.core.config_loader import ConfigLoader
-from src.core.image_processor import calculate_center_crop, get_image_center_crop, smart_crop
+from src.core.image_processor import (
+    calculate_center_crop,
+    get_image_center_crop,
+    get_image_dimensions,
+    smart_crop,
+)
 from src.converters.docx.style_manager import TableStyleManager
 
 
@@ -65,12 +73,28 @@ _SVG_EXT_URI = 'http://schemas.microsoft.com/office/drawing/2016/SVG/main'
 
 
 def _apply_feishu_image_crop(inline_shape, image_path, image_data):
-    """Apply the visible Feishu image frame as a native DrawingML crop."""
+    """Apply a Feishu crop rectangle as a native DrawingML source rectangle.
+
+    Docs AI exposes the editor crop as an absolute normalized rectangle.  The
+    DrawingML ``srcRect`` element instead expects the margins outside that
+    rectangle, so convert ``[left, top, right, bottom]`` accordingly.  Older
+    block-only responses do not include this field; retain the centered-ratio
+    fallback for those responses.
+    """
     if not isinstance(image_data, dict):
         return False
     frame_width = image_data.get('width')
     frame_height = image_data.get('height')
-    crop = get_image_center_crop(image_path, frame_width, frame_height)
+    crop_rect = _normalize_feishu_crop(image_data.get('crop'))
+    if crop_rect:
+        crop = {
+            'left': crop_rect[0],
+            'top': crop_rect[1],
+            'right': 1.0 - crop_rect[2],
+            'bottom': 1.0 - crop_rect[3],
+        }
+    else:
+        crop = get_image_center_crop(image_path, frame_width, frame_height)
     if not crop:
         return False
 
@@ -100,13 +124,77 @@ def _apply_feishu_image_crop(inline_shape, image_path, image_data):
         else:
             blip_fill.insert(blip_fill.index(stretch), src_rect)
 
-        # The shape itself must use the cropped frame's aspect ratio. Setting
-        # InlineShape.height also synchronizes the inner a:xfrm dimensions.
-        inline_shape.height = max(1, int(round(inline_shape.width * frame_height / frame_width)))
+        # A source rectangle can have a different aspect ratio from the
+        # original image frame.  Match the shape to the cropped source area so
+        # Word does not stretch the remaining pixels into the old frame.
+        if crop_rect:
+            source_size = get_image_dimensions(image_path)
+            source_width, source_height = source_size or (frame_width, frame_height)
+            crop_width = crop_rect[2] - crop_rect[0]
+            crop_height = crop_rect[3] - crop_rect[1]
+            crop_ratio = (source_height * crop_height) / (source_width * crop_width)
+            inline_shape.height = max(1, int(round(inline_shape.width * crop_ratio)))
+        else:
+            inline_shape.height = max(1, int(round(inline_shape.width * frame_height / frame_width)))
         return True
     except Exception as exc:
         logger.warning(f'应用飞书图片裁剪失败: {exc}')
         return False
+
+
+def _normalize_feishu_crop(value):
+    """Return a validated ``(left, top, right, bottom)`` crop rectangle."""
+    if isinstance(value, str):
+        raw = value.strip()
+        try:
+            value = json.loads(raw)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            try:
+                value = [float(item) for item in re.split(r'[,\s]+', raw.strip('[]')) if item]
+            except (TypeError, ValueError):
+                return None
+    if not isinstance(value, (list, tuple)) or len(value) != 4:
+        return None
+    try:
+        rect = tuple(float(item) for item in value)
+    except (TypeError, ValueError):
+        return None
+    left, top, right, bottom = rect
+    if any(not math.isfinite(value) or value < 0 or value > 1 for value in rect):
+        return None
+    if right <= left or bottom <= top:
+        return None
+    return rect
+
+
+def extract_image_crops_from_content(content):
+    """Extract Docs AI image crop rectangles keyed by block id and token.
+
+    The public block API omits crop metadata, while ``docs_ai`` rendered XML
+    includes it on ``<img crop="[...]" ...>``.  Returning both identifiers
+    makes this robust to gateways that omit either the image id or source token.
+    """
+    if not isinstance(content, str) or not content.strip():
+        return {}
+    try:
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring('<root>' + content + '</root>')
+    except Exception as exc:
+        logger.warning(f'解析图片裁剪 XML 失败，跳过图片裁剪: {exc}')
+        return {}
+
+    result = {}
+    for element in root.iter():
+        if element.tag.rsplit('}', 1)[-1].lower() not in ('img', 'image'):
+            continue
+        crop = _normalize_feishu_crop(element.get('crop'))
+        if not crop:
+            continue
+        identifiers = (element.get('id'), element.get('src'), element.get('token'))
+        for identifier in identifiers:
+            if identifier:
+                result[identifier] = crop
+    return result
 
 
 def _get_svg_dimensions(svg_path, fallback_width_cm=15):
@@ -181,16 +269,25 @@ def _add_svg_to_docx(run, svg_path, width_cm=15, image_data=None):
     png_part = OpcPart(png_partname, 'image/png', png_blob, package)
     png_rid = part.relate_to(png_part, docx.opc.constants.RELATIONSHIP_TYPE.IMAGE)
 
-    # 计算尺寸；如果图片块的可见区域比例不同，则同步写入原生裁剪。
+    # 计算尺寸；裁剪后按源区域比例设置图形框，避免 SVG 被拉伸。
     cx, cy = _get_svg_dimensions(svg_path, width_cm)
     src_rect = ''
     if isinstance(image_data, dict):
-        crop = calculate_center_crop(
-            cx,
-            cy,
-            image_data.get('width'),
-            image_data.get('height'),
-        )
+        crop_rect = _normalize_feishu_crop(image_data.get('crop'))
+        if crop_rect:
+            crop = {
+                'left': crop_rect[0],
+                'top': crop_rect[1],
+                'right': 1.0 - crop_rect[2],
+                'bottom': 1.0 - crop_rect[3],
+            }
+        else:
+            crop = calculate_center_crop(
+                cx,
+                cy,
+                image_data.get('width'),
+                image_data.get('height'),
+            )
         if crop:
             src_rect = '<a:srcRect ' + ' '.join(
                 f'{attribute}="{int(round(crop[name] * 100000))}"'
@@ -203,9 +300,14 @@ def _add_svg_to_docx(run, svg_path, width_cm=15, image_data=None):
                 if crop[name] > 0
             ) + '/>'
             try:
-                frame_width = float(image_data.get('width'))
-                frame_height = float(image_data.get('height'))
-                cy = max(1, int(round(cx * frame_height / frame_width)))
+                if crop_rect:
+                    crop_width = crop_rect[2] - crop_rect[0]
+                    crop_height = crop_rect[3] - crop_rect[1]
+                    cy = max(1, int(round(cx * crop_height / crop_width)))
+                else:
+                    frame_width = float(image_data.get('width'))
+                    frame_height = float(image_data.get('height'))
+                    cy = max(1, int(round(cx * frame_height / frame_width)))
             except (TypeError, ValueError, ZeroDivisionError):
                 src_rect = ''
 
@@ -565,7 +667,7 @@ class NumberingInjector:
 
 class FeishuDocxConverter:
 
-    def __init__(self, blocks, client, img_dir, template_path=None, progress_cb=None, check_stop_func=None, unordered_list_style='default', ignore_mention=False, add_title=False, image_style=None, table_config=None, table_backgrounds=None):
+    def __init__(self, blocks, client, img_dir, template_path=None, progress_cb=None, check_stop_func=None, unordered_list_style='default', ignore_mention=False, add_title=False, image_style=None, table_config=None, table_backgrounds=None, image_crops=None):
         self.blocks = blocks
         self.client = client
         self.img_dir = img_dir
@@ -581,6 +683,7 @@ class FeishuDocxConverter:
             self.table_config and self.table_config.get('preserveTableBackground')
         )
         self.table_backgrounds = table_backgrounds if isinstance(table_backgrounds, dict) else {}
+        self.image_crops = image_crops if isinstance(image_crops, dict) else {}
         self.block_map = {b['block_id']: b for b in blocks}
         self.tree = self._build_tree()
         self.doc = None
@@ -1060,10 +1163,16 @@ class FeishuDocxConverter:
             logger.error(traceback.format_exc())
 
     def _handle_image(self, block, container):
-        image_data = block.get('image') or {}
+        image_data = dict(block.get('image') or {})
         token = image_data.get('token')
         if not token:
             return
+        crop = (
+            self.image_crops.get(block.get('block_id'))
+            or self.image_crops.get(token)
+        )
+        if crop:
+            image_data['crop'] = crop
         file_path = os.path.join(self.img_dir, f'{token}.png')
         if not os.path.exists(file_path):
             self._update_progress(message=f'正在下载图片 ({token[:8]}...)')

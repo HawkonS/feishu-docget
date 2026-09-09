@@ -60,6 +60,17 @@ def get_image_center_crop(image_path, frame_width, frame_height, tolerance=0.001
         return None
 
 
+def get_image_dimensions(image_path):
+    """Return raster dimensions as ``(width, height)`` when available."""
+    if not os.path.exists(image_path):
+        return None
+    try:
+        with Image.open(image_path) as image:
+            return image.size
+    except Exception:
+        return None
+
+
 def smart_crop(image_path, padding=50):
     if not os.path.exists(image_path):
         return False
