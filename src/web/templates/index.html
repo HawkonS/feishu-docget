@@ -1397,6 +1397,11 @@
                                 <input type="checkbox" id="tableAutoFit" checked>
                                 启用表格自适应
                             </label>
+                            <label class="inline-check" title="保留飞书原生表格块的单元格背景色，并覆盖所选表格样式的底色">
+                                <input type="checkbox" id="tablePreserveBackground">
+                                保留表格块背景颜色
+                            </label>
+                            <div style="font-size: 11px; color: #94a3b8; margin-top: 6px;">默认关闭；开启后，飞书表格单元格（含表头）的背景色优先于所选表格样式</div>
                         </div>
                         <div class="option-card">
                             <div class="option-card-title">表格布局</div>
@@ -2264,6 +2269,7 @@
                 forceClearIndent: document.getElementById("tableForceClearIndent").checked,
                 forceClearImageSpace: document.getElementById("tableForceClearImageSpace").checked,
                 autoFit: document.getElementById("tableAutoFit").checked,
+                preserveTableBackground: document.getElementById("tablePreserveBackground").checked,
                 width: document.getElementById("tableWidth").value.trim(),
                 minColWidth: minColWidth,
                 headerAlign: document.getElementById("tableHeaderAlign").value,
@@ -2674,6 +2680,7 @@
             document.getElementById("tableForceClearIndent").checked = true;
             document.getElementById("tableForceClearImageSpace").checked = true;
             document.getElementById("tableAutoFit").checked = true;
+            document.getElementById("tablePreserveBackground").checked = false;
             document.getElementById("tableWidth").value = "100%";
             document.getElementById("tableMinColWidth").value = "8";
             validateTableMinColWidth(document.getElementById("tableMinColWidth"));

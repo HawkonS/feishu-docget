@@ -177,7 +177,7 @@ sh tools/feishu2word.sh "https://example.feishu.cn/wiki/xxxx" \
 图片边框可通过 `--image-border`、`--image-border-color`、`--image-border-width` 和
 `--image-shrink-percent` 设置；缩小比例会将图片内容内缩到保留边框的外框中。
 
-CLI 已覆盖前台高级选项，包括标题、页边距、文档信息、正文样式、图片样式、表格布局、表格内容调整、自定义表格边框和代码块样式。完整用法执行：
+CLI 已覆盖前台高级选项，包括标题、页边距、文档信息、正文样式、图片样式、表格布局、表格内容调整、自定义表格边框、表格块背景颜色保留和代码块样式。完整用法执行：
 
 ```bash
 sh tools/feishu2word.sh --help
@@ -275,6 +275,8 @@ python3 tools/migrate_json_to_sqlite.py
 6. 黑表头 + 斑马纹
 
 这些样式在 `src/converters/docx/style_manager.py` 中维护，前台预览 CSS 和 Word 写入逻辑保持同一套语义。
+
+使用 `--table-preserve-background` 可保留飞书原生文档表格单元格的背景颜色（默认关闭）。开启后，单元格（包括表头）的原生底色优先于所选表格样式底色。
 
 导出的 Word 还会自动创建两个独立的段落预设样式：`表格正文` 和 `表格表头`。普通表格（包括电子表格）的正文行和首行段落分别使用这两个样式，便于在 Word 中批量调整。如果模板已经包含同名段落样式，会直接复用模板定义；如果同名样式属于其他类型，则保留模板样式并创建带 `（导出）` 后缀的段落样式。
 

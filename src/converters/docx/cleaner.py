@@ -1993,7 +1993,7 @@ def _apply_custom_code_block_style(table, config, ns):
 import logging
 logger = logging.getLogger('doc_download')
 
-def apply_custom_styles(doc, style_idx):
+def apply_custom_styles(doc, style_idx, preserve_table_background=False):
     if not style_idx:
         return
     logger.info(f'正在应用自定义样式，索引 {style_idx}')
@@ -2026,7 +2026,11 @@ def apply_custom_styles(doc, style_idx):
             logger.warning(f'检查代码块错误: {e}')
             continue
         count_tables += 1
-        TableStyleManager.apply_style(table, style_idx)
+        TableStyleManager.apply_style(
+            table,
+            style_idx,
+            preserve_table_background=preserve_table_background,
+        )
     logger.info(f'已应用样式于 {count_tables} 个表格和 {count_sheets} 个电子表格')
 
 def list_table_styles():

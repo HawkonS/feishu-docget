@@ -4,7 +4,10 @@ import shutil
 from docx import Document
 
 from src.converters.docx.cleaner import apply_custom_styles, apply_document_info, clean_document
-from src.converters.docx.converter import FeishuDocxConverter
+from src.converters.docx.converter import (
+    FeishuDocxConverter,
+    extract_table_backgrounds_from_content,
+)
 from src.core.bot_store import normalize_bot_config, validate_bot_credentials
 from src.core.config_loader import ConfigLoader, config
 from src.core.feishu_client import FeishuClient
@@ -98,6 +101,29 @@ def _process_document_with_client(client, doc_url, template_path=None, table_sty
         if not blocks:
             raise RuntimeError('未找到内容')
 
+        table_backgrounds = {}
+        preserve_table_background = bool(
+            isinstance(table_config, dict)
+            and table_config.get('preserveTableBackground')
+        )
+        if preserve_table_background:
+            # Native table-cell fills are omitted by the blocks endpoint.  The
+            # rendered Docs AI XML contains them as <td background-color=...>.
+            # This is an optional enrichment: if the tenant lacks this API
+            # scope, retain the normal export rather than failing the whole
+            # download.
+            try:
+                source_content = client.get_document_content(doc_id)
+                table_backgrounds = extract_table_backgrounds_from_content(
+                    source_content, blocks
+                )
+                logger.info(
+                    '已读取飞书原生表格背景色: %d 个表格',
+                    len(table_backgrounds),
+                )
+            except Exception as exc:
+                logger.warning(f'读取飞书原生表格背景色失败，继续导出: {exc}')
+
         total_blocks = len(blocks)
         if progress_cb:
             progress_cb(50, f'已成功获取文档信息，共 {total_blocks} 个块', 'success')
@@ -105,7 +131,7 @@ def _process_document_with_client(client, doc_url, template_path=None, table_sty
         docx_path = os.path.join(doc_folder, f'{base_title}.docx')
         _raise_if_stopped(check_stop_func)
 
-        converter = FeishuDocxConverter(blocks, client, master_img_dir, template_path=template_path, progress_cb=progress_cb, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, ignore_mention=ignore_mention, add_title=add_title, image_style=image_style)
+        converter = FeishuDocxConverter(blocks, client, master_img_dir, template_path=template_path, progress_cb=progress_cb, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, ignore_mention=ignore_mention, add_title=add_title, image_style=image_style, table_config=table_config, table_backgrounds=table_backgrounds)
         converter.process(docx_path)
 
         if progress_cb:
@@ -113,7 +139,14 @@ def _process_document_with_client(client, doc_url, template_path=None, table_sty
         if table_style:
             try:
                 doc = Document(docx_path)
-                apply_custom_styles(doc, int(table_style))
+                apply_custom_styles(
+                    doc,
+                    int(table_style),
+                    preserve_table_background=bool(
+                        isinstance(table_config, dict)
+                        and table_config.get('preserveTableBackground')
+                    ),
+                )
                 doc.save(docx_path)
             except Exception as e:
                 logger.warning(f'应用表格样式失败: {e}')
