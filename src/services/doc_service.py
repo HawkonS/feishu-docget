@@ -6,6 +6,7 @@ from docx import Document
 from src.converters.docx.cleaner import apply_custom_styles, apply_document_info, clean_document
 from src.converters.docx.converter import (
     FeishuDocxConverter,
+    extract_image_crops_from_content,
     extract_table_backgrounds_from_content,
 )
 from src.core.bot_store import normalize_bot_config, validate_bot_credentials
@@ -102,27 +103,28 @@ def _process_document_with_client(client, doc_url, template_path=None, table_sty
             raise RuntimeError('未找到内容')
 
         table_backgrounds = {}
+        image_crops = {}
         preserve_table_background = bool(
             isinstance(table_config, dict)
             and table_config.get('preserveTableBackground')
         )
-        if preserve_table_background:
-            # Native table-cell fills are omitted by the blocks endpoint.  The
-            # rendered Docs AI XML contains them as <td background-color=...>.
-            # This is an optional enrichment: if the tenant lacks this API
-            # scope, retain the normal export rather than failing the whole
-            # download.
+        has_images = any(block.get('block_type') == 27 for block in blocks)
+        if preserve_table_background or has_images:
+            # Native table-cell fills and image crop rectangles are omitted by
+            # the blocks endpoint.  The rendered Docs AI XML contains both
+            # properties, so fetch it once and enrich the normal block data.
+            # This is optional: if the tenant lacks this API scope, retain the
+            # normal export rather than failing the whole download.
             try:
                 source_content = client.get_document_content(doc_id)
-                table_backgrounds = extract_table_backgrounds_from_content(
-                    source_content, blocks
-                )
-                logger.info(
-                    '已读取飞书原生表格背景色: %d 个表格',
-                    len(table_backgrounds),
-                )
+                if preserve_table_background:
+                    table_backgrounds = extract_table_backgrounds_from_content(source_content, blocks)
+                    logger.info('已读取飞书原生表格背景色: %d 个表格', len(table_backgrounds))
+                if has_images:
+                    image_crops = extract_image_crops_from_content(source_content)
+                    logger.info('已读取飞书图片裁剪区域: %d 个标识', len(image_crops))
             except Exception as exc:
-                logger.warning(f'读取飞书原生表格背景色失败，继续导出: {exc}')
+                logger.warning(f'读取飞书图片/表格视觉属性失败，继续导出: {exc}')
 
         total_blocks = len(blocks)
         if progress_cb:
@@ -131,7 +133,7 @@ def _process_document_with_client(client, doc_url, template_path=None, table_sty
         docx_path = os.path.join(doc_folder, f'{base_title}.docx')
         _raise_if_stopped(check_stop_func)
 
-        converter = FeishuDocxConverter(blocks, client, master_img_dir, template_path=template_path, progress_cb=progress_cb, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, ignore_mention=ignore_mention, add_title=add_title, image_style=image_style, table_config=table_config, table_backgrounds=table_backgrounds)
+        converter = FeishuDocxConverter(blocks, client, master_img_dir, template_path=template_path, progress_cb=progress_cb, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, ignore_mention=ignore_mention, add_title=add_title, image_style=image_style, table_config=table_config, table_backgrounds=table_backgrounds, image_crops=image_crops)
         converter.process(docx_path)
 
         if progress_cb:

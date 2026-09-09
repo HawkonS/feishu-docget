@@ -9,7 +9,10 @@ from docx.shared import Cm
 from PIL import Image
 
 from src.converters.docx.cleaner import clean_document, _normalize_image_border
-from src.converters.docx.converter import _apply_feishu_image_crop
+from src.converters.docx.converter import (
+    _apply_feishu_image_crop,
+    extract_image_crops_from_content,
+)
 from src.core.image_processor import calculate_center_crop
 
 
@@ -88,6 +91,43 @@ class ImageStyleTests(unittest.TestCase):
                 xml = archive.read('word/document.xml').decode('utf-8')
             self.assertIn('<a:srcRect l="25000" r="25000"/>', xml)
             self.assertIn('cx="3600000" cy="3600000"', xml)
+
+    def test_docs_ai_crop_rectangle_is_written_as_source_margins(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            image_path = os.path.join(workspace, 'source.png')
+            output_path = os.path.join(workspace, 'cropped.docx')
+            Image.new('RGB', (400, 200), color='red').save(image_path)
+
+            document = Document()
+            shape = document.add_paragraph().add_run().add_picture(image_path, width=Cm(10))
+            self.assertTrue(_apply_feishu_image_crop(
+                shape,
+                image_path,
+                {
+                    'width': 400,
+                    'height': 200,
+                    'crop': [0.0, 0.1, 1.0, 0.6],
+                },
+            ))
+            document.save(output_path)
+
+            with zipfile.ZipFile(output_path) as archive:
+                xml = archive.read('word/document.xml').decode('utf-8')
+            self.assertIn('<a:srcRect t="10000" b="40000"/>', xml)
+            # The selected source area is 400x100, so the shape is 4:1 rather
+            # than retaining the original 2:1 frame and stretching the crop.
+            self.assertIn('cx="3600000" cy="900000"', xml)
+
+    def test_docs_ai_image_crop_xml_is_indexed_by_block_id_and_token(self):
+        content = (
+            '<img id="blk-image" src="media-token" '
+            'crop="[0.000000,0.460900,1.000000,0.920100]" '
+            'width="1152" height="492"/>'
+        )
+        crops = extract_image_crops_from_content(content)
+        expected = (0.0, 0.4609, 1.0, 0.9201)
+        self.assertEqual(crops['blk-image'], expected)
+        self.assertEqual(crops['media-token'], expected)
 
     def test_uncropped_feishu_image_keeps_original_picture_xml(self):
         with tempfile.TemporaryDirectory() as workspace:
