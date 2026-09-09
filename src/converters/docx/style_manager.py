@@ -1,4 +1,5 @@
 import logging
+from copy import deepcopy
 
 from docx.enum.style import WD_STYLE_TYPE
 from docx.shared import RGBColor
@@ -161,7 +162,36 @@ class TableStyleManager:
         return '\n        /* 样式 1: 深蓝表头 + 白字加粗 */\n        table.style-1 th { background: #445bdc; color: white; font-weight: bold; border: 1px solid #D9D9D9; }\n        table.style-1 td { background: white; color: black; border: 1px solid #D9D9D9; }\n        \n        /* 样式 2: 浅蓝表头 + 网格边框 */\n        table.style-2 th { background: #E6F3FF; color: black; font-weight: bold; border: 1px solid #999; }\n        table.style-2 td { background: white; color: black; border: 1px solid #999; }\n        \n        /* 样式 3: 浅灰表头 + 细网格边框 */\n        table.style-3 th { background: #F2F2F2; color: black; border: 1px solid #D9D9D9; }\n        table.style-3 td { background: white; color: black; border: 1px solid #D9D9D9; }\n        \n        /* 样式 4: 全黑实线 (2px) */\n        table.style-4 th, table.style-4 td { background: white; color: black; border: 2px solid black; }\n        \n        /* 样式 5: 上下黑边 + 中间灰竖线 */\n        table.style-5 th, table.style-5 td { border: 1px solid #D9D9D9; color: black; background: white; }\n        table.style-5 tr:first-child th, table.style-5 tr:first-child td { border-top: 1px solid black; }\n        table.style-5 tr:last-child th, table.style-5 tr:last-child td { border-bottom: 1px solid black; }\n        \n        /* 样式 6: 黑表头 + 斑马纹 */\n        table.style-6 thead tr th, table.style-6 thead tr td { background: black; color: white; font-weight: bold; border: 1px solid #D9D9D9; }\n        table.style-6 tbody tr:nth-child(odd) td, table.style-6 tbody tr:nth-child(odd) th { background: #F2F2F2; }\n        table.style-6 tbody tr:nth-child(even) td, table.style-6 tbody tr:nth-child(even) th { background: white; }\n        table.style-6 td, table.style-6 th { border: 1px solid #D9D9D9; color: black; }\n        '
 
     @staticmethod
-    def apply_style(table, style_id):
+    def apply_style(table, style_id, preserve_table_background=False):
+        preserved_shading = None
+        preserved_text_colors = None
+        if preserve_table_background:
+            # Capture direct cell fills before applying a preset.  The preset
+            # intentionally writes its own shading, so restoring these after
+            # the preset is what makes the opt-in behavior win over header or
+            # zebra-striping colors.
+            preserved_shading = {}
+            preserved_text_colors = {}
+            for r_idx, c_idx, tc in TableStyleManager._iter_cells(table):
+                tc_pr = tc.get_or_add_tcPr()
+                shd = tc_pr.find(qn('w:shd'))
+                if shd is not None:
+                    fill = shd.get(qn('w:fill'))
+                    if fill and fill.lower() != 'auto':
+                        preserved_shading[(r_idx, c_idx)] = fill
+                        # Preserving the cell fill should also preserve the
+                        # source text color.  Preset 1/6 otherwise turn
+                        # headers white, which is unreadable on a light
+                        # Feishu fill.  Keep references to the original runs
+                        # so the preset can still provide borders/boldness for
+                        # cells without a source fill.
+                        colors = []
+                        for paragraph in tc.p_lst:
+                            for run in paragraph.r_lst:
+                                r_pr = run.find(qn('w:rPr'))
+                                color = r_pr.find(qn('w:color')) if r_pr is not None else None
+                                colors.append((run, deepcopy(color) if color is not None else None))
+                        preserved_text_colors[(r_idx, c_idx)] = colors
         TableStyleManager._clear_table_borders(table)
         try:
             style_id = int(style_id)
@@ -179,6 +209,22 @@ class TableStyleManager:
             TableStyleManager._apply_style_5(table)
         elif style_id == 6:
             TableStyleManager._apply_style_6(table)
+        if preserved_shading:
+            for r_idx, c_idx, tc in TableStyleManager._iter_cells(table):
+                color = preserved_shading.get((r_idx, c_idx))
+                if color:
+                    TableStyleManager._apply_shading(tc, color)
+                    for run, original_color in (preserved_text_colors or {}).get((r_idx, c_idx), []):
+                        r_pr = run.find(qn('w:rPr'))
+                        if r_pr is None and original_color is None:
+                            continue
+                        if r_pr is None:
+                            r_pr = run.get_or_add_rPr()
+                        current_color = r_pr.find(qn('w:color'))
+                        if current_color is not None:
+                            r_pr.remove(current_color)
+                        if original_color is not None:
+                            r_pr.append(deepcopy(original_color))
 
     @staticmethod
     def apply_default_sheet_style(table):

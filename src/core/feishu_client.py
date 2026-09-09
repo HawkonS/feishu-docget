@@ -103,6 +103,59 @@ class FeishuClient:
             return {}
         return res.get('data', {}).get('document', {}) or {}
 
+    def get_document_content(self, doc_id):
+        """Fetch the rendered XML content of a document.
+
+        The regular Docx blocks endpoint intentionally omits some visual
+        properties of native document blocks (notably table-cell fills).  The
+        Docs AI fetch endpoint includes those properties on the rendered XML,
+        so callers can opt into it when they need visual fidelity.
+        """
+        token = self.get_token()
+        if not token:
+            return ''
+        url = f'https://open.feishu.cn/open-apis/docs_ai/v1/documents/{doc_id}/fetch'
+        headers = {
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json',
+            'Connection': 'keep-alive',
+        }
+        response = None
+        for attempt in range(3):
+            try:
+                response = self.session.post(url, headers=headers, json={}, timeout=30)
+                break
+            except Exception as exc:
+                self.logger.warning(
+                    f'获取文档渲染内容错误 (尝试 {attempt + 1}/3): {exc}'
+                )
+                if attempt == 2:
+                    self.logger.error(f'获取文档渲染内容最终失败: {exc}')
+                    raise RuntimeError(f'请求飞书接口失败: {exc}')
+                time.sleep(1)
+
+        try:
+            payload = response.json()
+        except Exception as exc:
+            self.logger.error(f'解析文档渲染内容响应失败: {exc}')
+            raise RuntimeError('飞书接口返回了无效响应')
+
+        code = payload.get('code')
+        if code != 0:
+            msg = payload.get('msg', '')
+            self.logger.error(f'获取文档渲染内容失败: code={code}, msg={msg}')
+            if self._is_permission_error(code, msg, response.status_code):
+                raise self._permission_error('获取文档渲染内容失败')
+            raise RuntimeError(f'飞书接口错误 ({code}): {msg}')
+
+        document = (payload.get('data') or {}).get('document') or {}
+        content = document.get('content')
+        if content is None:
+            # Keep compatibility with older gateways that returned content
+            # directly under data.
+            content = (payload.get('data') or {}).get('content', '')
+        return content if isinstance(content, str) else ''
+
     def get_blocks(self, doc_id):
         token = self.get_token()
         if not token:

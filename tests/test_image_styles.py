@@ -9,6 +9,8 @@ from docx.shared import Cm
 from PIL import Image
 
 from src.converters.docx.cleaner import clean_document, _normalize_image_border
+from src.converters.docx.converter import _apply_feishu_image_crop
+from src.core.image_processor import calculate_center_crop
 
 
 class ImageStyleTests(unittest.TestCase):
@@ -56,6 +58,50 @@ class ImageStyleTests(unittest.TestCase):
             self.assertIn('w="25400"', xml)  # 2pt in DrawingML EMU
             self.assertIn('srgbClr val="112233"', xml)
             self.assertIn('prstDash val="solid"', xml)
+
+    def test_center_crop_calculation_uses_feishu_frame_ratio(self):
+        crop = calculate_center_crop(400, 200, 100, 100)
+        self.assertEqual(crop, {
+            'left': 0.25,
+            'top': 0.0,
+            'right': 0.25,
+            'bottom': 0.0,
+        })
+        self.assertIsNone(calculate_center_crop(400, 200, 200, 100))
+
+    def test_feishu_crop_is_written_as_native_docx_source_rectangle(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            image_path = os.path.join(workspace, 'wide.png')
+            output_path = os.path.join(workspace, 'cropped.docx')
+            Image.new('RGB', (400, 200), color='red').save(image_path)
+
+            document = Document()
+            shape = document.add_paragraph().add_run().add_picture(image_path, width=Cm(10))
+            self.assertTrue(_apply_feishu_image_crop(
+                shape,
+                image_path,
+                {'width': 100, 'height': 100},
+            ))
+            document.save(output_path)
+
+            with zipfile.ZipFile(output_path) as archive:
+                xml = archive.read('word/document.xml').decode('utf-8')
+            self.assertIn('<a:srcRect l="25000" r="25000"/>', xml)
+            self.assertIn('cx="3600000" cy="3600000"', xml)
+
+    def test_uncropped_feishu_image_keeps_original_picture_xml(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            image_path = os.path.join(workspace, 'wide.png')
+            Image.new('RGB', (400, 200), color='blue').save(image_path)
+
+            document = Document()
+            shape = document.add_paragraph().add_run().add_picture(image_path, width=Cm(10))
+            self.assertFalse(_apply_feishu_image_crop(
+                shape,
+                image_path,
+                {'width': 200, 'height': 100},
+            ))
+            self.assertNotIn('srcRect', shape._inline.xml)
 
 
 if __name__ == '__main__':

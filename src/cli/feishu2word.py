@@ -220,6 +220,7 @@ def build_table_config(args):
         "forceClearIndent": args.table_force_clear_indent,
         "forceClearImageSpace": args.table_force_clear_image_space,
         "autoFit": args.table_auto_fit,
+        "preserveTableBackground": args.table_preserve_background,
         "width": args.table_width,
         "minColWidth": args.table_min_col_width,
         "headerAlign": args.table_header_align,
@@ -395,6 +396,7 @@ def create_parser():
     table.add_argument("--table-force-clear-indent", action=argparse.BooleanOptionalAction, default=True, help="强制清除表格缩进")
     table.add_argument("--table-force-clear-image-space", action=argparse.BooleanOptionalAction, default=True, help="强制清除表格图片段前间距")
     table.add_argument("--table-auto-fit", action=argparse.BooleanOptionalAction, default=True, help="启用表格自适应")
+    table.add_argument("--table-preserve-background", action=argparse.BooleanOptionalAction, default=False, help="保留飞书原生表格块的单元格背景颜色，并覆盖所选表格样式底色")
     table.add_argument("--table-width", default="100%", help="表格宽度，如 100%% 或 15cm")
     table.add_argument("--table-min-col-width", type=bounded_int(1, 100), default=8, help="表格单列最小宽度，单位字符")
     table.add_argument("--table-header-align", choices=("center", "left", "right"), default="center", help="表头文字对齐")

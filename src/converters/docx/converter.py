@@ -9,7 +9,7 @@ from docx.oxml import OxmlElement, parse_xml
 import docx.opc.constants
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
 from src.core.config_loader import ConfigLoader
-from src.core.image_processor import smart_crop
+from src.core.image_processor import calculate_center_crop, get_image_center_crop, smart_crop
 from src.converters.docx.style_manager import TableStyleManager
 
 
@@ -47,6 +47,7 @@ _SVG_XML_TEMPLATE = (
     '<a:blip r:embed="{png_rid}"><a:extLst>'
     '<a:ext uri="{svg_ext_uri}"><asvg:svgBlip r:embed="{svg_rid}"/>'
     '</a:ext></a:extLst></a:blip>'
+    '{src_rect}'
     '<a:stretch><a:fillRect/></a:stretch>'
     '</pic:blipFill>'
     '<pic:spPr>'
@@ -61,6 +62,51 @@ _SVG_XML_TEMPLATE = (
     '</w:r>'
 )
 _SVG_EXT_URI = 'http://schemas.microsoft.com/office/drawing/2016/SVG/main'
+
+
+def _apply_feishu_image_crop(inline_shape, image_path, image_data):
+    """Apply the visible Feishu image frame as a native DrawingML crop."""
+    if not isinstance(image_data, dict):
+        return False
+    frame_width = image_data.get('width')
+    frame_height = image_data.get('height')
+    crop = get_image_center_crop(image_path, frame_width, frame_height)
+    if not crop:
+        return False
+
+    try:
+        frame_width = float(frame_width)
+        frame_height = float(frame_height)
+        blip_fill = inline_shape._inline.graphic.graphicData.pic.blipFill
+        existing = blip_fill.find(qn('a:srcRect'))
+        if existing is not None:
+            blip_fill.remove(existing)
+
+        src_rect = OxmlElement('a:srcRect')
+        drawingml_names = {
+            'left': 'l',
+            'top': 't',
+            'right': 'r',
+            'bottom': 'b',
+        }
+        for name, attribute in drawingml_names.items():
+            value = int(round(crop[name] * 100000))
+            if value > 0:
+                src_rect.set(attribute, str(value))
+
+        stretch = blip_fill.find(qn('a:stretch'))
+        if stretch is None:
+            blip_fill.append(src_rect)
+        else:
+            blip_fill.insert(blip_fill.index(stretch), src_rect)
+
+        # The shape itself must use the cropped frame's aspect ratio. Setting
+        # InlineShape.height also synchronizes the inner a:xfrm dimensions.
+        inline_shape.height = max(1, int(round(inline_shape.width * frame_height / frame_width)))
+        return True
+    except Exception as exc:
+        logger.warning(f'应用飞书图片裁剪失败: {exc}')
+        return False
 
 
 def _get_svg_dimensions(svg_path, fallback_width_cm=15):
@@ -110,7 +156,7 @@ def _create_placeholder_png(path, width=100, height=75):
     return True
 
 
-def _add_svg_to_docx(run, svg_path, width_cm=15):
+def _add_svg_to_docx(run, svg_path, width_cm=15, image_data=None):
     """将 SVG 直接嵌入 DOCX（Word 2019+/M365 原生渲染），附带 PNG 回退"""
     from docx.opc.part import Part as OpcPart
     from docx.opc.packuri import PackURI
@@ -135,8 +181,33 @@ def _add_svg_to_docx(run, svg_path, width_cm=15):
     png_part = OpcPart(png_partname, 'image/png', png_blob, package)
     png_rid = part.relate_to(png_part, docx.opc.constants.RELATIONSHIP_TYPE.IMAGE)
 
-    # 计算尺寸
+    # 计算尺寸；如果图片块的可见区域比例不同，则同步写入原生裁剪。
     cx, cy = _get_svg_dimensions(svg_path, width_cm)
+    src_rect = ''
+    if isinstance(image_data, dict):
+        crop = calculate_center_crop(
+            cx,
+            cy,
+            image_data.get('width'),
+            image_data.get('height'),
+        )
+        if crop:
+            src_rect = '<a:srcRect ' + ' '.join(
+                f'{attribute}="{int(round(crop[name] * 100000))}"'
+                for name, attribute in (
+                    ('left', 'l'),
+                    ('top', 't'),
+                    ('right', 'r'),
+                    ('bottom', 'b'),
+                )
+                if crop[name] > 0
+            ) + '/>'
+            try:
+                frame_width = float(image_data.get('width'))
+                frame_height = float(image_data.get('height'))
+                cy = max(1, int(round(cx * frame_height / frame_width)))
+            except (TypeError, ValueError, ZeroDivisionError):
+                src_rect = ''
 
     # 构建 Drawing XML 并替换 run 内容
     doc_pr_id = abs(hash(svg_path)) % 100000
@@ -144,6 +215,7 @@ def _add_svg_to_docx(run, svg_path, width_cm=15):
         cx=cx, cy=cy, doc_pr_id=doc_pr_id,
         png_rid=png_rid, svg_rid=svg_rid,
         svg_ext_uri=_SVG_EXT_URI,
+        src_rect=src_rect,
     )
     run_elem = parse_xml(xml_str)
     rPr = run._r.find(qn('w:rPr'))
@@ -174,6 +246,202 @@ FEISHU_BG_TO_WORD_HIGHLIGHT = {
     14: 'BLACK',            # 灰 -> 黑色
     15: 'GRAY_25',          # 浅灰 -> 25% 灰
 }
+
+# Table-cell fills are returned by some versions of the Feishu document API
+# as the same palette indexes used by text highlights.  Keep a concrete RGB
+# palette for Word cell shading, while also accepting a literal hex color
+# when the API (or a proxy) returns one.  The values intentionally use the
+# light palette for the first seven entries so a light Feishu fill remains
+# readable in the exported document.
+FEISHU_TABLE_BG_COLORS = {
+    1: 'FDE2E2',  # 浅红
+    2: 'FCE8D5',  # 浅橙
+    3: 'FFF4CC',  # 浅黄
+    4: 'E4F7D2',  # 浅绿
+    5: 'DDEBFF',  # 浅蓝
+    6: 'EFE1FF',  # 浅紫
+    7: 'D9D9D9',  # 中灰
+    8: 'FF7D7D',  # 红
+    9: 'FFBA5C',  # 橙
+    10: 'FFE66D',  # 黄
+    11: '7ED321',  # 绿
+    12: '4A90E2',  # 蓝
+    13: '9013FE',  # 紫
+    14: '8F959E',  # 灰
+    15: 'F2F3F5',  # 浅灰
+}
+
+
+def normalize_table_background_color(value):
+    """Normalize a Feishu table-cell background value to ``RRGGBB``.
+
+    The public SDK currently leaves ``table_cell`` untyped, and deployments
+    have returned both palette indexes and literal colors.  Supporting the
+    common representations here keeps the feature backwards compatible and
+    makes malformed values a harmless no-op.
+    """
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, dict):
+        for key in ('hex', 'hex_color', 'rgb', 'rgb_color', 'rgbColor', 'color', 'value', 'background_color', 'backgroundColor'):
+            if key in value:
+                color = normalize_table_background_color(value.get(key))
+                if color:
+                    return color
+        # Some responses encode RGB as separate channels.
+        if all(key in value for key in ('red', 'green', 'blue')):
+            try:
+                channels = [int(value[key]) for key in ('red', 'green', 'blue')]
+                if all(0 <= channel <= 255 for channel in channels):
+                    return ''.join(f'{channel:02X}' for channel in channels)
+            except (TypeError, ValueError):
+                pass
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            index = int(value)
+        except (TypeError, ValueError):
+            return None
+        return FEISHU_TABLE_BG_COLORS.get(index)
+    raw = str(value).strip()
+    if not raw:
+        return None
+    if raw.startswith('#'):
+        raw = raw[1:]
+    if len(raw) == 8:
+        # Accommodate either AARRGGBB or RRGGBBAA values.  Word shading does
+        # not support alpha, so retain the RGB portion only.  Fully opaque or
+        # fully transparent alpha prefixes are the unambiguous AARRGGBB form;
+        # other 8-digit values are treated as RRGGBBAA.
+        if raw[:2].lower() == '0x' or raw[:2].lower() in {'00', 'ff'}:
+            raw = raw[2:]
+        else:
+            raw = raw[:6]
+    if len(raw) == 6 and all(ch in '0123456789abcdefABCDEF' for ch in raw):
+        return raw.upper()
+    # Accept CSS-style rgb()/rgba() values returned by some integrations.
+    import re
+    match = re.fullmatch(r'rgba?\(\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*[, ]\s*(\d{1,3})(?:\s*[,/]\s*[^)]*)?\s*\)', raw, re.IGNORECASE)
+    if match:
+        channels = [int(match.group(i)) for i in range(1, 4)]
+        if all(0 <= channel <= 255 for channel in channels):
+            return ''.join(f'{channel:02X}' for channel in channels)
+    if raw.isdigit():
+        return FEISHU_TABLE_BG_COLORS.get(int(raw))
+    return FEISHU_TABLE_BG_COLORS.get(raw.casefold())
+
+
+def extract_table_cell_background(block):
+    """Read a cell fill from the loosely-typed Feishu table-cell payload."""
+    if not isinstance(block, dict):
+        return None
+    candidates = [block]
+    payload = block.get('table_cell')
+    if isinstance(payload, dict):
+        candidates.insert(0, payload)
+    elif payload is not None:
+        color = normalize_table_background_color(payload)
+        if color:
+            return color
+    for candidate in candidates:
+        for key in (
+            'background_color', 'backgroundColor', 'background_color_index',
+            'backgroundColorIndex', 'bg_color', 'bgColor', 'fill_color',
+            'fillColor', 'background', 'color',
+        ):
+            if key in candidate:
+                color = normalize_table_background_color(candidate.get(key))
+                if color:
+                    return color
+        # A nested property/style object is used by a few API gateways.
+        for key in ('property', 'style'):
+            nested = candidate.get(key)
+            if isinstance(nested, dict):
+                color = extract_table_cell_background(nested)
+                if color:
+                    return color
+    return None
+
+
+def extract_table_backgrounds_from_content(content, blocks):
+    """Extract native table-cell fills from the Docs AI rendered XML.
+
+    ``docx/v1/.../blocks`` currently returns ``table_cell: {}`` even when a
+    cell has a fill.  The rendered Docs AI XML keeps that visual information
+    on each ``td`` as ``background-color="rgb(...)"``.  Paragraph IDs inside
+    each ``td`` let us join the XML back to the block API's table-cell IDs,
+    without trying to reproduce rowspan/colspan layout ourselves.
+
+    The return value is ``{table_block_id: {cell_block_id: 'RRGGBB'}}``.
+    Malformed or incomplete content is treated as an empty mapping so this
+    optional fidelity feature cannot break an otherwise valid export.
+    """
+    if not isinstance(content, str) or not content.strip() or not isinstance(blocks, (list, tuple)):
+        return {}
+
+    block_map = {
+        block.get('block_id'): block
+        for block in blocks
+        if isinstance(block, dict) and block.get('block_id')
+    }
+    parent_by_child = {}
+    for block in block_map.values():
+        parent_id = block.get('block_id')
+        for child_id in block.get('children') or []:
+            if child_id and parent_id:
+                parent_by_child[child_id] = parent_id
+
+    def table_cell_ancestor(block_id, table_id):
+        """Find the table-cell ancestor of a paragraph within one table."""
+        seen = set()
+        current = block_id
+        while current and current not in seen:
+            seen.add(current)
+            block = block_map.get(current) or {}
+            if block.get('block_type') == 32:
+                if block.get('parent_id') == table_id:
+                    return current
+                # A nested table may contain a cell block from another table;
+                # don't accidentally associate it with the outer table.
+                return None
+            current = block.get('parent_id') or parent_by_child.get(current)
+        return None
+
+    try:
+        import xml.etree.ElementTree as ET
+        # Fetch returns a sequence of top-level XML blocks rather than one
+        # document element, so wrap it before parsing.
+        root = ET.fromstring('<root>' + content + '</root>')
+    except Exception as exc:
+        logger.warning(f'解析文档渲染 XML 失败，跳过表格背景色: {exc}')
+        return {}
+
+    result = {}
+    for table in root.iter('table'):
+        table_id = table.get('id')
+        if not table_id:
+            continue
+        table_result = result.setdefault(table_id, {})
+        for td in table.iter('td'):
+            raw_color = td.get('background-color') or td.get('backgroundColor')
+            color = normalize_table_background_color(raw_color)
+            if not color:
+                continue
+            # The first paragraph ID is sufficient to identify the owning
+            # table-cell block.  Empty cells still carry an empty paragraph ID
+            # in the current API; cells without one are safely skipped.
+            cell_block_id = None
+            for descendant in td.iter():
+                paragraph_id = descendant.get('id') if descendant.tag == 'p' else None
+                if paragraph_id:
+                    cell_block_id = table_cell_ancestor(paragraph_id, table_id)
+                    if cell_block_id:
+                        break
+            if cell_block_id:
+                table_result[cell_block_id] = color
+        if not table_result:
+            result.pop(table_id, None)
+    return result
 
 def add_hyperlink(paragraph, url, text, color='0000FF', underline=True):
     part = paragraph.part
@@ -297,7 +565,7 @@ class NumberingInjector:
 
 class FeishuDocxConverter:
 
-    def __init__(self, blocks, client, img_dir, template_path=None, progress_cb=None, check_stop_func=None, unordered_list_style='default', ignore_mention=False, add_title=False, image_style=None):
+    def __init__(self, blocks, client, img_dir, template_path=None, progress_cb=None, check_stop_func=None, unordered_list_style='default', ignore_mention=False, add_title=False, image_style=None, table_config=None, table_backgrounds=None):
         self.blocks = blocks
         self.client = client
         self.img_dir = img_dir
@@ -308,6 +576,11 @@ class FeishuDocxConverter:
         self.ignore_mention = ignore_mention
         self.add_title = add_title
         self.image_style = image_style if isinstance(image_style, dict) else None
+        self.table_config = table_config if isinstance(table_config, dict) else None
+        self.preserve_table_background = bool(
+            self.table_config and self.table_config.get('preserveTableBackground')
+        )
+        self.table_backgrounds = table_backgrounds if isinstance(table_backgrounds, dict) else {}
         self.block_map = {b['block_id']: b for b in blocks}
         self.tree = self._build_tree()
         self.doc = None
@@ -822,7 +1095,12 @@ class FeishuDocxConverter:
                 run = p.add_run()
                 if is_svg:
                     logger.info(f'检测到 SVG 图片，直接嵌入 DOCX: {token}')
-                    _add_svg_to_docx(run, file_path, width_cm=width_for_insert)
+                    _add_svg_to_docx(
+                        run,
+                        file_path,
+                        width_cm=width_for_insert,
+                        image_data=image_data,
+                    )
                     # SVG 内容可能变动，删除缓存确保下次重新下载
                     try:
                         os.remove(file_path)
@@ -830,7 +1108,12 @@ class FeishuDocxConverter:
                     except Exception as e:
                         logger.warning(f'清除 SVG 缓存失败: {token}: {e}')
                 else:
-                    run.add_picture(file_path, width=Cm(width_for_insert))
+                    inline_shape = run.add_picture(file_path, width=Cm(width_for_insert))
+                    if _apply_feishu_image_crop(inline_shape, file_path, image_data):
+                        logger.info(
+                            f'已按飞书可见区域裁剪图片: {token} '
+                            f'({image_data.get("width")}x{image_data.get("height")})'
+                        )
             except Exception as e:
                 logger.error(f'添加图片失败 {token}: {e}')
         # 渲染图片描述（caption），按正文段落处理
@@ -992,6 +1275,13 @@ class FeishuDocxConverter:
                         except Exception as e:
                             logger.warning(f'预合并错误在 {r},{c}: {e}')
             header_row = props.get('header_row', False)
+            # Newer Feishu responses may expose cell fills on the cell block;
+            # older gateways have also returned a parallel list on the table
+            # payload.  Both are supported, with an explicit cell value taking
+            # precedence over the fallback list/table-level value.
+            table_backgrounds = self._extract_table_backgrounds(
+                table_data, props, len(cells), block
+            )
             covered_cells = set()
             for idx, cell_id in enumerate(cells):
                 r = idx // cols
@@ -1018,6 +1308,17 @@ class FeishuDocxConverter:
                         continue
                     doc_cell = doc_table.cell(r, c)
                     doc_cell._element.clear_content()
+                    if self.preserve_table_background:
+                        table_colors = self.table_backgrounds.get(block.get('block_id'), {})
+                        color = table_colors.get(cell_id) if isinstance(table_colors, dict) else None
+                        # Keep support for any future/legacy block payload that
+                        # does expose a fill directly on ``table_cell``.
+                        if not color:
+                            color = extract_table_cell_background(cell_block)
+                        if not color and idx < len(table_backgrounds):
+                            color = table_backgrounds[idx]
+                        if color:
+                            self._set_cell_shading(doc_cell, color)
                     self._render_children(cell_block, doc_cell, child_level=0)
                     if not doc_cell.paragraphs:
                         doc_cell.add_paragraph()
@@ -1034,6 +1335,47 @@ class FeishuDocxConverter:
         except Exception as e:
             logger.error(f"创建表格失败 {block.get('block_id')}: {e}")
             logger.error(traceback.format_exc())
+
+    @staticmethod
+    def _extract_table_backgrounds(table_data, props, cell_count, block=None):
+        """Return normalized per-cell fills from alternate API response shapes."""
+        if not isinstance(table_data, dict):
+            return []
+        candidates = []
+        payloads = [table_data, props if isinstance(props, dict) else {}]
+        if isinstance(block, dict):
+            payloads.append(block)
+        for payload in payloads:
+            for key in (
+                'background_colors', 'backgroundColors',
+                'cell_background_colors', 'cellBackgroundColors',
+                'cell_background', 'cellBackground',
+            ):
+                value = payload.get(key)
+                if isinstance(value, (list, tuple)):
+                    candidates = list(value)
+                    break
+                if isinstance(value, dict):
+                    candidates = [value.get(str(i), value.get(i)) for i in range(cell_count)]
+                    break
+            if candidates:
+                break
+        if not candidates:
+            # A scalar table-level fill is a useful fallback for API versions
+            # that expose one color for the whole table.
+            for payload in payloads:
+                for key in (
+                    'background_color', 'backgroundColor', 'background_color_index',
+                    'backgroundColorIndex', 'bg_color', 'bgColor', 'fill_color',
+                    'fillColor', 'background',
+                ):
+                    if key in payload:
+                        color = normalize_table_background_color(payload.get(key))
+                        return [color] * cell_count if color else []
+        result = [normalize_table_background_color(value) for value in candidates[:cell_count]]
+        if len(result) < cell_count:
+            result.extend([None] * (cell_count - len(result)))
+        return result
 
     def _handle_table_cell(self, block, container):
         self._render_children(block, container, child_level=0)
@@ -1135,6 +1477,9 @@ class FeishuDocxConverter:
     def _set_cell_shading(self, cell, color_hex):
         tc = cell._tc
         tcPr = tc.get_or_add_tcPr()
+        existing = tcPr.find(qn('w:shd'))
+        if existing is not None:
+            tcPr.remove(existing)
         shd = OxmlElement('w:shd')
         shd.set(qn('w:fill'), color_hex)
         tcPr.append(shd)
