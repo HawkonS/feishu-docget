@@ -464,6 +464,19 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertIn('bootstrap.Modal.getOrCreateInstance', html)
         self.assertNotIn('modal.style.display = "flex"', html)
 
+    def test_admin_dashboard_defaults_to_download_stats(self):
+        with self.client.session_transaction() as session:
+            session['is_admin'] = True
+            session['user'] = {'open_id': SYSTEM_ADMIN_OPEN_ID, 'name': SYSTEM_ADMIN_NAME}
+
+        html = self.client.get('/admin').get_data(as_text=True)
+
+        self.assertIn("class=\"nav-item active\" onclick=\"switchTab('stats')\"", html)
+        self.assertIn('id="pageTitle">下载统计</div>', html)
+        self.assertIn('<div id="tab-stats" class="tab-pane active', html)
+        self.assertIn("renderTab('stats');", html)
+        self.assertNotIn("renderTab('projects');\n             }", html)
+
     def test_config_cards_use_consistent_title_stack_and_tooltip_notes(self):
         with self.client.session_transaction() as session:
             session['is_admin'] = True
