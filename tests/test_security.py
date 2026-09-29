@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 from src.app import (
-    app, config, _resolve_template_path, _script_json, paginate_items, list_templates,
+    app, config, _resolve_template_path, _safe_http_url, _script_json, paginate_items, list_templates,
     _is_system_admin_session, _get_client_ip,
 )
 from src.core.stats import _mask_ip, _mask_url
@@ -23,6 +23,18 @@ class SecurityRegressionTests(unittest.TestCase):
     def _csrf(self):
         with self.client.session_transaction() as session:
             return session['_csrf_token']
+
+    def test_contact_url_allows_mailto_but_rejects_unsafe_schemes(self):
+        self.assertEqual(_safe_http_url('mailto:contact@example.com'), 'mailto:contact@example.com')
+        self.assertEqual(_safe_http_url('mailto:contact@example.com?subject=Help'), 'mailto:contact@example.com?subject=Help')
+        self.assertEqual(_safe_http_url('javascript:alert(1)'), '#')
+        self.assertEqual(_safe_http_url('mailto:'), '#')
+
+    def test_home_footer_uses_configured_contact_url(self):
+        with patch.dict(config, {'usage.url': 'mailto:test@example.com'}):
+            response = self.client.get('/')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('<a href="mailto:test@example.com"', response.get_data(as_text=True))
 
     def test_sensitive_config_is_owner_only(self):
         mode = stat.S_IMODE(os.stat('feishu-docget.properties').st_mode)

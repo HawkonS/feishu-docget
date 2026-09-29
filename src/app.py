@@ -387,7 +387,12 @@ def _safe_http_url(value, fallback='#'):
     raw = str(value or '').strip()
     try:
         parsed = urlsplit(raw)
-        if parsed.scheme.lower() in {'http', 'https'} and parsed.netloc:
+        scheme = parsed.scheme.lower()
+        if scheme in {'http', 'https'} and parsed.netloc:
+            return parsed.geturl()
+        # 联系方式配置允许使用 mailto:，否则默认值会被错误地替换成 '#'
+        # （HTML 注入前仍会经过 escape，避免配置值进入属性时造成注入）。
+        if scheme == 'mailto' and parsed.path and not parsed.netloc:
             return parsed.geturl()
     except ValueError:
         pass
