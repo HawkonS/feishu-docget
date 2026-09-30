@@ -123,7 +123,7 @@ def _trusted_proxy_networks():
         try:
             networks.append(ipaddress.ip_network(value, strict=False))
         except ValueError:
-            logger.warning('忽略无效的可信代理地址: %s', value)
+            logger.warning('忽略无效的可信代理配置')
     return networks
 
 
@@ -1282,7 +1282,7 @@ def auth_feishu_callback():
         if existing and existing.get('disabled'):
             return redirect(f'{error_target}?error=disabled')
         if not user_store.upsert_user(profile):
-            logger.warning(f'用户信息落库失败 open_id={open_id}，不阻断本次登录')
+            logger.warning('用户信息落库失败，不阻断本次登录')
         # OAuth 登录切换回飞书用户身份时，清除密码管理员标志。
         session.pop('is_admin', None)
         session['user'] = {'open_id': open_id, 'name': profile['name']}
