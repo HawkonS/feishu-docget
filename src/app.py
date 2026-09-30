@@ -1504,17 +1504,17 @@ def api_admin_download_project():
         fd, tmp_zip = tempfile.mkstemp(suffix='.zip')
         os.close(fd)
         with zipfile.ZipFile(tmp_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for root, dirs, files in os.walk(path, topdown=True, followlinks=False):
+            for root, dirs, files in os.walk(real_path, topdown=True, followlinks=False):
                 dirs[:] = [dirname for dirname in dirs
                            if not _is_project_link(os.path.join(root, dirname))]
                 for file in files:
                     abs_path = os.path.join(root, file)
                     if _is_project_link(abs_path):
                         continue
-                    rel_path = os.path.relpath(abs_path, path)
+                    rel_path = os.path.relpath(abs_path, real_path)
                     zipf.write(abs_path, rel_path)
         _cleanup_temp(tmp_zip)
-        return send_file(tmp_zip, as_attachment=True, download_name=f'{os.path.basename(path)}.zip')
+        return send_file(tmp_zip, as_attachment=True, download_name=f'{os.path.basename(real_path)}.zip')
     except Exception as e:
         logger.error(f'下载项目打包失败: {e}', exc_info=True)
         return jsonify({'status': 'error', 'message': '打包下载失败，请稍后重试'})
@@ -1559,17 +1559,17 @@ def api_admin_download_folder():
         fd, tmp_zip = tempfile.mkstemp(suffix='.zip')
         os.close(fd)
         with zipfile.ZipFile(tmp_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for root, dirs, files in os.walk(path, topdown=True, followlinks=False):
+            for root, dirs, files in os.walk(real_path, topdown=True, followlinks=False):
                 dirs[:] = [dirname for dirname in dirs
                            if not _is_project_link(os.path.join(root, dirname))]
                 for file in files:
                     abs_path = os.path.join(root, file)
                     if _is_project_link(abs_path):
                         continue
-                    rel_path = os.path.relpath(abs_path, path)
+                    rel_path = os.path.relpath(abs_path, real_path)
                     zipf.write(abs_path, rel_path)
         _cleanup_temp(tmp_zip)
-        return send_file(tmp_zip, as_attachment=True, download_name=f'{os.path.basename(path)}.zip')
+        return send_file(tmp_zip, as_attachment=True, download_name=f'{os.path.basename(real_path)}.zip')
     except Exception as e:
         logger.error(f'下载文件夹打包失败: {e}', exc_info=True)
         return jsonify({'status': 'error', 'message': '打包下载失败，请稍后重试'})
