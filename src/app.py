@@ -799,6 +799,24 @@ def paginate_items(items, page=1, page_size=10):
     }
 
 
+def _resolve_path_under(root, value, *, allow_root=False, kind=None):
+    """Resolve a user-supplied path and keep it inside a trusted directory."""
+    trusted_root = os.path.realpath(root)
+    candidate = os.path.realpath(str(value or '').strip())
+    if candidate == trusted_root:
+        if not allow_root:
+            return None
+    elif not candidate.startswith(trusted_root + os.sep):
+        return None
+    if kind == 'file' and not os.path.isfile(candidate):
+        return None
+    if kind == 'dir' and not os.path.isdir(candidate):
+        return None
+    if kind is None and not os.path.exists(candidate):
+        return None
+    return candidate
+
+
 def _resolve_template_path(name, allow_empty=False):
     """解析模板文件名，并保证真实文件严格位于 template.dir 内。"""
     raw_name = str(name or '').strip()
@@ -808,13 +826,8 @@ def _resolve_template_path(name, allow_empty=False):
         return None
     if not raw_name.lower().endswith('.docx'):
         return None
-    template_root = os.path.realpath(os.path.join(base_dir, config['template.dir']))
-    candidate = os.path.realpath(os.path.join(template_root, raw_name))
-    if not candidate.startswith(template_root + os.sep):
-        return None
-    if not os.path.isfile(candidate):
-        return None
-    return candidate
+    template_root = os.path.join(base_dir, config['template.dir'])
+    return _resolve_path_under(template_root, os.path.join(template_root, raw_name), kind='file')
 
 
 def _invalidate_project_usage_cache():
@@ -1481,9 +1494,9 @@ def api_admin_project_files():
     path = request.args.get('path')
     if not path:
         return jsonify({'status': 'error', 'message': '无效路径'}), 400
-    output_dir = os.path.realpath(os.path.join(base_dir, config['output.dir']))
-    real_path = os.path.realpath(path)
-    if not real_path.startswith(output_dir + os.sep) or not os.path.isdir(real_path):
+    output_dir = os.path.join(base_dir, config['output.dir'])
+    real_path = _resolve_path_under(output_dir, path, kind='dir')
+    if not real_path:
         return jsonify({'status': 'error', 'message': '无效路径'}), 400
     return jsonify({'status': 'ok', 'items': list_project_files(real_path)})
 
@@ -1495,10 +1508,8 @@ def api_admin_download_project():
         return jsonify({'status': 'error', 'message': '无效路径'})
     output_dir = os.path.join(base_dir, config['output.dir'])
     real_output = os.path.realpath(output_dir)
-    real_path = os.path.realpath(path)
-    if not real_path.startswith(real_output + os.sep) and real_path != real_output:
-        return jsonify({'status': 'error', 'message': '无效路径'})
-    if not os.path.exists(real_path):
+    real_path = _resolve_path_under(output_dir, path, allow_root=True)
+    if not real_path:
         return jsonify({'status': 'error', 'message': '无效路径'})
     try:
         fd, tmp_zip = tempfile.mkstemp(suffix='.zip')
@@ -1528,10 +1539,8 @@ def api_admin_delete_project():
         return jsonify({'status': 'error', 'message': '无效路径'})
     output_dir = os.path.join(base_dir, config['output.dir'])
     real_output = os.path.realpath(output_dir)
-    real_path = os.path.realpath(path)
-    if not real_path.startswith(real_output + os.sep) and real_path != real_output:
-        return jsonify({'status': 'error', 'message': '无效路径'})
-    if not os.path.exists(real_path):
+    real_path = _resolve_path_under(output_dir, path, allow_root=True)
+    if not real_path:
         return jsonify({'status': 'error', 'message': '无效路径'})
     try:
         shutil.rmtree(real_path)
@@ -1659,7 +1668,9 @@ def api_upload_template():
         # 仅本次使用模式下，加上 temp_ 前缀和 uuid，避免冲突和方便清理
         final_filename = f'temp_{uuid.uuid4().hex[:8]}_{safe_name}.docx'
 
-    path = os.path.join(template_dir, final_filename)
+    path = _resolve_path_under(template_dir, os.path.join(template_dir, final_filename), allow_root=False)
+    if not path:
+        return jsonify({'status': 'error', 'message': '无效文件名'})
     
     # 检查是否是更新操作
     is_update = os.path.exists(path)
@@ -1683,7 +1694,9 @@ def api_upload_template():
         try:
             # 图片文件名与模板同名，后缀改为 .png
             img_filename = os.path.splitext(final_filename)[0] + '.png'
-            img_path = os.path.join(template_dir, img_filename)
+            img_path = _resolve_path_under(template_dir, os.path.join(template_dir, img_filename), allow_root=False)
+            if not img_path:
+                return jsonify({'status': 'error', 'message': '无效文件名'})
             image_file.save(img_path)
         except Exception as e:
             logger.error(f'保存预览图失败: {e}', exc_info=True)
@@ -1741,8 +1754,8 @@ def api_admin_rename_template():
     else:
         safe_new_filename = safe_new + '.docx'
         
-    new_path = os.path.join(template_dir, safe_new_filename)
-    if os.path.realpath(new_path).startswith(template_dir + os.sep) is False:
+    new_path = _resolve_path_under(template_dir, os.path.join(template_dir, safe_new_filename), allow_root=False)
+    if not new_path:
         return jsonify({'status': 'error', 'message': '无效文件名'})
     
     if os.path.exists(new_path):
@@ -2053,10 +2066,8 @@ def api_admin_download_file():
         return jsonify({'status': 'error', 'message': '无效文件'})
     output_dir = os.path.join(base_dir, config['output.dir'])
     real_output = os.path.realpath(output_dir)
-    real_path = os.path.realpath(path)
-    if not real_path.startswith(real_output + os.sep) and real_path != real_output:
-        return jsonify({'status': 'error', 'message': '无效文件'})
-    if not os.path.exists(real_path) or not os.path.isfile(real_path):
+    real_path = _resolve_path_under(output_dir, path, kind='file')
+    if not real_path:
         return jsonify({'status': 'error', 'message': '无效文件'})
     # 清洗下载名中的控制字符等，保留扩展名避免被截断丢失
     base, ext = os.path.splitext(os.path.basename(real_path))
