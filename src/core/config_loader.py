@@ -581,7 +581,7 @@ class ConfigLoader:
             generated_password = secrets.token_urlsafe(16)
             cls._config['admin.password'] = generated_password
             changed = True
-            print(f'已自动生成管理后台密码并写入 {CONFIG_FILE}: {generated_password}')
+            print(f'已自动生成管理后台密码并写入 {CONFIG_FILE}（仅所有者可读写），请在该文件中查看密码')
             print('请及时登录管理后台修改为自定义密码，并妥善保管。')
         if not cls._config.get('feishu.app_id') or not cls._config.get('feishu.app_secret'):
             if sys.stdin.isatty():
