@@ -51,9 +51,7 @@ echo [INFO] Python found.
 
 :: 2. Install dependencies
 echo [INFO] Installing dependencies...
-set REQUIRED_PACKAGES=Flask requests python-docx lxml Pillow waitress
-
-pip install %REQUIRED_PACKAGES%
+pip install -r requirements.txt
 if %errorlevel% neq 0 (
     echo.
     echo [ERROR] Failed to install dependencies.

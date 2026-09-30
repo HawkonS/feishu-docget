@@ -18,7 +18,20 @@ from src.core.user_store import SYSTEM_ADMIN_NAME, SYSTEM_ADMIN_OPEN_ID
 class SecurityRegressionTests(unittest.TestCase):
     def setUp(self):
         app.config.update(TESTING=True)
+        self._previous_feishu_credentials = {
+            'feishu.app_id': config.get('feishu.app_id'),
+            'feishu.app_secret': config.get('feishu.app_secret'),
+        }
+        # Keep OAuth and sensitive-config tests independent of a developer's
+        # local properties file and avoid exposing real credentials in tests.
+        config.update({
+            'feishu.app_id': 'test-app-id',
+            'feishu.app_secret': 'test-app-secret',
+        })
         self.client = app.test_client()
+
+    def tearDown(self):
+        config.update(self._previous_feishu_credentials)
 
     def _csrf(self):
         with self.client.session_transaction() as session:

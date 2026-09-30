@@ -95,22 +95,22 @@ fi
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR" || exit
 
-# 依赖包列表（waitress 为生产级 WSGI 服务器，未安装时应用会自动降级到 Flask 开发服务器）
-REQUIRED_PACKAGES="Flask requests python-docx lxml Pillow waitress"
+# 依赖清单（waitress 为生产级 WSGI 服务器，未安装时应用会自动降级到 Flask 开发服务器）
+REQUIREMENTS_FILE="$SCRIPT_DIR/requirements.txt"
 
-echo "检查 Python 依赖: $REQUIRED_PACKAGES"
+echo "检查 Python 依赖: $REQUIREMENTS_FILE"
 
 install_packages() {
     # 尝试使用 --break-system-packages 安装（适配新版 Python/OS）
-    if pip3 install $REQUIRED_PACKAGES --break-system-packages; then
+    if pip3 install -r "$REQUIREMENTS_FILE" --break-system-packages; then
         return 0
-    elif pip3 install $REQUIRED_PACKAGES; then
+    elif pip3 install -r "$REQUIREMENTS_FILE"; then
         return 0
     else
         echo "权限不足或安装失败。尝试使用 sudo..."
-        if sudo pip3 install $REQUIRED_PACKAGES --break-system-packages; then
+        if sudo pip3 install -r "$REQUIREMENTS_FILE" --break-system-packages; then
             return 0
-        elif sudo pip3 install $REQUIRED_PACKAGES; then
+        elif sudo pip3 install -r "$REQUIREMENTS_FILE"; then
             return 0
         else
             return 1
@@ -125,7 +125,7 @@ if [ "$INTERACTIVE" = true ]; then
     }
 else
     # 非交互模式下，尝试安装并忽略部分输出
-    pip3 install $REQUIRED_PACKAGES --break-system-packages >/dev/null 2>&1 || pip3 install $REQUIRED_PACKAGES >/dev/null 2>&1
+    pip3 install -r "$REQUIREMENTS_FILE" --break-system-packages >/dev/null 2>&1 || pip3 install -r "$REQUIREMENTS_FILE" >/dev/null 2>&1
 fi
 
 # 4. 启动应用

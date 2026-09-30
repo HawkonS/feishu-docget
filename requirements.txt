@@ -1,0 +1,6 @@
+Flask
+requests
+python-docx
+lxml
+Pillow
+waitress

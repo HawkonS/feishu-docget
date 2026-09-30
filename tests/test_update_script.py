@@ -41,7 +41,7 @@ class UpdateScriptTests(unittest.TestCase):
         run_git(['commit', '-m', 'initial version'], repo)
 
         remote = workspace / 'remote.git'
-        run_git(['init', '--bare', remote], workspace)
+        run_git(['init', '--bare', '-b', 'main', remote], workspace)
         run_git(['remote', 'add', 'origin', str(remote)], repo)
         run_git(['push', '-u', 'origin', 'main'], repo)
         return repo, remote

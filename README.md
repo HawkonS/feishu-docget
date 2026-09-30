@@ -32,11 +32,21 @@
 - lxml
 - Pillow
 
-项目没有单独的 `requirements.txt`，`run.bat` 和 `run.sh` 会尝试安装上述依赖。手动安装可执行：
+`run.bat` 和 `run.sh` 会根据 `requirements.txt` 安装依赖。手动安装可执行：
 
 ```bash
-pip install Flask requests python-docx lxml Pillow
+python -m pip install -r requirements.txt
 ```
+
+### 提交前检查
+
+提交前 hook 和 GitHub Actions 都会运行单元测试。首次克隆后启用本地提交检查：
+
+```bash
+git config core.hooksPath .githooks
+```
+
+之后每次 `git commit` 都会先运行 `python -m unittest discover -s tests -p 'test_*.py'`；推送和 Pull Request 也会在 GitHub Actions 中运行同一套测试。
 
 ## 项目结构
 
