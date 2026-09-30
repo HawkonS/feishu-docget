@@ -1559,10 +1559,8 @@ def api_admin_download_folder():
         return jsonify({'status': 'error', 'message': '无效路径'})
     output_dir = os.path.join(base_dir, config['output.dir'])
     real_output = os.path.realpath(output_dir)
-    real_path = os.path.realpath(path)
-    if not real_path.startswith(real_output + os.sep) and real_path != real_output:
-        return jsonify({'status': 'error', 'message': '无效路径'})
-    if not os.path.exists(real_path):
+    real_path = _resolve_path_under(output_dir, path, allow_root=True)
+    if not real_path:
         return jsonify({'status': 'error', 'message': '无效路径'})
     try:
         fd, tmp_zip = tempfile.mkstemp(suffix='.zip')

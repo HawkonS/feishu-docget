@@ -2,6 +2,8 @@ import os
 import shutil
 import tempfile
 import unittest
+import zipfile
+from io import BytesIO
 from unittest.mock import patch
 
 from src.app import (
@@ -103,6 +105,32 @@ class ProjectManagementRegressionTests(unittest.TestCase):
             self.assertEqual(payload['total'], 2)
             self.assertEqual(payload['total_size_bytes'], 12)
             self.assertEqual(sum(item['size'] for item in payload['items']), 12)
+
+    def test_download_folder_rejects_paths_outside_output_root(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            output_dir = os.path.join(workspace, 'output')
+            project_dir = os.path.join(output_dir, 'project')
+            os.makedirs(project_dir)
+            with open(os.path.join(project_dir, 'document.docx'), 'wb') as handle:
+                handle.write(b'docx')
+            with self.client.session_transaction() as session:
+                session['is_admin'] = True
+
+            with patch('src.app.base_dir', workspace), \
+                    patch.dict(config, {'output.dir': 'output'}):
+                allowed = self.client.get(
+                    '/api/admin/download_folder',
+                    query_string={'path': project_dir},
+                )
+                rejected = self.client.get(
+                    '/api/admin/download_folder',
+                    query_string={'path': workspace},
+                )
+
+            self.assertEqual(allowed.status_code, 200)
+            with zipfile.ZipFile(BytesIO(allowed.data)) as archive:
+                self.assertEqual(archive.namelist(), ['document.docx'])
+            self.assertEqual(rejected.get_json()['message'], '无效路径')
 
 
 if __name__ == '__main__':
