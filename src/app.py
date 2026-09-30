@@ -1857,8 +1857,9 @@ def api_start():
     template = os.path.basename(template_path) if template_path else ''
     try:
         bot_config = normalize_bot_config(data.get('botConfig'))
-    except ValueError as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+    except ValueError:
+        logger.warning('自定义机器人配置无效')
+        return jsonify({'status': 'error', 'message': '自定义机器人配置无效，请检查后重试'})
     document_info_error = _validate_document_info(document_info)
     if document_info_error:
         return jsonify({'status': 'error', 'message': document_info_error})

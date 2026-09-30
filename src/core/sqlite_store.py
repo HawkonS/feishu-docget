@@ -434,7 +434,7 @@ def upsert_download_stat(base_dir, config, entry):
     values = _stat_values(entry)
     if not values['task_id']:
         seed = json.dumps(values, ensure_ascii=False, sort_keys=True).encode('utf-8')
-        values['legacy_key'] = f"legacy_{values['ts']}_{hashlib.sha1(seed).hexdigest()[:16]}"
+        values['legacy_key'] = f"legacy_{values['ts']}_{hashlib.sha256(seed).hexdigest()[:16]}"
     else:
         values['legacy_key'] = None
     initialize_database(base_dir, config)
@@ -733,7 +733,7 @@ def migrate_legacy_data(base_dir, config, db_path=None, backup=True, dry_run=Fal
             values = _stat_values(item)
             if not values['task_id']:
                 seed = json.dumps(values, ensure_ascii=False, sort_keys=True).encode('utf-8')
-                values['legacy_key'] = f"legacy_{values['ts']}_{hashlib.sha1(seed).hexdigest()[:16]}"
+                values['legacy_key'] = f"legacy_{values['ts']}_{hashlib.sha256(seed).hexdigest()[:16]}"
             else:
                 values['legacy_key'] = None
             existing = connection.execute(
