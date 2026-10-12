@@ -546,6 +546,32 @@ def extract_table_backgrounds_from_content(content, blocks):
             result.pop(table_id, None)
     return result
 
+
+def extract_code_block_names_from_content(content):
+    """Return code-block captions indexed by Feishu block ID.
+
+    The blocks API omits the ``caption`` attribute exposed by the rendered
+    Docs AI XML.  Keep only non-empty captions so documents without named code
+    blocks retain their existing output.
+    """
+    if not isinstance(content, str) or not content.strip():
+        return {}
+    try:
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring('<root>' + content + '</root>')
+    except Exception as exc:
+        logger.warning(f'解析文档渲染 XML 失败，跳过代码块名称: {exc}')
+        return {}
+
+    names = {}
+    for pre in root.iter('pre'):
+        block_id = pre.get('id')
+        name = (pre.get('caption') or '').strip()
+        if block_id and name:
+            names[block_id] = name
+    return names
+
+
 def add_hyperlink(paragraph, url, text, color='0000FF', underline=True):
     part = paragraph.part
     r_id = part.relate_to(url, docx.opc.constants.RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
@@ -668,7 +694,7 @@ class NumberingInjector:
 
 class FeishuDocxConverter:
 
-    def __init__(self, blocks, client, img_dir, template_path=None, progress_cb=None, check_stop_func=None, unordered_list_style='default', ignore_mention=False, add_title=False, image_style=None, table_config=None, table_backgrounds=None, image_crops=None):
+    def __init__(self, blocks, client, img_dir, template_path=None, progress_cb=None, check_stop_func=None, unordered_list_style='default', ignore_mention=False, add_title=False, image_style=None, table_config=None, table_backgrounds=None, image_crops=None, code_block_names=None):
         self.blocks = blocks
         self.client = client
         self.img_dir = img_dir
@@ -685,6 +711,7 @@ class FeishuDocxConverter:
         )
         self.table_backgrounds = table_backgrounds if isinstance(table_backgrounds, dict) else {}
         self.image_crops = image_crops if isinstance(image_crops, dict) else {}
+        self.code_block_names = code_block_names if isinstance(code_block_names, dict) else {}
         self.block_map = {b['block_id']: b for b in blocks}
         self.tree = self._build_tree()
         self.doc = None
@@ -1087,8 +1114,9 @@ class FeishuDocxConverter:
 
     def _handle_code(self, block, container):
         code_data = (block.get('code') or {}).get('elements') or []
+        code_name = self.code_block_names.get(block.get('block_id'), '').strip()
         try:
-            table = container.add_table(rows=1, cols=1)
+            table = container.add_table(rows=2 if code_name else 1, cols=1)
             try:
                 table.style = 'Table Grid'
             except:
@@ -1123,32 +1151,38 @@ class FeishuDocxConverter:
                     tbl_w.set(qn('w:w'), '0')
                     tbl_w.set(qn('w:type'), 'auto')
                     
-            cell = table.cell(0, 0)
-            tcPr = cell._tc.get_or_add_tcPr()
-            tcW = tcPr.find(qn('w:tcW'))
-            if tcW is not None:
+            for row in table.rows:
+                cell = row.cells[0]
+                tcPr = cell._tc.get_or_add_tcPr()
+                tcW = tcPr.find(qn('w:tcW'))
+                if tcW is None:
+                    tcW = OxmlElement('w:tcW')
+                    tcPr.append(tcW)
                 tcW.set(qn('w:w'), '0')
                 tcW.set(qn('w:type'), 'auto')
-            else:
-                tcW = OxmlElement('w:tcW')
-                tcW.set(qn('w:w'), '0')
-                tcW.set(qn('w:type'), 'auto')
-                tcPr.append(tcW)
-
-            self._set_cell_shading(cell, 'F5F5F5')
-            if cell.paragraphs:
+                self._set_cell_shading(cell, 'F5F5F5')
                 p = cell.paragraphs[0]
-            else:
-                p = cell.add_paragraph()
-            p.paragraph_format.space_before = Pt(2)
-            p.paragraph_format.space_after = Pt(2)
-            p.paragraph_format.line_spacing = 1.0
+                p.paragraph_format.space_before = Pt(2)
+                p.paragraph_format.space_after = Pt(2)
+                p.paragraph_format.line_spacing = 1.0
+
+            # A separate top cell preserves the name without altering code.
+            if code_name:
+                name_paragraph = table.cell(0, 0).paragraphs[0]
+                name_paragraph.paragraph_format.keep_with_next = True
+                name_run = name_paragraph.add_run(code_name)
+                name_run.bold = True
+            p = table.cell(1 if code_name else 0, 0).paragraphs[0]
             
             # 使用统一的 _add_runs 处理内容，支持加粗、颜色、@、链接等
             self._add_runs(p, code_data)
             
             # 强制设置代码块字体（在 _add_runs 之后设置）
-            for run in p.runs:
+            runs = (
+                run for row in table.rows for cell in row.cells
+                for paragraph in cell.paragraphs for run in paragraph.runs
+            )
+            for run in runs:
                 run.font.name = 'Courier New'
                 run.font.size = Pt(9)
                 try:

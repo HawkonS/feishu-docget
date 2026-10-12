@@ -1890,7 +1890,6 @@ def _apply_custom_code_block_style(table, config, ns):
     def hex_to_docx(h):
         return h.lstrip('#').upper()
 
-    cell = table.cell(0, 0)
     table_width = config.get('tableWidth')
     if table_width not in (None, ''):
         _apply_table_layout(table, f"{table_width}cm", False, ns, min_col_width=0)
@@ -1924,17 +1923,18 @@ def _apply_custom_code_block_style(table, config, ns):
                         tc_pr.append(tc_w)
 
     bg_color = hex_to_docx(config.get('bgColor', '#F5F5F5'))
-    _apply_shading(cell, bg_color)
-
     border_color = hex_to_docx(config.get('borderColor', '#D9D9D9'))
     borders = config.get('borders', {})
-    
-    _apply_border(cell, 
-        top={'val': borders.get('top', {}).get('type', 'single'), 'sz': borders.get('top', {}).get('width', 4), 'color': border_color},
-        bottom={'val': borders.get('bottom', {}).get('type', 'single'), 'sz': borders.get('bottom', {}).get('width', 4), 'color': border_color},
-        left={'val': borders.get('left', {}).get('type', 'single'), 'sz': borders.get('left', {}).get('width', 4), 'color': border_color},
-        right={'val': borders.get('right', {}).get('type', 'single'), 'sz': borders.get('right', {}).get('width', 4), 'color': border_color}
-    )
+
+    for row in table.rows:
+        for cell in row.cells:
+            _apply_shading(cell, bg_color)
+            _apply_border(cell,
+                top={'val': borders.get('top', {}).get('type', 'single'), 'sz': borders.get('top', {}).get('width', 4), 'color': border_color},
+                bottom={'val': borders.get('bottom', {}).get('type', 'single'), 'sz': borders.get('bottom', {}).get('width', 4), 'color': border_color},
+                left={'val': borders.get('left', {}).get('type', 'single'), 'sz': borders.get('left', {}).get('width', 4), 'color': border_color},
+                right={'val': borders.get('right', {}).get('type', 'single'), 'sz': borders.get('right', {}).get('width', 4), 'color': border_color}
+            )
 
     font_color = hex_to_docx(config.get('fontColor', '#000000'))
     font_family = config.get('fontFamily', 'Courier New')
@@ -1946,7 +1946,10 @@ def _apply_custom_code_block_style(table, config, ns):
     space_before = config.get('spaceBefore')
     space_after = config.get('spaceAfter')
     
-    for p in cell.paragraphs:
+    paragraphs = (
+        p for row in table.rows for cell in row.cells for p in cell.paragraphs
+    )
+    for p in paragraphs:
         if force_clear_indent:
             _force_clear_indent(p, ns)
         elif config.get('cleanTextIndent', False):

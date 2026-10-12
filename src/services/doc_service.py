@@ -6,6 +6,7 @@ from docx import Document
 from src.converters.docx.cleaner import apply_custom_styles, apply_document_info, clean_document
 from src.converters.docx.converter import (
     FeishuDocxConverter,
+    extract_code_block_names_from_content,
     extract_image_crops_from_content,
     extract_table_backgrounds_from_content,
 )
@@ -104,15 +105,17 @@ def _process_document_with_client(client, doc_url, template_path=None, table_sty
 
         table_backgrounds = {}
         image_crops = {}
+        code_block_names = {}
         preserve_table_background = bool(
             isinstance(table_config, dict)
             and table_config.get('preserveTableBackground')
         )
         has_images = any(block.get('block_type') == 27 for block in blocks)
-        if preserve_table_background or has_images:
-            # Native table-cell fills and image crop rectangles are omitted by
-            # the blocks endpoint.  The rendered Docs AI XML contains both
-            # properties, so fetch it once and enrich the normal block data.
+        has_code_blocks = any(block.get('block_type') == 14 for block in blocks)
+        if preserve_table_background or has_images or has_code_blocks:
+            # Native table-cell fills, image crops, and code captions are
+            # omitted by the blocks endpoint.  Fetch the rendered Docs AI XML
+            # once to enrich the normal block data with these properties.
             # This is optional: if the tenant lacks this API scope, retain the
             # normal export rather than failing the whole download.
             try:
@@ -123,8 +126,11 @@ def _process_document_with_client(client, doc_url, template_path=None, table_sty
                 if has_images:
                     image_crops = extract_image_crops_from_content(source_content)
                     logger.info('已读取飞书图片裁剪区域: %d 个标识', len(image_crops))
+                if has_code_blocks:
+                    code_block_names = extract_code_block_names_from_content(source_content)
+                    logger.info('已读取飞书代码块名称: %d 个', len(code_block_names))
             except Exception as exc:
-                logger.warning(f'读取飞书图片/表格视觉属性失败，继续导出: {exc}')
+                logger.warning(f'读取飞书图片/表格属性或代码块名称失败，继续导出: {exc}')
 
         total_blocks = len(blocks)
         if progress_cb:
@@ -133,7 +139,7 @@ def _process_document_with_client(client, doc_url, template_path=None, table_sty
         docx_path = os.path.join(doc_folder, f'{base_title}.docx')
         _raise_if_stopped(check_stop_func)
 
-        converter = FeishuDocxConverter(blocks, client, master_img_dir, template_path=template_path, progress_cb=progress_cb, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, ignore_mention=ignore_mention, add_title=add_title, image_style=image_style, table_config=table_config, table_backgrounds=table_backgrounds, image_crops=image_crops)
+        converter = FeishuDocxConverter(blocks, client, master_img_dir, template_path=template_path, progress_cb=progress_cb, check_stop_func=check_stop_func, unordered_list_style=unordered_list_style, ignore_mention=ignore_mention, add_title=add_title, image_style=image_style, table_config=table_config, table_backgrounds=table_backgrounds, image_crops=image_crops, code_block_names=code_block_names)
         converter.process(docx_path)
 
         if progress_cb:
