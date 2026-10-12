@@ -19,6 +19,7 @@ from src.core.image_processor import (
     smart_crop,
 )
 from src.converters.docx.style_manager import TableStyleManager
+from src.converters.docx.equation import latex_to_omml
 
 
 def _is_svg_file(file_path):
@@ -1498,10 +1499,17 @@ class FeishuDocxConverter:
     def _add_paragraph(self, container, text_data):
         elements = text_data.get('elements') or []
         p = container.add_paragraph()
-        self._add_runs(p, elements)
+        display_equation = len(elements) == 1 and 'equation' in elements[0]
+        if display_equation:
+            alignment = (text_data.get('style') or {}).get('align')
+            if alignment == 2:
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            elif alignment == 3:
+                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        self._add_runs(p, elements, display_equation=display_equation)
         return p
 
-    def _add_runs(self, paragraph, elements):
+    def _add_runs(self, paragraph, elements, display_equation=False):
         for el in elements:
             if 'text_run' in el:
                 tr = el['text_run']
@@ -1553,6 +1561,21 @@ class FeishuDocxConverter:
                         dark_bg_ids = {1, 2, 7, 8, 9, 10, 11, 12, 13, 14}
                         if bg_color_idx in dark_bg_ids:
                             run.font.color.rgb = RGBColor(255, 255, 255)
+            elif 'equation' in el:
+                latex = (el.get('equation') or {}).get('content') or ''
+                if not latex:
+                    continue
+                try:
+                    equation = latex_to_omml(latex)
+                    if display_equation:
+                        math_paragraph = OxmlElement('m:oMathPara')
+                        math_paragraph.append(equation)
+                        paragraph._p.append(math_paragraph)
+                    else:
+                        paragraph._p.append(equation)
+                except Exception as exc:
+                    logger.warning(f'公式转换失败，保留 LaTeX 原文: {exc}')
+                    paragraph.add_run(f'\\({latex}\\)')
             elif 'mention_user' in el:
                 if self.ignore_mention:
                     continue

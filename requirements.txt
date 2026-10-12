@@ -4,3 +4,5 @@ python-docx
 lxml
 Pillow
 waitress
+latex2mathml==3.78.1
+mathml2omml==0.0.2
