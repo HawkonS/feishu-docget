@@ -21,31 +21,60 @@ The unit test command is also run by GitHub Actions. If you change the web inter
 
 ## Commit messages
 
-Use this format for every commit:
+Use [Conventional Commits](https://www.conventionalcommits.org/) for every commit message and pull request title:
 
 ```text
-type(scope): description
+type(scope): summary
 ```
 
-- Write the entire title in English.
-- A scope is required. Use a concise, lowercase name for the affected area, such as `web`, `admin`, `api`, `converter`, `auth`, `cli`, `config`, `template`, `docs`, or `repo`.
-- Use one title line only. Do not add a commit body or additional `-m` argument.
-- Start the description with a lowercase imperative verb, such as `add`, `fix`, `restore`, `update`, or `document`.
-- Keep the title concise, preferably no more than 72 characters. Do not end it with a period or use emoji.
+- **English is required** for the entire title, including the scope and summary.
+- **A scope is required**. Start it with a lowercase English letter and use only lowercase English letters, digits, and hyphens.
+- **The entire commit message must be a single title line**. Do not add a body, footers, trailers, or a second `-m` argument.
+- **The complete title must be 72 characters or fewer**, including the type, scope, spaces, and punctuation.
+- Keep the type and scope lowercase. Start the summary with a lowercase imperative verb, such as `add`, `fix`, `remove`, `update`, or `document`.
+- Proper names and technical identifiers in the summary may retain their original capitalization, such as `Android`, `GitHub`, `SDK`, and `JAVA_HOME`.
+- Do not end the title with a period or whitespace, and do not use emoji.
+- Keep each commit focused on one logical change. Describe the actual change; avoid vague summaries such as `update code` or `fix bug`.
+- For an incompatible change, put `!` after the scope and before the colon: `type(scope)!: summary`.
+- Put context, issue references, validation details, and migration notes in the pull request description.
+- Apply the same rules to pull request titles and final squash-merge commit messages. When squash-merging, keep only the title and remove any automatically generated body or trailers.
 
-Common types:
+Use one of these types:
 
 | Type | Use for |
 | --- | --- |
-| `feat` | New functionality |
-| `fix` | Bug or compatibility fixes |
-| `refactor` | Code restructuring without changing behavior |
+| `feat` | New user-visible functionality |
+| `fix` | Bug, regression, or compatibility fixes |
+| `refactor` | Code restructuring without behavior changes |
+| `ui` | Visual styling or interaction adjustments |
 | `perf` | Performance improvements |
 | `docs` | Documentation changes |
 | `test` | Test additions or updates |
-| `build` | Build, dependency, or packaging changes |
+| `build` | Build configuration, dependencies, tooling, or packaging |
 | `ci` | CI workflows and automation |
-| `chore` | Maintenance that does not fit another type |
+| `chore` | Maintenance that fits no other type |
+| `revert` | Reverting an earlier commit |
+
+Use `feat` for new functionality and `fix` for defects, including changes to the UI. Use `ui` for other visual or interaction adjustments.
+
+Preferred scopes:
+
+| Scope | Area |
+| --- | --- |
+| `web` | User-facing pages and frontend interactions |
+| `admin` | Administration features and interface |
+| `api` | Backend endpoints and application services |
+| `converter` | Document conversion and export |
+| `auth` | OAuth login, sessions, and permissions |
+| `cli` | Command-line tools and local scripts |
+| `config` | Configuration loading and schema |
+| `template` | Word templates and style resources |
+| `build` | Build configuration, dependencies, tooling, and packaging |
+| `ci` | CI workflows and automation |
+| `docs` | README files and project documentation |
+| `repo` | Repository-level configuration and contribution guidelines |
+
+Prefer the scopes listed above. Use another concise scope only for a distinct area not covered by them, and keep it consistent. Tests should normally use the scope of the code they cover.
 
 Examples:
 
@@ -54,9 +83,8 @@ feat(converter): preserve table cell colors in exported docx
 fix(admin): load contact author email into frontend
 test(api): cover invalid download paths
 docs(repo): document open-source contribution workflow
+feat(api)!: change the download response format
 ```
-
-Keep each commit focused on one logical change. Use the same format for pull request titles when the changes will be squash-merged.
 
 ## Pull requests
 
