@@ -67,7 +67,6 @@ sh tools/feishu2word.sh "https://example.feishu.cn/wiki/xxxx" --template Hawkon.
 
 - 启用本地提交检查：`git config core.hooksPath .githooks`，之后每次提交都会跑单元测试（与 GitHub Actions 同一套）。
 - 单元测试：`python -m unittest discover -s tests -p 'test_*.py'`；语法检查：`python -m compileall ./src`。
-- 主要代码位置：Web/API 与后台在 `src/app.py`，转换与清洗在 `src/converters/docx/`，飞书接口在 `src/core/feishu_client.py`，页面在 `src/web/templates/`。
 
 ## 安全说明
 

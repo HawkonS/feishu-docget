@@ -19,6 +19,13 @@ python -m compileall ./src
 
 The unit test command is also run by GitHub Actions. If you change the web interface, include a screenshot in your pull request when it helps reviewers understand the change.
 
+Project layout:
+
+- [`src/app.py`](./src/app.py): Web interface, API endpoints, and the admin console.
+- [`src/converters/docx/`](./src/converters/docx/): Document conversion and formatting cleanup.
+- [`src/core/feishu_client.py`](./src/core/feishu_client.py): Feishu Open Platform API client.
+- [`src/web/templates/`](./src/web/templates/): Page templates.
+
 ## Commit messages
 
 Use [Conventional Commits](https://www.conventionalcommits.org/) for every commit message and pull request title:
