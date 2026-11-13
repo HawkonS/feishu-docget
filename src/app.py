@@ -799,7 +799,7 @@ def paginate_items(items, page=1, page_size=10):
     }
 
 
-def _resolve_path_under(root, value, *, allow_root=False, kind=None):
+def _resolve_path_under(root, value, *, allow_root=False, kind=None, allow_missing=False):
     """Resolve a user-supplied path and keep it inside a trusted directory."""
     trusted_root = os.path.realpath(root)
     candidate = os.path.realpath(str(value or '').strip())
@@ -808,11 +808,12 @@ def _resolve_path_under(root, value, *, allow_root=False, kind=None):
             return None
     elif not candidate.startswith(trusted_root + os.sep):
         return None
-    if kind == 'file' and not os.path.isfile(candidate):
+    exists = os.path.exists(candidate)
+    if kind == 'file' and not os.path.isfile(candidate) and not (allow_missing and not exists):
         return None
-    if kind == 'dir' and not os.path.isdir(candidate):
+    if kind == 'dir' and not os.path.isdir(candidate) and not (allow_missing and not exists):
         return None
-    if kind is None and not os.path.exists(candidate):
+    if kind is None and not exists and not allow_missing:
         return None
     return candidate
 
@@ -1666,7 +1667,10 @@ def api_upload_template():
         # 仅本次使用模式下，加上 temp_ 前缀和 uuid，避免冲突和方便清理
         final_filename = f'temp_{uuid.uuid4().hex[:8]}_{safe_name}.docx'
 
-    path = _resolve_path_under(template_dir, os.path.join(template_dir, final_filename), allow_root=False)
+    path = _resolve_path_under(
+        template_dir, os.path.join(template_dir, final_filename),
+        allow_root=False, kind='file', allow_missing=True,
+    )
     if not path:
         return jsonify({'status': 'error', 'message': '无效文件名'})
     
@@ -1692,7 +1696,10 @@ def api_upload_template():
         try:
             # 图片文件名与模板同名，后缀改为 .png
             img_filename = os.path.splitext(final_filename)[0] + '.png'
-            img_path = _resolve_path_under(template_dir, os.path.join(template_dir, img_filename), allow_root=False)
+            img_path = _resolve_path_under(
+                template_dir, os.path.join(template_dir, img_filename),
+                allow_root=False, kind='file', allow_missing=True,
+            )
             if not img_path:
                 return jsonify({'status': 'error', 'message': '无效文件名'})
             image_file.save(img_path)
@@ -1752,7 +1759,10 @@ def api_admin_rename_template():
     else:
         safe_new_filename = safe_new + '.docx'
         
-    new_path = _resolve_path_under(template_dir, os.path.join(template_dir, safe_new_filename), allow_root=False)
+    new_path = _resolve_path_under(
+        template_dir, os.path.join(template_dir, safe_new_filename),
+        allow_root=False, kind='file', allow_missing=True,
+    )
     if not new_path:
         return jsonify({'status': 'error', 'message': '无效文件名'})
     

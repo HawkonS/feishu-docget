@@ -4,6 +4,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from io import BytesIO
 from unittest.mock import patch
 from src.app import (
     app, config, _resolve_template_path, _safe_http_url, _script_json, paginate_items, list_templates,
@@ -131,6 +132,86 @@ class SecurityRegressionTests(unittest.TestCase):
         finally:
             if os.path.lexists(link_path):
                 os.unlink(link_path)
+
+    def test_upload_template_accepts_new_docx_and_preview(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            template_dir = os.path.join(workspace, 'template')
+            os.makedirs(template_dir)
+            with self.client.session_transaction() as session:
+                session['is_admin'] = True
+                session['_csrf_token'] = 'test-csrf-token'
+
+            with patch('src.app.base_dir', workspace), patch.dict(config, {'template.dir': 'template'}):
+                response = self.client.post(
+                    '/api/upload_template',
+                    data={
+                        'name': '新模板',
+                        'file': (BytesIO(b'docx content'), 'source.docx'),
+                        'image': (BytesIO(b'png content'), 'preview.png'),
+                    },
+                    headers={'X-CSRF-Token': 'test-csrf-token'},
+                )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.get_json()['status'], 'ok')
+            with open(os.path.join(template_dir, '新模板.docx'), 'rb') as handle:
+                self.assertEqual(handle.read(), b'docx content')
+            with open(os.path.join(template_dir, '新模板.png'), 'rb') as handle:
+                self.assertEqual(handle.read(), b'png content')
+
+    def test_upload_template_rejects_destination_symlink_outside_template_directory(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            template_dir = os.path.join(workspace, 'template')
+            os.makedirs(template_dir)
+            outside_path = os.path.join(workspace, 'outside.docx')
+            with open(outside_path, 'wb') as handle:
+                handle.write(b'outside content')
+            link_path = os.path.join(template_dir, 'linked.docx')
+            try:
+                os.symlink(outside_path, link_path)
+            except OSError as error:
+                self.skipTest(f'当前环境无法创建软链接: {error}')
+
+            with self.client.session_transaction() as session:
+                session['is_admin'] = True
+                session['_csrf_token'] = 'test-csrf-token'
+
+            with patch('src.app.base_dir', workspace), patch.dict(config, {'template.dir': 'template'}):
+                response = self.client.post(
+                    '/api/upload_template',
+                    data={
+                        'name': 'linked',
+                        'file': (BytesIO(b'new content'), 'source.docx'),
+                    },
+                    headers={'X-CSRF-Token': 'test-csrf-token'},
+                )
+
+            self.assertEqual(response.get_json()['message'], '无效文件名')
+            with open(outside_path, 'rb') as handle:
+                self.assertEqual(handle.read(), b'outside content')
+
+    def test_rename_template_accepts_nonexistent_destination(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            template_dir = os.path.join(workspace, 'template')
+            os.makedirs(template_dir)
+            old_path = os.path.join(template_dir, 'old.docx')
+            with open(old_path, 'wb') as handle:
+                handle.write(b'docx content')
+            with self.client.session_transaction() as session:
+                session['is_admin'] = True
+                session['_csrf_token'] = 'test-csrf-token'
+
+            with patch('src.app.base_dir', workspace), patch.dict(config, {'template.dir': 'template'}):
+                response = self.client.post(
+                    '/api/admin/rename_template',
+                    json={'old_name': 'old.docx', 'new_name': 'new'},
+                    headers={'X-CSRF-Token': 'test-csrf-token'},
+                )
+
+            self.assertEqual(response.get_json()['status'], 'ok')
+            self.assertFalse(os.path.exists(old_path))
+            with open(os.path.join(template_dir, 'new.docx'), 'rb') as handle:
+                self.assertEqual(handle.read(), b'docx content')
 
     def test_default_template_rename_only_changes_frontend_display_name(self):
         """Git-tracked default template keeps its stable storage filename."""
